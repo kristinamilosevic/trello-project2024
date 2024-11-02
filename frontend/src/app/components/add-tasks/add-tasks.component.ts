@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup } from '@angular/forms';
+import { TaskService } from '../../services/task/task.service';
 
 @Component({
   selector: 'app-create-task',
@@ -10,29 +11,58 @@ import { ReactiveFormsModule, FormBuilder, FormGroup } from '@angular/forms';
   styleUrls: ['./add-tasks.component.css']
 })
 export class AddTasksComponent {
-  showForm: boolean = true; // Varijabla za kontrolu vidljivosti forme
-  taskForm: FormGroup; // Forma za zadatak
+  showForm: boolean = true; 
+  taskForm: FormGroup; 
 
-  constructor(private fb: FormBuilder) {
-    // Inicijalizacija forme
+  constructor(private fb: FormBuilder, private taskService: TaskService) {
     this.taskForm = this.fb.group({
-      projectId: [0],
+      projectId: [''],
       title: [''],
       description: [''],
-      // Dodajte ostala polja po potrebi
+      status: ['Pending']
     });
   }
 
   toggleForm() {
-    this.showForm = !this.showForm; // Prebaci vidljivost forme
+    this.showForm = !this.showForm;
   }
 
-  onSubmit() {
-    // Ovdje možete obraditi unos
-    console.log(this.taskForm.value);
-    // Zatvori formu nakon slanja
-    this.showForm = false;
-    this.taskForm.reset(); // Resetujte formu ako je potrebno
+  isValidTaskData(taskData: any): boolean {
+    return (
+      typeof taskData.projectId === 'string' &&
+      typeof taskData.title === 'string' &&
+      typeof taskData.description === 'string' &&
+      typeof taskData.status === 'string'
+    );
   }
+
+
+  onSubmit() {
+    if (this.taskForm.valid) { 
+      const taskData = this.taskForm.value;
+  
+      taskData.projectId = taskData.projectId.toString();
+  
+      if (this.isValidTaskData(taskData)) {
+        this.taskService.createTask(taskData).subscribe(
+          response => {
+            this.taskForm.reset(); 
+            this.taskForm.get('status')?.setValue('Pending');
+            alert('Task successfully created!');
+          },
+          error => {
+            console.error('Error while creating task.', error);
+            alert('Error while creating task.');
+          }
+        );
+      } else {
+        console.error('Task data is not in the correct format:', taskData);
+      }
+    } else {
+      console.error('Form is not valid. Status:', this.taskForm.errors);
+    }
+  }
+  
+  
 
 }
