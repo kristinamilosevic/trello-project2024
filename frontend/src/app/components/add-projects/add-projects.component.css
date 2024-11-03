@@ -1,63 +1,75 @@
 .form-container {
-    background-color: #f9f9f9;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-    max-width: 500px;
-    margin: 20px auto;
-  }
-  
-  h2 {
-    text-align: center;
-    color: #333;
-    margin-bottom: 20px;
-  }
-  
-  label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: bold;
-    color: #333;
-  }
-  
-  input {
-    width: 100%;
-    padding: 10px;
-    margin-bottom: 15px;
-    border: 1px solid #e0a1c4;
-    border-radius: 4px;
-    font-size: 16px;
-    transition: border-color 0.3s;
-  }
-  
-  input:focus {
-    border-color: #d13e6b;
-    outline: none;
-  }
-  
-  button {
-    background-color: #d13e6b;
-    color: white;
-    border: none;
-    padding: 10px 15px;
-    border-radius: 4px;
-    font-size: 16px;
-    cursor: pointer;
-    transition: background-color 0.3s;
-    display: block;
-    width: 100%;
-    margin-bottom: 10px;
-  }
-  
-  button:hover {
-    background-color: #b52d4d;
-  }
-  
-  button[type="button"] {
-    background-color: #666;
-  }
-  
-  button[type="button"]:hover {
-    background-color: #555;
-  }
-  
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 30px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  max-width: 600px;
+  margin: 40px auto;
+  font-family: 'Arial', sans-serif;
+}
+
+h2 {
+  text-align: center;
+  color: #2c3e50;
+  margin-bottom: 25px;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+label {
+  display: block;
+  margin-bottom: 10px;
+  font-weight: bold;
+  color: #2c3e50;
+  font-size: 14px;
+}
+
+input {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 20px;
+  border: 1px solid #b0c5c6;
+  border-radius: 6px;
+  font-size: 16px;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+input:focus {
+  border-color: #61989c; 
+  outline: none;
+  box-shadow: 0 0 8px rgba(97, 152, 156, 0.3);
+}
+
+button {
+  padding: 12px 20px;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.3s ease;
+  border: none;
+  display: block;
+  width: 100%;
+  margin-top: 15px;
+}
+
+button[type="submit"] {
+  background-color: #61989c; 
+  color: white;
+}
+
+button[type="submit"]:hover {
+  background-color: #527e82; 
+  transform: scale(1.05);
+}
+
+button[type="button"] {
+  background-color: #7ca9ac; 
+  color: white;
+  margin-top: 10px;
+}
+
+button[type="button"]:hover {
+  background-color: #6a8f91; 
+  transform: scale(1.05);
+}

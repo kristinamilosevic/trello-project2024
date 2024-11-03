@@ -1,20 +1,19 @@
 <div class="form-container">
-    <h2>Create New Project</h2>
-    <form [formGroup]="projectForm" (ngSubmit)="onSubmit()">
-      <label for="name">Project Name:</label>
-      <input id="name" formControlName="name" type="text" required>
-  
-      <label for="expectedEndDate">Expected End Date:</label>
-      <input id="expectedEndDate" formControlName="expectedEndDate" type="date" required>
-  
-      <label for="minMembers">Minimum Members:</label>
-      <input id="minMembers" formControlName="minMembers" type="number" required>
-  
-      <label for="maxMembers">Maximum Members:</label>
-      <input id="maxMembers" formControlName="maxMembers" type="number" required>
-  
-      <button type="submit">Submit</button>
-      <button type="button" (click)="onTasksClick()">Tasks</button>
-    </form>
-  </div>
-  
+  <h2>Create New Project</h2>
+  <form [formGroup]="projectForm" (ngSubmit)="onSubmit()">
+    <label for="name">Project Name:</label>
+    <input id="name" formControlName="name" type="text" required>
+
+    <label for="expectedEndDate">Expected End Date:</label>
+    <input id="expectedEndDate" formControlName="expectedEndDate" type="date" required>
+
+    <label for="minMembers">Minimum Members:</label>
+    <input id="minMembers" formControlName="minMembers" type="number" required>
+
+    <label for="maxMembers">Maximum Members:</label>
+    <input id="maxMembers" formControlName="maxMembers" type="number" required>
+
+    <button type="submit">Submit</button>
+    <button type="button" (click)="onTasksClick()">Add Task</button>
+  </form>
+</div>
