@@ -1,9 +1,13 @@
 package handlers
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"trello-project/microservices/projects-service/services"
+
+	"github.com/gorilla/mux"
 )
 
 type ProjectHandler struct {
@@ -14,23 +18,36 @@ func NewProjectHandler(service *services.ProjectService) *ProjectHandler {
 	return &ProjectHandler{Service: service}
 }
 
-// Handler za uklanjanje člana iz projekta
-func (h *ProjectHandler) RemoveMemberFromProjectHandler(w http.ResponseWriter, r *http.Request) {
+func (h *ProjectHandler) GetProjectMembersHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	projectID := vars["projectId"]
 
-	// /projects/{projectId}/members/{memberId}/remove
-	pathParts := strings.Split(r.URL.Path, "/")
-
-	if len(pathParts) < 6 {
-		http.Error(w, "Invalid URL format", http.StatusBadRequest)
+	// Pozivamo servis za dobavljanje clanova odredjenog projekta
+	members, err := h.Service.GetProjectMembers(r.Context(), projectID)
+	if err != nil {
+		http.Error(w, "Failed to fetch project members", http.StatusInternalServerError)
 		return
 	}
 
-	// Pribavljanje projectID i memberID iz url
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(members)
+}
+
+func (h *ProjectHandler) RemoveMemberFromProjectHandler(w http.ResponseWriter, r *http.Request) {
+	pathParts := strings.Split(r.URL.Path, "/")
+	if len(pathParts) != 6 || pathParts[3] != "members" || pathParts[5] != "remove" {
+		http.NotFound(w, r)
+		return
+	}
+
 	projectID := pathParts[2]
 	memberID := pathParts[4]
 
+	fmt.Println("Attempting to remove member:", memberID, "from project:", projectID)
+
 	err := h.Service.RemoveMemberFromProject(r.Context(), projectID, memberID)
 	if err != nil {
+		fmt.Println("Error removing member:", err)
 		if err.Error() == "cannot remove member assigned to an in-progress task" {
 			http.Error(w, err.Error(), http.StatusForbidden)
 		} else if err.Error() == "project not found" {
