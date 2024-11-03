@@ -1,0 +1,13 @@
+<div class="member-list">
+    <h3>Select Members to Add</h3>
+    <ul>
+      <li *ngFor="let member of members">
+        <label>
+          <input type="checkbox" [(ngModel)]="member.selected">
+          {{ member.name }} ({{ member.role }})
+        </label>
+      </li>
+    </ul>
+    <button (click)="addSelectedMembers()">Add</button>
+  </div>
+  
