@@ -7,7 +7,7 @@ import (
 )
 
 type Project struct {
-	ID              primitive.ObjectID `json:"id" bson:"_id,omitempty"`
+	ID              primitive.ObjectID `json:"id,omitempty" bson:"_id,omitempty"`
 	Name            string             `json:"name" bson:"name"`
 	ExpectedEndDate time.Time          `json:"expectedEndDate" bson:"expected_end_date"`
 	MinMembers      int                `json:"minMembers" bson:"min_members"`
