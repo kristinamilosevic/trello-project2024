@@ -1,1 +1,15 @@
-<p>add-tasks works!</p>
+<div *ngIf="showForm">
+    <form [formGroup]="taskForm" (ngSubmit)="onSubmit()">
+      <label for="projectId">Project ID:</label>
+      <input id="projectId" type="number" formControlName="projectId" required>
+  
+      <label for="title">Title:</label>
+      <input id="title" formControlName="title" required>
+  
+      <label for="description">Description:</label>
+      <textarea id="description" formControlName="description" required></textarea>
+  
+      <button type="submit">Submit</button>
+    </form>
+  </div>
+  
