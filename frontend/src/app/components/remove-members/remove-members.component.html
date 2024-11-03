@@ -1,0 +1,16 @@
+<table class="project-table">
+  <thead>
+    <tr>
+      <th>Member Name</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr *ngFor="let member of members">
+      <td>{{ member.name }}</td>
+      <td>
+        <button (click)="removeMember(member.id)" class="remove-btn">Remove</button>
+      </td>
+    </tr>
+  </tbody>
+</table>
