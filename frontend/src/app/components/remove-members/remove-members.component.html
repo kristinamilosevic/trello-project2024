@@ -9,7 +9,7 @@
     <tr *ngFor="let member of members">
       <td>{{ member.name }}</td>
       <td>
-        <button (click)="removeMember(member.id)" class="remove-btn">Remove</button>
+        <button (click)="removeMember(member._id)" class="remove-btn">Remove</button>
       </td>
     </tr>
   </tbody>
