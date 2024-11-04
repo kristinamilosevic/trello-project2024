@@ -1,0 +1,27 @@
+.member-list {
+    max-width: 400px;
+    margin: auto;
+  }
+  
+  .member-list h3 {
+    text-align: center;
+  }
+  
+  .member-list ul {
+    list-style-type: none;
+    padding: 0;
+  }
+  
+  .member-list li {
+    margin-bottom: 8px;
+  }
+  
+  button {
+    display: block;
+    width: 100%;
+    padding: 8px;
+    margin-top: 16px;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  
