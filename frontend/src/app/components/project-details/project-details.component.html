@@ -4,13 +4,13 @@
     <p><strong>Expected End Date:</strong> {{ project.expectedEndDate | date: 'shortDate' }}</p>
     <p><strong>Min Members:</strong> {{ project.minMembers }}</p>
     <p><strong>Max Members:</strong> {{ project.maxMembers }}</p>
-    <button (click)="goBack()" class="back-button">Back</button>
+    <button (click)="goBack()" class="action-button">Back</button>
 
     <!-- Nova dugmad -->
     <div class="action-buttons">
-      <button (click)="addTask()" class="back-button">Add Task</button>
-      <button (click)="viewMembers()" class="back-button">Members</button>
-      <button (click)="addMember()" class="back-button">Add Member</button>
+      <button (click)="addTask()" class="action-button">Add Task</button>
+      <button (click)="viewMembers()" class="action-button">Members</button>
+      <button (click)="addMember()" class="action-button">Add Member</button>
     </div>
   </div>
 </div>

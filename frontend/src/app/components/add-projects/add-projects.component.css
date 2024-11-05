@@ -1,5 +1,5 @@
 .form-container {
-  background-color: #ffffff;
+  background-color: #F8ECD1;
   border-radius: 12px;
   padding: 30px;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
@@ -10,7 +10,7 @@
 
 h2 {
   text-align: center;
-  color: #2c3e50;
+  color: #85586F;
   margin-bottom: 25px;
   font-size: 24px;
   font-weight: 600;
@@ -35,7 +35,7 @@ input {
 }
 
 input:focus {
-  border-color: #61989c; 
+  border-color: #85586F; 
   outline: none;
   box-shadow: 0 0 8px rgba(97, 152, 156, 0.3);
 }
@@ -54,22 +54,22 @@ button {
 }
 
 button[type="submit"] {
-  background-color: #61989c; 
-  color: white;
+  background-color: #85586F; 
+  color: #F8ECD1;
 }
 
 button[type="submit"]:hover {
-  background-color: #527e82; 
+  background-color: #DEB6AB; 
   transform: scale(1.05);
 }
 
 button[type="button"] {
-  background-color: #7ca9ac; 
-  color: white;
+  background-color: #85586F; 
+  color: #F8ECD1;
   margin-top: 10px;
 }
 
 button[type="button"]:hover {
-  background-color: #6a8f91; 
+  background-color: #DEB6AB; 
   transform: scale(1.05);
 }

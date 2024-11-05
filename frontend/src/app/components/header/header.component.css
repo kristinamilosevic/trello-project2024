@@ -53,3 +53,14 @@
     background-color: #AC7D88;
     color: #F8ECD1;
 }
+
+.logo-link {
+    text-decoration: none; 
+    color: inherit;
+    cursor: pointer; 
+}
+
+.logo-link:hover {
+    color: inherit; 
+    opacity: 0.8;
+}

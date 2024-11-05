@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ProjectService } from '../../services/project/project.service';
 import { Project } from '../../models/project/project';
 import { CommonModule, DatePipe } from '@angular/common';
@@ -18,7 +18,8 @@ export class ProjectDetailsComponent implements OnInit {
   constructor(
     private route: ActivatedRoute,
     private projectService: ProjectService,
-    private datePipe: DatePipe
+    private datePipe: DatePipe,
+    private router: Router
   ) {}
 
   ngOnInit(): void {
@@ -41,7 +42,9 @@ export class ProjectDetailsComponent implements OnInit {
 
   // Prazne metode za dugmad
   addTask(): void {
-    console.log("Add Task clicked");
+    if (this.project) {
+      this.router.navigate(['/add-tasks', { projectId: this.project.id }]); 
+    }
   }
 
   viewMembers(): void {

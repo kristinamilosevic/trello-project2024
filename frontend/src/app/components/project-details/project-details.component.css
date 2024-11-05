@@ -7,7 +7,7 @@
   }
   
   .project-details {
-    background-color: #ffffff;
+    background-color: #F8ECD1;
     border-radius: 12px;
     padding: 30px;
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
@@ -29,9 +29,9 @@
     margin: 10px 0;
   }
   
-  .back-button {
-    background-color: #61989c;
-    color: white;
+  .action-button {
+    background-color: #85586F;
+    color: #F8ECD1;
     padding: 10px 20px;
     border: none;
     border-radius: 6px;
@@ -41,7 +41,16 @@
     margin-top: 20px;
   }
   
-  .back-button:hover {
-    background-color: #527e82;
+  .action-button:hover {
+    background-color: #DEB6AB;
   }
   
+  .action-buttons {
+    display: flex;
+    justify-content: center; 
+    margin-top: 20px; 
+}
+
+.action-buttons .action-button {
+    margin: 0 10px; 
+}

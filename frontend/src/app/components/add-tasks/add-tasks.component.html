@@ -1,8 +1,5 @@
 <div *ngIf="showForm">
     <form [formGroup]="taskForm" (ngSubmit)="onSubmit()">
-      <label for="projectId">Project ID:</label>
-      <input id="projectId" type="number" formControlName="projectId" required>
-  
       <label for="title">Title:</label>
       <input id="title" formControlName="title" required>
   

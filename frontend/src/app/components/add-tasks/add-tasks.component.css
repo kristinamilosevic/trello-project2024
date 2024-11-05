@@ -15,7 +15,7 @@ label {
 }
 
 input, textarea {
-    width: 100%;
+    width: 90%;
     padding: 10px;
     margin-bottom: 15px;
     border: 1px solid #85586F;
@@ -31,7 +31,7 @@ input:focus, textarea:focus {
 
 button {
     background-color: #85586F;
-    color: white;
+    color: #F8ECD1;
     border: none;
     padding: 10px 15px;
     border-radius: 4px;

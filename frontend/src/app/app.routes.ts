@@ -9,22 +9,33 @@ import { ProjectDetailsComponent } from './components/project-details/project-de
 import { TaskListComponent } from './components/task-list/task-list.component';
 
 
+// export const routes: Routes = [
+//   { path: 'add-tasks', component: AddTasksComponent },
+//   { path: 'remove-members', component: RemoveMembersComponent },
+//   { path: 'add-projects', component: AddProjectsComponent }, 
+//   { path: '', redirectTo: '/add-projects', pathMatch: 'full' }, 
+//   { path: 'add-members', component: AddMembersComponent },
+//   { path: 'add-projects', component: AddProjectsComponent },
+//   { path: 'add-members', component: AddMembersComponent },
+//   { path: 'projects-list', component: ProjectListComponent },
+//   { path: 'project/:id', component: ProjectDetailsComponent }, 
+//   { path: '', redirectTo: '/projects-list', pathMatch: 'full' },
+//   { path: 'add-projects', component: AddProjectsComponent }, 
+//   { path: '', redirectTo: '/add-projects', pathMatch: 'full' }, 
+//   { path: 'add-members', component: AddMembersComponent },
+//   { path: 'task-list', component: TaskListComponent },
+
+// ];
+
 export const routes: Routes = [
   { path: 'add-tasks', component: AddTasksComponent },
   { path: 'remove-members', component: RemoveMembersComponent },
-  { path: 'add-projects', component: AddProjectsComponent }, 
-  { path: '', redirectTo: '/add-projects', pathMatch: 'full' }, 
-  { path: 'add-members', component: AddMembersComponent },
   { path: 'add-projects', component: AddProjectsComponent },
   { path: 'add-members', component: AddMembersComponent },
   { path: 'projects-list', component: ProjectListComponent },
-  { path: 'project/:id', component: ProjectDetailsComponent }, 
-  { path: '', redirectTo: '/projects-list', pathMatch: 'full' },
-  { path: 'add-projects', component: AddProjectsComponent }, 
-  { path: '', redirectTo: '/add-projects', pathMatch: 'full' }, 
-  { path: 'add-members', component: AddMembersComponent },
+  { path: 'project/:id', component: ProjectDetailsComponent },
   { path: 'task-list', component: TaskListComponent },
-
+  { path: '', redirectTo: '/projects-list', pathMatch: 'full' }, // Postavi ovu rutu kao početnu
 ];
 
 @NgModule({
