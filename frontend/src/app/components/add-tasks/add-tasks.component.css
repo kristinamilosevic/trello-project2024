@@ -1,5 +1,5 @@
 form {
-    background-color: #f9f9f9;
+    background-color: #F8ECD1;
     border-radius: 8px;
     padding: 20px;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
@@ -18,19 +18,19 @@ input, textarea {
     width: 100%;
     padding: 10px;
     margin-bottom: 15px;
-    border: 1px solid #e0a1c4;
+    border: 1px solid #85586F;
     border-radius: 4px;
     font-size: 16px;
     transition: border-color 0.3s;
 }
 
 input:focus, textarea:focus {
-    border-color: #d13e6b;
+    border-color: #85586F;
     outline: none;
 }
 
 button {
-    background-color: #d13e6b;
+    background-color: #85586F;
     color: white;
     border: none;
     padding: 10px 15px;
@@ -41,7 +41,7 @@ button {
 }
 
 button:hover {
-    background-color: #b52d4d;
+    background-color: #DEB6AB;
 }
 
 p {
