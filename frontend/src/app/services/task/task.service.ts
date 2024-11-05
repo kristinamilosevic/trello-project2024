@@ -15,4 +15,9 @@ export class TaskService {
     const headers = new HttpHeaders({ 'Content-Type': 'application/json' });
     return this.http.post(this.apiUrl, taskData, { headers });
   }
+
+  getAllTasks(): Observable<any[]> {
+    return this.http.get<any[]>(this.apiUrl);
+  }
+  
 }

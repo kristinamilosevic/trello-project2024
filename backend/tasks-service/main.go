@@ -31,23 +31,22 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Kreirajte servis i handler
 	taskService := services.NewTaskService(client)
 	taskHandler := handlers.NewTaskHandler(taskService)
 
-	// Kreiramo novi multiplexer za rute
 	mux := http.NewServeMux()
 
-	// Definišemo POST zahtev za kreiranje taska
 	mux.HandleFunc("/tasks", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
+		switch r.Method {
+		case http.MethodPost:
 			taskHandler.CreateTask(w, r)
-		} else {
+		case http.MethodGet:
+			taskHandler.GetAllTasks(w, r)
+		default:
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		}
 	})
 
-	// Pokrenemo server sa omogućenim CORS-om
 	log.Println("Server pokrenut na http://localhost:8000")
 	if err := http.ListenAndServe(":8000", enableCORS(mux)); err != nil {
 		log.Fatal(err)
