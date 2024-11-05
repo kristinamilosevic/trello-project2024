@@ -3,6 +3,7 @@ import { ActivatedRoute } from '@angular/router';
 import { ProjectService } from '../../services/project/project.service';
 import { Project } from '../../models/project/project';
 import { CommonModule, DatePipe } from '@angular/common';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-project-details',
@@ -18,7 +19,8 @@ export class ProjectDetailsComponent implements OnInit {
   constructor(
     private route: ActivatedRoute,
     private projectService: ProjectService,
-    private datePipe: DatePipe
+    private datePipe: DatePipe,
+    private router: Router
   ) {}
 
   ngOnInit(): void {
@@ -45,7 +47,9 @@ export class ProjectDetailsComponent implements OnInit {
   }
 
   viewMembers(): void {
-    console.log("Members clicked");
+    if (this.project) {
+      this.router.navigate(['/remove-members', this.project.id]); 
+    }
   }
 
   addMember(): void {

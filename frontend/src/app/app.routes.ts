@@ -11,7 +11,7 @@ import { TaskListComponent } from './components/task-list/task-list.component';
 
 export const routes: Routes = [
   { path: 'add-tasks', component: AddTasksComponent },
-  { path: 'remove-members', component: RemoveMembersComponent },
+  { path: 'remove-members/:id', component: RemoveMembersComponent },
   { path: 'add-projects', component: AddProjectsComponent }, 
   { path: '', redirectTo: '/add-projects', pathMatch: 'full' }, 
   { path: 'add-members', component: AddMembersComponent },
