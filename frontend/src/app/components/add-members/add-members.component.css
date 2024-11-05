@@ -116,4 +116,16 @@
     left: 2px;
     top: -1px;
   }
+  .member-list li {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  
+  .member-list label {
+    display: flex;
+    align-items: center;
+    font-size: 16px;
+  }
+  
   
