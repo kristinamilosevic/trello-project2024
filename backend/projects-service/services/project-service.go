@@ -63,22 +63,32 @@ func (s *ProjectService) CreateProject(name string, description string, expected
 
 // AddMembersToProject adds multiple members to a project.
 func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, memberIDs []primitive.ObjectID) error {
-	var members []models.Member
+	var project models.Project
+	err := s.ProjectsCollection.FindOne(context.Background(), bson.M{"_id": projectID}).Decode(&project)
+	if err != nil {
+		return fmt.Errorf("projekat nije pronađen: %v", err)
+	}
 
-	// Fetch user data from the users collection
+	// Proveravamo da li dodavanje članova premašuje maksimalno dozvoljeni broj
+	if len(project.Members)+len(memberIDs) > project.MaxMembers {
+		return fmt.Errorf("dostignut je maksimalan broj članova za projekat")
+	}
+
+	// Dohvatanje korisničkih podataka i priprema za ažuriranje
+	var members []models.Member
 	for _, memberID := range memberIDs {
 		var user models.Member
 		err := s.UsersCollection.FindOne(context.Background(), bson.M{"_id": memberID}).Decode(&user)
 		if err != nil {
-			return err // Error if member is not found
+			return err // Greška ako član nije pronađen
 		}
 		members = append(members, user)
 	}
 
-	// Update the project collection to add the new members
+	// Ažuriranje projekta sa novim članovima
 	filter := bson.M{"_id": projectID}
 	update := bson.M{"$push": bson.M{"members": bson.M{"$each": members}}}
-	_, err := s.ProjectsCollection.UpdateOne(context.Background(), filter, update)
+	_, err = s.ProjectsCollection.UpdateOne(context.Background(), filter, update)
 	return err
 }
 

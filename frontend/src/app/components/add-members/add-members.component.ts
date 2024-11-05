@@ -14,8 +14,9 @@ import { CommonModule } from '@angular/common';
 })
 export class AddMembersComponent implements OnInit {
   members: Member[] = [];
-  projectMembers: Member[] = []; // Lista za članove koji su već na projektu
+  projectMembers: Member[] = [];
   projectId: string = '672939543b45491848ab98b3'; // Zakucan ID projekta za testiranje
+  errorMessage: string = ''; // Poruka o grešci
 
   constructor(private projectMembersService: ProjectMembersService) {}
 
@@ -32,19 +33,13 @@ export class AddMembersComponent implements OnInit {
   }
 
   fetchProjectMembers() {
-    console.log("Fetching project members with projectId:", this.projectId);
-
     this.projectMembersService.getProjectMembers(this.projectId).subscribe(
       (projectMembers) => {
-        console.log("Fetched project members:", projectMembers);
-
-        // Pretvaramo `_id` u `id` string za svaki projektni član
         this.projectMembers = projectMembers.map(member => ({
           ...member,
-          id: (member as any)._id.toString() // Preimenujemo `_id` u `id` za doslednost
+          id: (member as any)._id.toString()
         }));
-        
-        this.fetchUsers(); // Nakon što učitamo članove projekta, pozivamo učitavanje svih korisnika
+        this.fetchUsers();
       },
       (error) => {
         console.error('Error fetching project members:', error);
@@ -53,22 +48,12 @@ export class AddMembersComponent implements OnInit {
   }
 
   fetchUsers() {
-    console.log('Fetching all users...');
-
     this.projectMembersService.getAllUsers().subscribe(
       (allUsers) => {
-        console.log('All users:', allUsers);
-
-        // Proveravamo da li je svaki korisnik već član projekta
         this.members = allUsers.map(user => {
-          const userId = user.id.toString(); // Osiguravamo da je `id` string
+          const userId = user.id.toString();
           const isSelected = this.projectMembers.some(projMember => projMember.id === userId);
-
-          // Dodatni log za proveru vrednosti id-a
-          console.log(`Comparing project member ID: ${userId} with project IDs:`, this.projectMembers.map(pm => pm.id));
-          console.log(`User ${user.name} selected status:`, isSelected);
-          
-          return { ...user, selected: isSelected }; // Dodajemo selected svojstvo za checkiranje
+          return { ...user, selected: isSelected };
         });
       },
       (error) => {
@@ -78,25 +63,43 @@ export class AddMembersComponent implements OnInit {
   }
 
   addSelectedMembers() {
+    this.errorMessage = ''; // Reset error message
+  
     const newMembersToAdd = this.members
       .filter(member => member.selected && !this.isMemberAlreadyAdded(member))
       .map(member => member.id);
-
+  
     if (newMembersToAdd.length === 0) {
-      alert('No new members to add!');
+      // If no new members are selected, set an error message and exit function
+      this.errorMessage = 'No new members selected for addition.';
       return;
     }
-
+  
+    const currentMemberCount = this.projectMembers.length;
+    const maxMembersAllowed = 10; // Replace with actual maximum from backend
+  
+    if (currentMemberCount + newMembersToAdd.length > maxMembersAllowed) {
+      this.errorMessage = 'You cannot add more members than the maximum allowed.';
+      return;
+    }
+  
     this.projectMembersService.addMembers(this.projectId, newMembersToAdd).subscribe(
       () => {
+        this.errorMessage = ''; // Clear error message on success
         alert('Members added successfully!');
-        this.fetchProjectMembers(); // Osvežavamo listu članova nakon dodavanja
+        this.fetchProjectMembers();
       },
       (error) => {
         console.error('Error adding members:', error);
+        if (error.status === 400) {
+          this.errorMessage = 'The maximum number of members on the project has been reached!';
+        } else {
+          this.errorMessage = 'An error occurred while adding members.';
+        }
       }
     );
   }
+  
 
   isMemberAlreadyAdded(member: Member): boolean {
     return this.projectMembers.some(existingMember => existingMember.id === member.id);

@@ -93,7 +93,12 @@ func (h *ProjectHandler) AddMemberToProjectHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
+	// Pozivamo servis za dodavanje članova i proveravamo greške
 	if err := h.Service.AddMembersToProject(projectID, memberIDs); err != nil {
+		if err.Error() == "dostignut je maksimalan broj članova za projekat" {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		http.Error(w, "Failed to add members to project", http.StatusInternalServerError)
 		return
 	}
