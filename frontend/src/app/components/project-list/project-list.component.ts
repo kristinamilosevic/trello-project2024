@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { ProjectService } from '../../services/project/project.service';
 import { Project } from '../../models/project/project';
 import { CommonModule, DatePipe } from '@angular/common';
@@ -12,16 +13,16 @@ import { CommonModule, DatePipe } from '@angular/common';
   styleUrls: ['./project-list.component.css']
 })
 export class ProjectListComponent implements OnInit {
-  projects: Project[] = []; // Initialize empty array for projects
+  projects: Project[] = [];
 
-  constructor(private projectService: ProjectService) {} // Injecting ProjectService
+  constructor(private projectService: ProjectService, private router: Router) {}
 
   ngOnInit(): void {
     this.projectService.getProjects().subscribe(
       (data) => {
         this.projects = data.map((project) => ({
           ...project,
-          expectedEndDate: new Date(project.expectedEndDate as string) // Prisilno konvertovanje u string pre kreiranja Date objekta
+          expectedEndDate: new Date(project.expectedEndDate as string)
         }));
       },
       (error) => {
@@ -29,5 +30,9 @@ export class ProjectListComponent implements OnInit {
       }
     );
   }
-  
+
+  // Navigacija na stranicu sa detaljima projekta
+  openDetails(project: Project): void {
+    this.router.navigate(['/project', project.id]);
+  }
 }

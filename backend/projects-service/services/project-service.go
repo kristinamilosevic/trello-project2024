@@ -193,20 +193,20 @@ func (s *ProjectService) GetAllProjects() ([]models.Project, error) {
 	return projects, nil
 }
 
-// GetProjectByID - preuzima projekat po ID-ju
 func (s *ProjectService) GetProjectByID(projectID string) (*models.Project, error) {
-	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
+	objectId, err := primitive.ObjectIDFromHex(projectID)
 	if err != nil {
+		fmt.Println("Invalid project ID format:", projectID)
 		return nil, fmt.Errorf("invalid project ID format")
 	}
 
 	var project models.Project
-	err = s.ProjectsCollection.FindOne(context.Background(), bson.M{"_id": projectObjectID}).Decode(&project)
+	err = s.ProjectsCollection.FindOne(context.Background(), bson.M{"_id": objectId}).Decode(&project)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("project not found")
 		}
-		return nil, fmt.Errorf("unsuccessful delivery of the project: %v", err)
+		return nil, fmt.Errorf("error fetching project: %v", err)
 	}
 
 	return &project, nil

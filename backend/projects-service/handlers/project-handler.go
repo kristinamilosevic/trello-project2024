@@ -175,17 +175,17 @@ func (h *ProjectHandler) ListProjectsHandler(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(projects)
 }
 
-// GetProjectByIDHandler - dobavlja projekat po ID-ju
+// GetProjectByIDHandler - Dohvata projekat po ID-ju
 func (h *ProjectHandler) GetProjectByIDHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	projectID := vars["projectId"]
+	projectID := vars["id"]
 
 	project, err := h.Service.GetProjectByID(projectID)
 	if err != nil {
 		if err.Error() == "project not found" {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
-			http.Error(w, "Error fetching projects", http.StatusInternalServerError)
+			http.Error(w, "Error fetching project", http.StatusInternalServerError)
 		}
 		return
 	}

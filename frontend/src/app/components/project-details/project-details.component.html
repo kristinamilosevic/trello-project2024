@@ -1,0 +1,10 @@
+<div *ngIf="project" class="project-details-container">
+    <div class="project-details">
+      <h2>{{ project.name }}</h2>
+      <p><strong>Expected End Date:</strong> {{ project.expectedEndDate | date: 'shortDate' }}</p>
+      <p><strong>Min Members:</strong> {{ project.minMembers }}</p>
+      <p><strong>Max Members:</strong> {{ project.maxMembers }}</p>
+      <button (click)="goBack()" class="back-button">Back</button> <!-- Dugme Back je sada ispod teksta -->
+    </div>
+  </div>
+  
