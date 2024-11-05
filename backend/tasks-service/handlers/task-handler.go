@@ -3,20 +3,18 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"trello-project/microservices/tasks-service/models"   // Prilagodite putanju
-	"trello-project/microservices/tasks-service/services" // Prilagodite putanju
+	"trello-project/microservices/tasks-service/models"
+	"trello-project/microservices/tasks-service/services"
 )
 
 type TaskHandler struct {
 	service *services.TaskService
 }
 
-// Kreirajte novi TaskHandler
 func NewTaskHandler(service *services.TaskService) *TaskHandler {
 	return &TaskHandler{service: service}
 }
 
-// Handler za kreiranje novog zadatka
 func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	var task models.Task
 	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
@@ -32,4 +30,15 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(createdTask)
+}
+
+func (h *TaskHandler) GetAllTasks(w http.ResponseWriter, r *http.Request) {
+	tasks, err := h.service.GetAllTasks()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(tasks)
 }
