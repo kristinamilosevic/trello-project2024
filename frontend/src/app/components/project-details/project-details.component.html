@@ -1,0 +1,16 @@
+<div *ngIf="project" class="project-details-container">
+  <div class="project-details">
+    <h2>{{ project.name }}</h2>
+    <p><strong>Expected End Date:</strong> {{ project.expectedEndDate | date: 'shortDate' }}</p>
+    <p><strong>Min Members:</strong> {{ project.minMembers }}</p>
+    <p><strong>Max Members:</strong> {{ project.maxMembers }}</p>
+    <button (click)="goBack()" class="back-button">Back</button>
+
+    <!-- Nova dugmad -->
+    <div class="action-buttons">
+      <button (click)="addTask()" class="back-button">Add Task</button>
+      <button (click)="viewMembers()" class="back-button">Members</button>
+      <button (click)="addMember()" class="back-button">Add Member</button>
+    </div>
+  </div>
+</div>
