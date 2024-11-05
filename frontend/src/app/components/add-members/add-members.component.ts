@@ -14,7 +14,7 @@ import { Member } from '../../models/member/member.model';
 })
 export class AddMembersComponent implements OnInit {
   members: Member[] = [];
-  projectMembers: Member[] = []; // Nova lista za članove projekta
+  projectMembers: any[] = []; // Koristimo any[] da bismo podržali _id format
   projectId: string = '672939543b45491848ab98b3'; // Zakucan ID projekta za testiranje
 
   constructor(private http: HttpClient) {}
@@ -34,11 +34,17 @@ export class AddMembersComponent implements OnInit {
   fetchProjectMembers() {
     console.log("Fetching project members with projectId:", this.projectId);
 
-    this.http.get<Member[]>(`http://localhost:8080/projects/${this.projectId}/members`).subscribe(
+    this.http.get<any[]>(`http://localhost:8080/projects/${this.projectId}/members`).subscribe(
       (projectMembers) => {
         console.log("Fetched project members:", projectMembers);
-        this.projectMembers = projectMembers;
-        this.fetchUsers();
+
+        // Pretvaramo `_id` u `id` string za svaki projektni član
+        this.projectMembers = projectMembers.map(member => ({
+          ...member,
+          id: member._id.toString() // Preimenujemo `_id` u `id` za doslednost
+        }));
+        
+        this.fetchUsers(); // Nakon što učitamo članove projekta, pozivamo učitavanje svih korisnika
       },
       (error) => {
         console.error('Error fetching project members:', error);
@@ -49,16 +55,20 @@ export class AddMembersComponent implements OnInit {
   fetchUsers() {
     console.log('Fetching all users...');
 
-    // Zatim učitavamo sve korisnike
     this.http.get<Member[]>('http://localhost:8080/users').subscribe(
       (allUsers) => {
         console.log('All users:', allUsers);
 
-        // Setujemo `selected` na `true` za članove koji su već na projektu
+        // Proveravamo da li je svaki korisnik već član projekta
         this.members = allUsers.map(user => {
-          const isSelected = this.projectMembers.some(projMember => projMember.id === user.id);
+          const userId = user.id.toString(); // Osiguravamo da je `id` string
+          const isSelected = this.projectMembers.some(projMember => projMember.id === userId);
+
+          // Dodatni log za proveru vrednosti id-a
+          console.log(`Comparing project member ID: ${userId} with project IDs:`, this.projectMembers.map(pm => pm.id));
           console.log(`User ${user.name} selected status:`, isSelected);
-          return { ...user, selected: isSelected };
+          
+          return { ...user, selected: isSelected }; // Dodajemo selected svojstvo za checkiranje
         });
       },
       (error) => {
@@ -80,7 +90,7 @@ export class AddMembersComponent implements OnInit {
     this.http.post(`http://localhost:8080/projects/${this.projectId}/members`, newMembersToAdd).subscribe(
       () => {
         alert('Members added successfully!');
-        this.fetchProjectMembers();
+        this.fetchProjectMembers(); // Osvežavamo listu članova nakon dodavanja
       },
       (error) => {
         console.error('Error adding members:', error);
