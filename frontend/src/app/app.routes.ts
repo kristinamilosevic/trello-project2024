@@ -32,12 +32,14 @@ export const routes: Routes = [
   { path: 'remove-members', component: RemoveMembersComponent },
   { path: 'remove-members/:id', component: RemoveMembersComponent },
   { path: 'add-projects', component: AddProjectsComponent }, 
-  { path: '', redirectTo: '/add-projects', pathMatch: 'full' }, 
-  { path: 'add-members', component: AddMembersComponent },
-  { path: 'add-projects', component: AddProjectsComponent },
-  { path: 'add-members', component: AddMembersComponent },
+  { path: '', redirectTo: '/add-projects', pathMatch: 'full' },
+  { path: 'project/:id/add-members', component: AddMembersComponent },
   { path: 'projects-list', component: ProjectListComponent },
+
   { path: 'project/:id', component: ProjectDetailsComponent },
+
+  { path: 'project/:id', component: ProjectDetailsComponent }, 
+  { path: '', redirectTo: '/projects-list', pathMatch: 'full' },
   { path: 'task-list', component: TaskListComponent },
   { path: '', redirectTo: '/projects-list', pathMatch: 'full' }, 
 ];

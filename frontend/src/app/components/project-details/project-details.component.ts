@@ -55,6 +55,10 @@ export class ProjectDetailsComponent implements OnInit {
   }
 
   addMember(): void {
-    console.log("Add Member clicked");
+    const projectId = this.project?.id;
+    if (projectId) {
+      this.router.navigate([`/project/${projectId}/add-members`]);
+    }
   }
+  
 }

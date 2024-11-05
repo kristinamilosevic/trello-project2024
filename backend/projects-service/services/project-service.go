@@ -66,12 +66,17 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, membe
 	var project models.Project
 	err := s.ProjectsCollection.FindOne(context.Background(), bson.M{"_id": projectID}).Decode(&project)
 	if err != nil {
-		return fmt.Errorf("projekat nije pronađen: %v", err)
+		return fmt.Errorf("project not found: %v", err)
 	}
 
-	// Proveravamo da li dodavanje članova premašuje maksimalno dozvoljeni broj
+	// Provera da li dodavanje članova premašuje maksimalno dozvoljeni broj
 	if len(project.Members)+len(memberIDs) > project.MaxMembers {
-		return fmt.Errorf("dostignut je maksimalan broj članova za projekat")
+		return fmt.Errorf("maximum number of members reached for the project")
+	}
+
+	// Provera da li bi broj članova pao ispod minimalnog
+	if len(project.Members)+len(memberIDs) < project.MinMembers {
+		return fmt.Errorf("the number of members cannot be less than the minimum required for the project")
 	}
 
 	// Dohvatanje korisničkih podataka i priprema za ažuriranje

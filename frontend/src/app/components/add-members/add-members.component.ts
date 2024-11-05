@@ -4,6 +4,8 @@ import { Member } from '../../models/member/member.model';
 import { FormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
+import { ActivatedRoute } from '@angular/router';
+
 
 @Component({
   selector: 'app-add-members',
@@ -15,12 +17,14 @@ import { CommonModule } from '@angular/common';
 export class AddMembersComponent implements OnInit {
   members: Member[] = [];
   projectMembers: Member[] = [];
-  projectId: string = '672939543b45491848ab98b3'; // Zakucan ID projekta za testiranje
-  errorMessage: string = ''; // Poruka o grešci
+  projectId: string = '';
+  errorMessage: string = '';
 
-  constructor(private projectMembersService: ProjectMembersService) {}
+  constructor(private projectMembersService: ProjectMembersService, private route: ActivatedRoute) {}
 
   ngOnInit(): void {
+    this.projectId = this.route.snapshot.paramMap.get('id') || ''; // Preuzimamo ID projekta iz parametra rute
+
     if (this.isValidObjectId(this.projectId)) {
       this.fetchProjectMembers();
     } else {
@@ -70,35 +74,50 @@ export class AddMembersComponent implements OnInit {
       .map(member => member.id);
   
     if (newMembersToAdd.length === 0) {
-      // If no new members are selected, set an error message and exit function
+      // Ako nije izabran nijedan novi član, postavi poruku o grešci i prekini funkciju
       this.errorMessage = 'No new members selected for addition.';
       return;
     }
   
     const currentMemberCount = this.projectMembers.length;
-    const maxMembersAllowed = 10; // Replace with actual maximum from backend
+    const maxMembersAllowed = 10; // Zamenite stvarnom maksimalnom vrednošću sa backenda
+    const minMembersAllowed = 2;  // Zamenite stvarnom minimalnom vrednošću sa backenda
   
     if (currentMemberCount + newMembersToAdd.length > maxMembersAllowed) {
       this.errorMessage = 'You cannot add more members than the maximum allowed.';
       return;
     }
+
+    if (currentMemberCount + newMembersToAdd.length < minMembersAllowed) {
+      this.errorMessage = 'You cannot have fewer members than the minimum required.';
+      return;
+    }
   
     this.projectMembersService.addMembers(this.projectId, newMembersToAdd).subscribe(
       () => {
-        this.errorMessage = ''; // Clear error message on success
+        this.errorMessage = ''; // Očisti poruku o grešci kada je dodavanje uspešno
         alert('Members added successfully!');
         this.fetchProjectMembers();
       },
       (error) => {
         console.error('Error adding members:', error);
         if (error.status === 400) {
-          this.errorMessage = 'The maximum number of members on the project has been reached!';
+          // Provera za specifične poruke grešaka koje vraća backend
+          const errorText = error.error || error.message || '';
+          if (errorText.includes('the number of members cannot be less than the minimum required for the project')) {
+            this.errorMessage = 'The number of members cannot be less than the minimum required for the project.';
+          } else if (errorText.includes('maximum number of members reached for the project')) {
+            this.errorMessage = 'The maximum number of members on the project has been reached!';
+          } else {
+            this.errorMessage = 'An error occurred while adding members.';
+          }
         } else {
-          this.errorMessage = 'An error occurred while adding members.';
+          this.errorMessage = 'An unexpected error occurred while adding members.';
         }
       }
     );
   }
+
   
 
   isMemberAlreadyAdded(member: Member): boolean {
