@@ -2,7 +2,7 @@ import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ProjectService } from '../../services/project/project.service';
-
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-add-projects',
@@ -14,14 +14,17 @@ import { ProjectService } from '../../services/project/project.service';
 export class AddProjectsComponent {
   projectForm: FormGroup;
 
-  constructor(private fb: FormBuilder, private projectService: ProjectService) {
+  constructor(
+    private fb: FormBuilder, 
+    private projectService: ProjectService,
+    private router: Router // Dodavanje Router servisa
+  ) {
     this.projectForm = this.fb.group({
       name: ['', Validators.required],
       expectedEndDate: ['', Validators.required],
       minMembers: ['', [Validators.required, Validators.min(1)]],
       maxMembers: ['', [Validators.required, Validators.min(1)]],
     });
-    
   }
 
   onSubmit() {
@@ -36,11 +39,11 @@ export class AddProjectsComponent {
           console.log('Project created:', response);
           alert('Project successfully created!');
           this.projectForm.reset();
+          this.router.navigate(['/projects-list']); // Redirekcija na listu projekata
         },
         error => {
           console.error('Error creating project:', error);
           
-          // Analizirajte specifičnu grešku i prikažite odgovarajuću poruku
           if (error.status === 400) {
             if (error.error.includes("Expected end date must be in the future")) {
               alert("Expected end date must be in the future.");
@@ -63,8 +66,7 @@ export class AddProjectsComponent {
     }
   }
   
-  
   onTasksClick() {
     alert('Navigating to tasks page...');
   }
-}  
+}
