@@ -11,7 +11,7 @@ import { ProjectMembersService } from '../../services/project-members/project-me
   styleUrls: ['./remove-members.component.css']
 })
 export class RemoveMembersComponent implements OnInit {
-  projectId = '617f1f77bcf86cd799439011'; //id projekta
+  projectId = '672939543b45491848ab98b3'; //id projekta
   members: any[] = [];
 
   constructor(private projectMembersService: ProjectMembersService) {}

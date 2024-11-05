@@ -63,22 +63,32 @@ func (s *ProjectService) CreateProject(name string, description string, expected
 
 // AddMembersToProject adds multiple members to a project.
 func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, memberIDs []primitive.ObjectID) error {
-	var members []models.Member
+	var project models.Project
+	err := s.ProjectsCollection.FindOne(context.Background(), bson.M{"_id": projectID}).Decode(&project)
+	if err != nil {
+		return fmt.Errorf("projekat nije pronađen: %v", err)
+	}
 
-	// Fetch user data from the users collection
+	// Proveravamo da li dodavanje članova premašuje maksimalno dozvoljeni broj
+	if len(project.Members)+len(memberIDs) > project.MaxMembers {
+		return fmt.Errorf("dostignut je maksimalan broj članova za projekat")
+	}
+
+	// Dohvatanje korisničkih podataka i priprema za ažuriranje
+	var members []models.Member
 	for _, memberID := range memberIDs {
 		var user models.Member
 		err := s.UsersCollection.FindOne(context.Background(), bson.M{"_id": memberID}).Decode(&user)
 		if err != nil {
-			return err // Error if member is not found
+			return err // Greška ako član nije pronađen
 		}
 		members = append(members, user)
 	}
 
-	// Update the project collection to add the new members
+	// Ažuriranje projekta sa novim članovima
 	filter := bson.M{"_id": projectID}
 	update := bson.M{"$push": bson.M{"members": bson.M{"$each": members}}}
-	_, err := s.ProjectsCollection.UpdateOne(context.Background(), filter, update)
+	_, err = s.ProjectsCollection.UpdateOne(context.Background(), filter, update)
 	return err
 }
 
@@ -175,4 +185,39 @@ func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID,
 	}
 
 	return nil
+}
+
+// GetAllProjects - preuzima sve projekte iz kolekcije
+func (s *ProjectService) GetAllProjects() ([]models.Project, error) {
+	var projects []models.Project
+	cursor, err := s.ProjectsCollection.Find(context.Background(), bson.M{})
+	if err != nil {
+		return nil, fmt.Errorf("unsuccessful procurement of projects: %v", err)
+	}
+	defer cursor.Close(context.Background())
+
+	if err = cursor.All(context.Background(), &projects); err != nil {
+		return nil, fmt.Errorf("unsuccessful decoding of projects: %v", err)
+	}
+
+	return projects, nil
+}
+
+func (s *ProjectService) GetProjectByID(projectID string) (*models.Project, error) {
+	objectId, err := primitive.ObjectIDFromHex(projectID)
+	if err != nil {
+		fmt.Println("Invalid project ID format:", projectID)
+		return nil, fmt.Errorf("invalid project ID format")
+	}
+
+	var project models.Project
+	err = s.ProjectsCollection.FindOne(context.Background(), bson.M{"_id": objectId}).Decode(&project)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("project not found")
+		}
+		return nil, fmt.Errorf("error fetching project: %v", err)
+	}
+
+	return &project, nil
 }

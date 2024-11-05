@@ -93,7 +93,12 @@ func (h *ProjectHandler) AddMemberToProjectHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
+	// Pozivamo servis za dodavanje članova i proveravamo greške
 	if err := h.Service.AddMembersToProject(projectID, memberIDs); err != nil {
+		if err.Error() == "dostignut je maksimalan broj članova za projekat" {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		http.Error(w, "Failed to add members to project", http.StatusInternalServerError)
 		return
 	}
@@ -161,4 +166,40 @@ func (h *ProjectHandler) GetAllUsersHandler(w http.ResponseWriter, r *http.Reque
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(users)
+}
+
+// ListProjectsHandler - dobavlja sve projekte
+func (h *ProjectHandler) ListProjectsHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Fetching all projects...") // Log za praćenje
+
+	projects, err := h.Service.GetAllProjects()
+	if err != nil {
+		fmt.Println("Error fetching projects from service:", err) // Log za grešku
+		http.Error(w, "Error fetching projects", http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Println("Projects fetched successfully:", projects) // Log za uspešan odziv
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(projects)
+}
+
+// GetProjectByIDHandler - Dohvata projekat po ID-ju
+func (h *ProjectHandler) GetProjectByIDHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	projectID := vars["id"]
+
+	project, err := h.Service.GetProjectByID(projectID)
+	if err != nil {
+		if err.Error() == "project not found" {
+			http.Error(w, err.Error(), http.StatusNotFound)
+		} else {
+			http.Error(w, "Error fetching project", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(project)
 }

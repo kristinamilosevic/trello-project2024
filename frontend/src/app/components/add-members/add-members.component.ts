@@ -1,9 +1,9 @@
 import { Component, OnInit } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { ProjectMembersService } from '../../services/project-members/project-members.service';
+import { Member } from '../../models/member/member.model';
 import { FormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { Member } from '../../models/member/member.model';
 
 @Component({
   selector: 'app-add-members',
@@ -14,10 +14,11 @@ import { Member } from '../../models/member/member.model';
 })
 export class AddMembersComponent implements OnInit {
   members: Member[] = [];
-  projectMembers: Member[] = []; // Nova lista za članove projekta
+  projectMembers: Member[] = [];
   projectId: string = '672939543b45491848ab98b3'; // Zakucan ID projekta za testiranje
+  errorMessage: string = ''; // Poruka o grešci
 
-  constructor(private http: HttpClient) {}
+  constructor(private projectMembersService: ProjectMembersService) {}
 
   ngOnInit(): void {
     if (this.isValidObjectId(this.projectId)) {
@@ -32,12 +33,12 @@ export class AddMembersComponent implements OnInit {
   }
 
   fetchProjectMembers() {
-    console.log("Fetching project members with projectId:", this.projectId);
-
-    this.http.get<Member[]>(`http://localhost:8080/projects/${this.projectId}/members`).subscribe(
+    this.projectMembersService.getProjectMembers(this.projectId).subscribe(
       (projectMembers) => {
-        console.log("Fetched project members:", projectMembers);
-        this.projectMembers = projectMembers;
+        this.projectMembers = projectMembers.map(member => ({
+          ...member,
+          id: (member as any)._id.toString()
+        }));
         this.fetchUsers();
       },
       (error) => {
@@ -47,17 +48,11 @@ export class AddMembersComponent implements OnInit {
   }
 
   fetchUsers() {
-    console.log('Fetching all users...');
-
-    // Zatim učitavamo sve korisnike
-    this.http.get<Member[]>('http://localhost:8080/users').subscribe(
+    this.projectMembersService.getAllUsers().subscribe(
       (allUsers) => {
-        console.log('All users:', allUsers);
-
-        // Setujemo `selected` na `true` za članove koji su već na projektu
         this.members = allUsers.map(user => {
-          const isSelected = this.projectMembers.some(projMember => projMember.id === user.id);
-          console.log(`User ${user.name} selected status:`, isSelected);
+          const userId = user.id.toString();
+          const isSelected = this.projectMembers.some(projMember => projMember.id === userId);
           return { ...user, selected: isSelected };
         });
       },
@@ -68,25 +63,43 @@ export class AddMembersComponent implements OnInit {
   }
 
   addSelectedMembers() {
+    this.errorMessage = ''; // Reset error message
+  
     const newMembersToAdd = this.members
       .filter(member => member.selected && !this.isMemberAlreadyAdded(member))
       .map(member => member.id);
-
+  
     if (newMembersToAdd.length === 0) {
-      alert('No new members to add!');
+      // If no new members are selected, set an error message and exit function
+      this.errorMessage = 'No new members selected for addition.';
       return;
     }
-
-    this.http.post(`http://localhost:8080/projects/${this.projectId}/members`, newMembersToAdd).subscribe(
+  
+    const currentMemberCount = this.projectMembers.length;
+    const maxMembersAllowed = 10; // Replace with actual maximum from backend
+  
+    if (currentMemberCount + newMembersToAdd.length > maxMembersAllowed) {
+      this.errorMessage = 'You cannot add more members than the maximum allowed.';
+      return;
+    }
+  
+    this.projectMembersService.addMembers(this.projectId, newMembersToAdd).subscribe(
       () => {
+        this.errorMessage = ''; // Clear error message on success
         alert('Members added successfully!');
         this.fetchProjectMembers();
       },
       (error) => {
         console.error('Error adding members:', error);
+        if (error.status === 400) {
+          this.errorMessage = 'The maximum number of members on the project has been reached!';
+        } else {
+          this.errorMessage = 'An error occurred while adding members.';
+        }
       }
     );
   }
+  
 
   isMemberAlreadyAdded(member: Member): boolean {
     return this.projectMembers.some(existingMember => existingMember.id === member.id);
