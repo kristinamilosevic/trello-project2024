@@ -134,6 +134,7 @@ func (s *ProjectService) GetAllUsers() ([]models.Member, error) {
 }
 
 // RemoveMemberFromProject removes a member from a project if they are not assigned to an in-progress task.
+
 func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID, memberID string) error {
 	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
 	if err != nil {
@@ -145,11 +146,11 @@ func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID,
 		return errors.New("invalid member ID format")
 	}
 
-	// Check if the member has any active tasks
+	// Proverite da li član ima aktivne zadatke
 	taskFilter := bson.M{
-		"projectId": projectObjectID.Hex(),
+		"projectId": projectObjectID.Hex(), // ID projekta
 		"status":    "in progress",
-		"assignees": memberID,
+		"assignees": memberObjectID, // ID člana
 	}
 
 	cursor, err := s.TasksCollection.Find(ctx, taskFilter)
@@ -158,20 +159,12 @@ func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID,
 	}
 	defer cursor.Close(ctx)
 
-	var tasksInProgress []bson.M
-	for cursor.Next(ctx) {
-		var task bson.M
-		if err := cursor.Decode(&task); err != nil {
-			return errors.New("failed to decode task data")
-		}
-		tasksInProgress = append(tasksInProgress, task)
-	}
-
-	if len(tasksInProgress) > 0 {
+	// Proverite ima li aktivnih zadataka
+	if cursor.TryNext(ctx) { // Ako postoje rezultati
 		return errors.New("cannot remove member assigned to an in-progress task")
 	}
 
-	// Update the project to remove the member from the list
+	// Uklonite člana ako nema aktivnih zadataka
 	projectFilter := bson.M{"_id": projectObjectID}
 	update := bson.M{"$pull": bson.M{"members": bson.M{"_id": memberObjectID}}}
 

@@ -13,4 +13,8 @@
       </td>
     </tr>
   </tbody>
+
+  <div *ngIf="members.length === 0" class="no-members">
+    <p>No members found for this project.</p>
+  </div>
 </table>

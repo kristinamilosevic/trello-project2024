@@ -4,6 +4,7 @@ import { ProjectService } from '../../services/project/project.service';
 import { Project } from '../../models/project/project';
 import { CommonModule, DatePipe } from '@angular/common';
 
+
 @Component({
   selector: 'app-project-details',
   standalone: true,
@@ -48,7 +49,9 @@ export class ProjectDetailsComponent implements OnInit {
   }
 
   viewMembers(): void {
-    console.log("Members clicked");
+    if (this.project) {
+      this.router.navigate(['/remove-members', this.project.id]); 
+    }
   }
 
   addMember(): void {
