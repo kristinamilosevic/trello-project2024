@@ -39,7 +39,7 @@ func main() {
 
 	// Initialize services and handlers
 	projectService := &services.ProjectService{
-		ProjectsCollection: projectsDB.Collection("project"),
+		ProjectsCollection: projectsDB.Collection("projects"),
 		TasksCollection:    tasksDB.Collection("tasks"),
 		UsersCollection:    usersDB.Collection("users"),
 	}
@@ -53,6 +53,8 @@ func main() {
 	r.HandleFunc("/projects/{id}/members", projectHandler.AddMemberToProjectHandler).Methods("POST")
 	//r.HandleFunc("/projects/{id}/members", projectHandler.GetProjectMembersHandler).Methods("GET")
 	r.HandleFunc("/users", projectHandler.GetAllUsersHandler).Methods("GET")
+	r.HandleFunc("/projects", projectHandler.ListProjectsHandler).Methods("GET")
+	r.HandleFunc("/projects/{projectId}", projectHandler.GetProjectByIDHandler).Methods("GET")
 
 	// Apply CORS middleware
 	corsRouter := enableCORS(r)

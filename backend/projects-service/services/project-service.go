@@ -176,3 +176,38 @@ func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID,
 
 	return nil
 }
+
+// GetAllProjects - preuzima sve projekte iz kolekcije
+func (s *ProjectService) GetAllProjects() ([]models.Project, error) {
+	var projects []models.Project
+	cursor, err := s.ProjectsCollection.Find(context.Background(), bson.M{})
+	if err != nil {
+		return nil, fmt.Errorf("unsuccessful procurement of projects: %v", err)
+	}
+	defer cursor.Close(context.Background())
+
+	if err = cursor.All(context.Background(), &projects); err != nil {
+		return nil, fmt.Errorf("unsuccessful decoding of projects: %v", err)
+	}
+
+	return projects, nil
+}
+
+// GetProjectByID - preuzima projekat po ID-ju
+func (s *ProjectService) GetProjectByID(projectID string) (*models.Project, error) {
+	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid project ID format")
+	}
+
+	var project models.Project
+	err = s.ProjectsCollection.FindOne(context.Background(), bson.M{"_id": projectObjectID}).Decode(&project)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("project not found")
+		}
+		return nil, fmt.Errorf("unsuccessful delivery of the project: %v", err)
+	}
+
+	return &project, nil
+}

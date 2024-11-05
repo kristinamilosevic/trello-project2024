@@ -162,3 +162,34 @@ func (h *ProjectHandler) GetAllUsersHandler(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(users)
 }
+
+// ListProjectsHandler - dobavlja sve projekte
+func (h *ProjectHandler) ListProjectsHandler(w http.ResponseWriter, r *http.Request) {
+	projects, err := h.Service.GetAllProjects()
+	if err != nil {
+		http.Error(w, "Error fetching projects", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(projects)
+}
+
+// GetProjectByIDHandler - dobavlja projekat po ID-ju
+func (h *ProjectHandler) GetProjectByIDHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	projectID := vars["projectId"]
+
+	project, err := h.Service.GetProjectByID(projectID)
+	if err != nil {
+		if err.Error() == "project not found" {
+			http.Error(w, err.Error(), http.StatusNotFound)
+		} else {
+			http.Error(w, "Error fetching projects", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(project)
+}

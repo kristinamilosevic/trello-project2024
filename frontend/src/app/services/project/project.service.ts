@@ -1,6 +1,10 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { Project } from '../../models/project/project';
+
+
+
 
 @Injectable({
   providedIn: 'root'
@@ -18,5 +22,9 @@ export class ProjectService {
 
     // Pravilno šaljemo `headers` parametar u POST metodu
     return this.http.post(this.apiUrl, projectData, { headers });
+  }
+
+  getProjects(): Observable<Project[]> {
+    return this.http.get<Project[]>(this.apiUrl); // GET zahtev za dobijanje liste projekata
   }
 }
