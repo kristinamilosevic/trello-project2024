@@ -1,9 +1,9 @@
 import { Component, OnInit } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { ProjectMembersService } from '../../services/project-members/project-members.service';
+import { Member } from '../../models/member/member.model';
 import { FormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { Member } from '../../models/member/member.model';
 
 @Component({
   selector: 'app-add-members',
@@ -14,10 +14,10 @@ import { Member } from '../../models/member/member.model';
 })
 export class AddMembersComponent implements OnInit {
   members: Member[] = [];
-  projectMembers: any[] = []; // Koristimo any[] da bismo podržali _id format
+  projectMembers: Member[] = []; // Lista za članove koji su već na projektu
   projectId: string = '672939543b45491848ab98b3'; // Zakucan ID projekta za testiranje
 
-  constructor(private http: HttpClient) {}
+  constructor(private projectMembersService: ProjectMembersService) {}
 
   ngOnInit(): void {
     if (this.isValidObjectId(this.projectId)) {
@@ -34,14 +34,14 @@ export class AddMembersComponent implements OnInit {
   fetchProjectMembers() {
     console.log("Fetching project members with projectId:", this.projectId);
 
-    this.http.get<any[]>(`http://localhost:8080/projects/${this.projectId}/members`).subscribe(
+    this.projectMembersService.getProjectMembers(this.projectId).subscribe(
       (projectMembers) => {
         console.log("Fetched project members:", projectMembers);
 
         // Pretvaramo `_id` u `id` string za svaki projektni član
         this.projectMembers = projectMembers.map(member => ({
           ...member,
-          id: member._id.toString() // Preimenujemo `_id` u `id` za doslednost
+          id: (member as any)._id.toString() // Preimenujemo `_id` u `id` za doslednost
         }));
         
         this.fetchUsers(); // Nakon što učitamo članove projekta, pozivamo učitavanje svih korisnika
@@ -55,7 +55,7 @@ export class AddMembersComponent implements OnInit {
   fetchUsers() {
     console.log('Fetching all users...');
 
-    this.http.get<Member[]>('http://localhost:8080/users').subscribe(
+    this.projectMembersService.getAllUsers().subscribe(
       (allUsers) => {
         console.log('All users:', allUsers);
 
@@ -87,7 +87,7 @@ export class AddMembersComponent implements OnInit {
       return;
     }
 
-    this.http.post(`http://localhost:8080/projects/${this.projectId}/members`, newMembersToAdd).subscribe(
+    this.projectMembersService.addMembers(this.projectId, newMembersToAdd).subscribe(
       () => {
         alert('Members added successfully!');
         this.fetchProjectMembers(); // Osvežavamo listu članova nakon dodavanja
