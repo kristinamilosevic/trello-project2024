@@ -3,6 +3,7 @@ import { ActivatedRoute } from '@angular/router';
 import { ProjectService } from '../../services/project/project.service';
 import { Project } from '../../models/project/project';
 import { CommonModule, DatePipe } from '@angular/common';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-project-details',
@@ -15,11 +16,13 @@ import { CommonModule, DatePipe } from '@angular/common';
 export class ProjectDetailsComponent implements OnInit {
   project: Project | null = null;
 
-  constructor(
-    private route: ActivatedRoute,
-    private projectService: ProjectService,
-    private datePipe: DatePipe
-  ) {}
+ 
+constructor(
+  private route: ActivatedRoute,
+  private projectService: ProjectService,
+  private datePipe: DatePipe,
+  private router: Router
+) {}
 
   ngOnInit(): void {
     const projectId = this.route.snapshot.paramMap.get('id');
@@ -49,6 +52,10 @@ export class ProjectDetailsComponent implements OnInit {
   }
 
   addMember(): void {
-    console.log("Add Member clicked");
+    const projectId = this.project?.id;
+    if (projectId) {
+      this.router.navigate([`/project/${projectId}/add-members`]);
+    }
   }
+  
 }

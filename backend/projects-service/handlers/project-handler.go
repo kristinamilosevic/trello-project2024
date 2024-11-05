@@ -94,8 +94,13 @@ func (h *ProjectHandler) AddMemberToProjectHandler(w http.ResponseWriter, r *htt
 	}
 
 	// Pozivamo servis za dodavanje članova i proveravamo greške
-	if err := h.Service.AddMembersToProject(projectID, memberIDs); err != nil {
-		if err.Error() == "dostignut je maksimalan broj članova za projekat" {
+	err = h.Service.AddMembersToProject(projectID, memberIDs)
+	if err != nil {
+		if err.Error() == "maximum number of members reached for the project" {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err.Error() == "the number of members cannot be less than the minimum required for the project" {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
