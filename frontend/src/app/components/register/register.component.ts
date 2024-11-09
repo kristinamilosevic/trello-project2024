@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
 
 @Component({
   selector: 'app-register',
@@ -13,8 +14,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 export class RegisterComponent {
   registerForm: FormGroup;
 
-  constructor(private fb: FormBuilder) {
-    // Kreiranje forme sa validacijama
+  constructor(private fb: FormBuilder, private http: HttpClient) {
     this.registerForm = this.fb.group({
       name: ['', Validators.required],
       lastName: ['', Validators.required],
@@ -28,10 +28,19 @@ export class RegisterComponent {
   // Metoda za submit forme
   onSubmit() {
     if (this.registerForm.valid) {
-      console.log('Form data:', this.registerForm.value);
-      alert('Form successfully submitted!');
+      this.http.post('http://localhost:8080/register', this.registerForm.value).subscribe({
+        next: () => {
+          alert('Registration successful. Check your email for confirmation link.');
+          this.registerForm.reset();
+        },
+        error: (error) => {
+          console.error('Error during registration:', error);
+          alert('Registration failed.');
+        },
+      });
     } else {
       alert('Please fill out the form correctly.');
     }
   }
 }
+
