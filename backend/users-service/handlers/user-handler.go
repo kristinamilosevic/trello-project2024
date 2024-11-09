@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"trello-project/microservices/users-service/models"
 	"trello-project/microservices/users-service/services"
@@ -32,31 +33,63 @@ func (h *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 // ConfirmEmail kreira korisnika u bazi i redirektuje na frontend
 func (h *UserHandler) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
-	token := r.URL.Query().Get("token")
-	if token == "" {
-		http.Error(w, "Missing token", http.StatusBadRequest)
+	var requestData struct {
+		Email string `json:"email"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
+		http.Error(w, "Invalid request data", http.StatusBadRequest)
 		return
 	}
 
-	// Verifikacija tokena i preuzimanje emaila
+	// Proverite da li token i podaci korisnika postoje u kešu
+	tokenData, ok := h.UserService.TokenCache[requestData.Email]
+	if !ok {
+		http.Error(w, "Token expired or not found", http.StatusUnauthorized)
+		return
+	}
+
+	// Podelite podatke iz keša
+	dataParts := strings.Split(tokenData, "|")
+	if len(dataParts) < 6 {
+		http.Error(w, "Invalid token data", http.StatusBadRequest)
+		return
+	}
+	token := dataParts[0]
+	name := dataParts[1]
+	lastName := dataParts[2]
+	username := dataParts[3]
+	password := dataParts[4]
+	role := dataParts[5]
+
+	// Verifikujte token
 	email, err := h.UserService.JWTService.VerifyEmailVerificationToken(token)
 	if err != nil {
 		http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
 		return
 	}
 
-	// Kreiranje korisnika sa preuzetim email-om
+	// Kreirajte korisnika sa podacima iz keša
 	user := models.User{
-		Email: email,
+		Email:    email,
+		Name:     name,
+		LastName: lastName,
+		Username: username,
+		Password: password,
+		Role:     role,
 	}
 
-	// Čuvanje korisnika u bazi
+	// Sačuvajte korisnika u bazi
 	err = h.UserService.CreateUser(user)
 	if err != nil {
 		http.Error(w, "Failed to save user", http.StatusInternalServerError)
 		return
 	}
 
-	// Redirektuje korisnika na frontend bez prikazivanja tokena
-	http.Redirect(w, r, "http://localhost:4200/projects-list", http.StatusFound)
+	// Izbrišite token iz keša
+	delete(h.UserService.TokenCache, requestData.Email)
+
+	// Redirektujte korisnika
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Registration confirmed. You may now log in once the login page is ready."))
 }

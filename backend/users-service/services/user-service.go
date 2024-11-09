@@ -14,12 +14,14 @@ import (
 type UserService struct {
 	UserCollection *mongo.Collection
 	JWTService     *JWTService
+	TokenCache     map[string]string
 }
 
 func NewUserService(userCollection *mongo.Collection) *UserService {
 	return &UserService{
 		UserCollection: userCollection,
 		JWTService:     &JWTService{},
+		TokenCache:     make(map[string]string), // Privremeni keš
 	}
 }
 
@@ -37,8 +39,11 @@ func (s *UserService) RegisterUser(user models.User) error {
 		return fmt.Errorf("Failed to generate token: %v", err)
 	}
 
+	// Sačuvajte korisničke podatke i token u kešu
+	s.TokenCache[user.Email] = fmt.Sprintf("%s|%s|%s|%s|%s|%s", token, user.Name, user.LastName, user.Username, user.Password, user.Role)
+
 	// Slanje emaila sa linkom za potvrdu
-	verificationLink := fmt.Sprintf("http://localhost:8080/confirm?token=%s", token)
+	verificationLink := "http://localhost:4200/projects-list?verify=true"
 	subject := "Confirm your email"
 	body := fmt.Sprintf("Click the link to confirm your registration: %s", verificationLink)
 
