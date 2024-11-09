@@ -42,11 +42,9 @@ func main() {
 	userService := services.NewUserService(userCollection, projectCollection, taskCollection)
 	userHandler := handlers.UserHandler{UserService: userService}
 
-	// Postavi rutu za registraciju
 	http.HandleFunc("/register", userHandler.Register)
-	http.HandleFunc("/api/auth/delete-account/", userHandler.DeleteAccountHandler)
+	http.Handle("/api/auth/delete-account/", enableCORS(http.HandlerFunc(userHandler.DeleteAccountHandler)))
 
-	// Pokreni server
 	srv := &http.Server{
 		Addr:         ":8080",
 		ReadTimeout:  10 * time.Second,
@@ -55,4 +53,21 @@ func main() {
 	fmt.Println("Server is running on port 8080")
 	log.Fatal(srv.ListenAndServe())
 
+}
+
+// CORS Middleware
+func enableCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Max-Age", "86400")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }

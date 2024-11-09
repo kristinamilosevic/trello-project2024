@@ -1,0 +1,8 @@
+<div class="delete-account">
+    <h2>Delete Account</h2>
+    <button (click)="deleteAccount()" [disabled]="isLoading">
+      {{ isLoading ? 'Deleted' : 'Delete Account' }}
+    </button>
+    <p *ngIf="errorMessage" class="error">{{ errorMessage }}</p>
+  </div>
+  
