@@ -12,5 +12,4 @@ type User struct {
 	Password string             `bson:"password" json:"password"`
 	Email    string             `bson:"email" json:"email"`
 	Role     string             `bson:"role" json:"role"`
-	IsActive bool               `bson:"isActive" json:"isActive"`
 }

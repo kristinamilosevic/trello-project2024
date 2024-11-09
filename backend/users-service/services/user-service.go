@@ -8,7 +8,6 @@ import (
 	"trello-project/microservices/users-service/utils"
 
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -24,22 +23,12 @@ func NewUserService(userCollection *mongo.Collection) *UserService {
 	}
 }
 
+// RegisterUser šalje verifikacioni email korisniku bez čuvanja u bazi
 func (s *UserService) RegisterUser(user models.User) error {
-	// Provera da li korisnik već postoji na osnovu email-a
 	var existingUser models.User
 	err := s.UserCollection.FindOne(context.Background(), bson.M{"email": user.Email}).Decode(&existingUser)
 	if err != mongo.ErrNoDocuments {
 		return fmt.Errorf("User with email already exists")
-	}
-
-	// Inicijalno postavljanje korisnika kao neaktivan
-	user.ID = primitive.NewObjectID()
-	user.IsActive = false
-
-	// Unos korisnika u bazu
-	_, err = s.UserCollection.InsertOne(context.Background(), user)
-	if err != nil {
-		return err
 	}
 
 	// Generisanje JWT tokena
@@ -48,8 +37,8 @@ func (s *UserService) RegisterUser(user models.User) error {
 		return fmt.Errorf("Failed to generate token: %v", err)
 	}
 
-	// Slanje emaila za potvrdu registracije
-	verificationLink := fmt.Sprintf("http://localhost:4200/project-list?token=%s", token)
+	// Slanje emaila sa linkom za potvrdu
+	verificationLink := fmt.Sprintf("http://localhost:8080/confirm?token=%s", token)
 	subject := "Confirm your email"
 	body := fmt.Sprintf("Click the link to confirm your registration: %s", verificationLink)
 
@@ -58,4 +47,32 @@ func (s *UserService) RegisterUser(user models.User) error {
 	}
 
 	return nil
+}
+
+// GetUnverifiedUserByEmail pronalazi korisnika u bazi po email adresi
+func (s *UserService) GetUnverifiedUserByEmail(email string) (models.User, error) {
+	var user models.User
+	err := s.UserCollection.FindOne(context.Background(), bson.M{"email": email}).Decode(&user)
+	if err != nil {
+		return models.User{}, fmt.Errorf("User not found")
+	}
+	return user, nil
+}
+
+// ConfirmAndSaveUser ažurira korisnika i postavlja `IsActive` na true
+func (s *UserService) ConfirmAndSaveUser(user models.User) error {
+	// Ažuriraj korisnika da bude aktivan
+	filter := bson.M{"email": user.Email}
+	update := bson.M{"$set": bson.M{"isActive": true}}
+
+	_, err := s.UserCollection.UpdateOne(context.Background(), filter, update)
+	if err != nil {
+		return fmt.Errorf("Failed to activate user: %v", err)
+	}
+
+	return nil
+}
+func (s *UserService) CreateUser(user models.User) error {
+	_, err := s.UserCollection.InsertOne(context.Background(), user)
+	return err
 }

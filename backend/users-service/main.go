@@ -43,6 +43,7 @@ func main() {
 
 	// Postavi rutu za registraciju
 	http.HandleFunc("/register", userHandler.Register)
+	http.HandleFunc("/confirm", userHandler.ConfirmEmail)
 
 	// Pokreni server
 	srv := &http.Server{
