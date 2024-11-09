@@ -10,19 +10,18 @@ import (
 	"trello-project/microservices/users-service/handlers"
 	"trello-project/microservices/users-service/services"
 
-	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func main() {
 	// Učitavanje .env fajla
-	err := godotenv.Load("jwt.env")
+	/*err := godotenv.Load("jwt.env")
 	if err != nil {
 		log.Fatalf("Error loading .env file")
 	}
 
-	log.Println("Uspešno učitane varijable iz .env fajla")
+	log.Println("Uspešno učitane varijable iz .env fajla")*/
 
 	// Konektovanje na MongoDB
 	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
@@ -37,12 +36,15 @@ func main() {
 	fmt.Println("Connected to MongoDB!")
 
 	// Kolekcija korisnika
-	userCollection := client.Database("users_db").Collection("users")
-	userService := services.NewUserService(userCollection)
+	userCollection := client.Database("users").Collection("users")
+	projectCollection := client.Database("projects_db").Collection("project")
+	taskCollection := client.Database("tasks_db").Collection("tasks")
+	userService := services.NewUserService(userCollection, projectCollection, taskCollection)
 	userHandler := handlers.UserHandler{UserService: userService}
 
 	// Postavi rutu za registraciju
 	http.HandleFunc("/register", userHandler.Register)
+	http.HandleFunc("/api/auth/delete-account/", userHandler.DeleteAccountHandler)
 
 	// Pokreni server
 	srv := &http.Server{
@@ -52,4 +54,5 @@ func main() {
 	}
 	fmt.Println("Server is running on port 8080")
 	log.Fatal(srv.ListenAndServe())
+
 }
