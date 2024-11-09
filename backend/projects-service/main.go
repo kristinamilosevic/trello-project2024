@@ -55,6 +55,7 @@ func main() {
 	r.HandleFunc("/users", projectHandler.GetAllUsersHandler).Methods("GET")
 	r.HandleFunc("/projects", projectHandler.ListProjectsHandler).Methods("GET")
 	r.HandleFunc("/projects/{id}", projectHandler.GetProjectByIDHandler).Methods("GET")
+	r.HandleFunc("/projects/{id}/tasks", projectHandler.DisplayTasksForProjectHandler).Methods("GET")
 
 	// Apply CORS middleware
 	corsRouter := enableCORS(r)

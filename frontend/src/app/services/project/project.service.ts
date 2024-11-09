@@ -26,4 +26,8 @@ export class ProjectService {
   getProjectById(id: string): Observable<Project> {
     return this.http.get<Project>(`${this.apiUrl}/${id}`);
   }
-}
+  
+  getTasksForProject(projectId: string): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}/${projectId}/tasks`);
+  }
+}  

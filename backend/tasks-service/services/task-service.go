@@ -11,14 +11,23 @@ import (
 )
 
 type TaskService struct {
-	collection *mongo.Collection
+	tasksCollection    *mongo.Collection
+	projectsCollection *mongo.Collection
 }
 
 func NewTaskService(client *mongo.Client) *TaskService {
-	return &TaskService{collection: client.Database("tasks_db").Collection("tasks")}
+	return &TaskService{
+		tasksCollection:    client.Database("tasks_db").Collection("tasks"),
+		projectsCollection: client.Database("projects_db").Collection("project"),
+	}
 }
 
-func (s *TaskService) CreateTask(projectID, title, description string) (*models.Task, error) {
+func (s *TaskService) CreateTask(projectID string, title, description string) (*models.Task, error) {
+	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid project ID format: %v", err)
+	}
+
 	task := &models.Task{
 		ID:          primitive.NewObjectID(),
 		ProjectID:   projectID,
@@ -27,18 +36,27 @@ func (s *TaskService) CreateTask(projectID, title, description string) (*models.
 		Status:      "Pending",
 	}
 
-	result, err := s.collection.InsertOne(context.Background(), task)
+	result, err := s.tasksCollection.InsertOne(context.Background(), task)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create task: %v", err)
 	}
 
 	task.ID = result.InsertedID.(primitive.ObjectID)
+
+	filter := bson.M{"_id": projectObjectID}
+	update := bson.M{"$push": bson.M{"taskIDs": task.ID}}
+
+	_, err = s.projectsCollection.UpdateOne(context.Background(), filter, update)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update project with task ID: %v", err)
+	}
+
 	return task, nil
 }
 
 func (s *TaskService) GetAllTasks() ([]*models.Task, error) {
 	var tasks []*models.Task
-	cursor, err := s.collection.Find(context.Background(), bson.M{})
+	cursor, err := s.tasksCollection.Find(context.Background(), bson.M{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve tasks: %v", err)
 	}
