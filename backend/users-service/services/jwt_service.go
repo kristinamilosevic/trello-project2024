@@ -8,22 +8,25 @@ import (
 	"github.com/dgrijalva/jwt-go"
 )
 
-// JWTService sadrži funkcionalnost za rad sa JWT tokenima
 type JWTService struct{}
 
-// GenerateEmailVerificationToken kreira JWT token sa email adresom kao claim
+// Claims struktura za JWT tokene
+type Claims struct {
+	Email string `json:"email"`
+	Role  string `json:"role"`
+	jwt.StandardClaims
+}
+
+// GenerateEmailVerificationToken kreira JWT token za verifikaciju email-a
 func (s *JWTService) GenerateEmailVerificationToken(email string) (string, error) {
-	// Postavljanje claim-ova za JWT token
 	claims := jwt.MapClaims{
 		"email": email,
-		"exp":   time.Now().Add(time.Hour * 24).Unix(), // Token važi 24 sata
+		"exp":   time.Now().Add(24 * time.Hour).Unix(),
 	}
-
-	// Generisanje tokena sa HS256 algoritmom
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	// Potpisivanje tokena pomoću tajnog ključa
 	return token.SignedString([]byte(os.Getenv("JWT_SECRET")))
 }
+
 func (s *JWTService) VerifyEmailVerificationToken(tokenString string) (string, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -42,4 +45,28 @@ func (s *JWTService) VerifyEmailVerificationToken(tokenString string) (string, e
 	}
 
 	return "", fmt.Errorf("invalid token")
+}
+
+// GenerateAuthToken kreira JWT token za autentifikaciju korisnika
+func (s *JWTService) GenerateAuthToken(email, role string) (string, error) {
+	claims := Claims{
+		Email: email,
+		Role:  role,
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: time.Now().Add(24 * time.Hour).Unix(),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+}
+
+// ValidateToken proverava validnost JWT tokena
+func (s *JWTService) ValidateToken(tokenStr string) (*Claims, error) {
+	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("JWT_SECRET")), nil
+	})
+	if err != nil || !token.Valid {
+		return nil, err
+	}
+	return token.Claims.(*Claims), nil
 }

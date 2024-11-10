@@ -15,14 +15,31 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+// CORS Middleware funkcija
+func enableCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	// Učitavanje .env fajla
 	err := godotenv.Load("jwt.env")
 	if err != nil {
 		log.Fatalf("Error loading .env file")
 	}
-
-	log.Println("Uspešno učitane varijable iz .env fajla")
+	log.Println("Successfully loaded variables from .env file")
 
 	// Konektovanje na MongoDB
 	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
@@ -39,18 +56,33 @@ func main() {
 	// Kolekcija korisnika
 	userCollection := client.Database("users_db").Collection("users")
 	userService := services.NewUserService(userCollection)
+
+	// Inicijalizacija handlera
 	userHandler := handlers.UserHandler{UserService: userService}
+	loginHandler := handlers.LoginHandler{UserService: userService}
 
 	// Postavi rutu za registraciju
-	http.HandleFunc("/register", userHandler.Register)
-	http.HandleFunc("/confirm", userHandler.ConfirmEmail)
+	//http.HandleFunc("/register", userHandler.Register)
+	//http.HandleFunc("/confirm", userHandler.ConfirmEmail)
 
-	// Pokreni server
+	// Kreiranje novog multiplexer-a i dodavanje ruta
+	mux := http.NewServeMux()
+	mux.HandleFunc("/register", userHandler.Register)
+	mux.HandleFunc("/confirm", userHandler.ConfirmEmail)
+	mux.HandleFunc("/verify-code", userHandler.VerifyCode)
+	mux.HandleFunc("/login", loginHandler.Login)
+
+	// Primena CORS i JWT Middleware-a
+	finalHandler := enableCORS(mux)
+
+	// Pokretanje servera
 	srv := &http.Server{
 		Addr:         ":8080",
+		Handler:      finalHandler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
+
 	fmt.Println("Server is running on port 8080")
 	log.Fatal(srv.ListenAndServe())
 }
