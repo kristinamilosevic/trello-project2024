@@ -33,25 +33,25 @@ func (h *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UserHandler) DeleteAccountHandler(w http.ResponseWriter, r *http.Request) {
-	// Ekstraktovanje ID-a iz URL-a
 	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 5 || pathParts[4] == "" {
-		http.Error(w, "Invalid manager ID", http.StatusBadRequest)
+	if len(pathParts) < 6 || pathParts[4] == "" || pathParts[5] == "" {
+		http.Error(w, "Invalid request parameters", http.StatusBadRequest)
 		return
 	}
 
-	managerID := pathParts[4]
-	objectID, err := primitive.ObjectIDFromHex(managerID)
+	userID := pathParts[4]
+	role := pathParts[5]
+
+	objectID, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
-		http.Error(w, "Invalid manager ID format", http.StatusBadRequest)
+		http.Error(w, "Invalid user ID format", http.StatusBadRequest)
 		return
 	}
 
-	err = h.UserService.DeleteManagerAccount(objectID)
+	err = h.UserService.DeleteAccount(objectID, role)
 	if err != nil {
-		if err.Error() == "user does not exist in the database" {
-			http.Error(w, err.Error(), http.StatusNotFound)
-		} else if err.Error() == "cannot delete account with active projects" {
+		if err.Error() == "cannot delete manager account with active projects" ||
+			err.Error() == "cannot delete member account assigned to active projects" {
 			http.Error(w, err.Error(), http.StatusConflict)
 		} else {
 			http.Error(w, "Failed to delete account", http.StatusInternalServerError)

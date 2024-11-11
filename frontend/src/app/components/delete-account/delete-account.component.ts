@@ -4,33 +4,40 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { AccountService } from '../../services/delete-account/delete-account.service';
 import { CommonModule } from '@angular/common';
 
+
 @Component({
   selector: 'app-delete-account',
   templateUrl: './delete-account.component.html',
   styleUrls: ['./delete-account.component.css'],
   standalone: true,
-  imports: [CommonModule]
+  imports: [CommonModule],
 })
 export class DeleteAccountComponent implements OnInit {
   isLoading = false;
   errorMessage: string | null = null;
   successMessage: string | null = null;
-  managerId: string = '';
+  userId: string = '';
+  role: string = '';
 
   constructor(
     private accountService: AccountService,
-    private router: Router,
-    private route: ActivatedRoute
+    private router: Router
   ) {}
 
   ngOnInit(): void {
-    // Dohvati managerId iz URL-a
-    this.managerId = this.route.snapshot.paramMap.get('managerId') || '';
+    const token = localStorage.getItem('token');
+    if (token) {
+      const decodedToken: any = jwt_decode(token);
+      this.userId = decodedToken.userId; // Preuzmi ID iz tokena
+      this.role = decodedToken.role; // Preuzmi ulogu iz tokena
+    } else {
+      this.router.navigate(['/login']);
+    }
   }
 
   deleteAccount() {
-    if (!this.managerId) {
-      this.errorMessage = 'Manager ID is missing.';
+    if (!this.userId || !this.role) {
+      this.errorMessage = 'User information is missing.';
       return;
     }
 
@@ -38,12 +45,12 @@ export class DeleteAccountComponent implements OnInit {
     this.errorMessage = null;
     this.successMessage = null;
 
-    this.accountService.deleteAccount(this.managerId).subscribe({
+    this.accountService.deleteAccount(this.userId, this.role).subscribe({
       next: () => {
-        this.isLoading = false;
         this.successMessage = 'Account deleted successfully!';
         setTimeout(() => {
           this.successMessage = null;
+          localStorage.removeItem('token');
           this.router.navigate(['/login']);
         }, 3000);
       },
@@ -61,3 +68,7 @@ export class DeleteAccountComponent implements OnInit {
     });
   }
 }
+function jwt_decode(token: string): any {
+  throw new Error('Function not implemented.');
+}
+
