@@ -14,26 +14,24 @@ import { AuthService } from '../../services/user/auth.service';
 export class LoginComponent {
   username: string = '';
   password: string = '';
-  errorMessage: string = '';
   forgotEmail: string = '';
+  errorMessage: string = '';
   resetMessage: string = '';
   showForgotPassword: boolean = false;
 
   constructor(private authService: AuthService, private router: Router) {}
 
-  // Funkcija za prijavljivanje korisnika
+  // Funkcija za prijavu korisnika
   onSubmit(): void {
-    const sanitizedCredentials = this.sanitizeInput({ username: this.username, password: this.password });
-
-    if (!this.validateInput(sanitizedCredentials.username, sanitizedCredentials.password)) {
-      this.errorMessage = 'Invalid username or password format';
+    if (!this.username || !this.password) {
+      this.errorMessage = 'Please enter both username and password';
       return;
     }
 
-    this.authService.login(sanitizedCredentials).subscribe({
+    this.authService.login({ username: this.username, password: this.password }).subscribe({
       next: () => {
         alert('Login successful!');
-        this.router.navigate(['/login']);
+        this.router.navigate(['/add-projects']);
       },
       error: () => {
         this.errorMessage = 'Invalid username or password';
@@ -41,9 +39,21 @@ export class LoginComponent {
     });
   }
 
-  // Prebacivanje između login forme i "Forgot Password" sekcije
-  toggleForgotPassword(): void {
-    this.showForgotPassword = !this.showForgotPassword;
+  // Funkcija za otvaranje "Forgot Password" sekcije
+  openForgotPassword(): void {
+    if (!this.username) {
+      this.errorMessage = 'Please enter your username';
+      return;
+    }
+    this.errorMessage = '';
+    this.showForgotPassword = true;
+  }
+
+  // Funkcija za zatvaranje "Forgot Password" sekcije
+  closeForgotPassword(): void {
+    this.showForgotPassword = false;
+    this.forgotEmail = '';
+    this.resetMessage = '';
   }
 
   // Funkcija za slanje linka za reset lozinke
@@ -53,7 +63,7 @@ export class LoginComponent {
       return;
     }
 
-    this.authService.sendPasswordResetLink(this.forgotEmail).subscribe({
+    this.authService.sendPasswordResetLink(this.username, this.forgotEmail).subscribe({
       next: () => {
         this.resetMessage = 'Reset link sent to your email!';
       },
@@ -61,19 +71,5 @@ export class LoginComponent {
         this.resetMessage = 'Error sending reset link';
       }
     });
-  }
-
-  // Validacija unosa
-  validateInput(username: string, password: string): boolean {
-    const usernameRegex = /^[a-zA-Z0-9]+$/;
-    return usernameRegex.test(username) && password.length >= 6 && password.length <= 20;
-  }
-
-  // Sanitizacija unosa za sprečavanje XSS napada
-  sanitizeInput(data: any) {
-    return {
-      username: data.username.replace(/<[^>]*>?/gm, ''),
-      password: data.password.replace(/<[^>]*>?/gm, '')
-    };
   }
 }

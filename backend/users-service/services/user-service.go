@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 
 	"trello-project/microservices/users-service/models"
 	"trello-project/microservices/users-service/utils"
@@ -59,29 +60,35 @@ func (s *UserService) RegisterUser(user models.User) error {
 	return nil
 }
 
-func (s *UserService) SendPasswordResetLink(email string) error {
+// ResetPasswordByUsername resetuje lozinku korisnika i šalje novu lozinku na email
+func (s *UserService) ResetPasswordByUsername(username string) error {
 	var user models.User
-	err := s.UserCollection.FindOne(context.Background(), bson.M{"email": email}).Decode(&user)
+	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
 	if err != nil {
-		return errors.New("user not found")
-
+		return fmt.Errorf("user not found")
 	}
+
 	if !user.IsActive {
 		return errors.New("user is not active")
 	}
 
-	token, err := s.JWTService.GenerateEmailVerificationToken(email)
+	// Generiši novu lozinku
+	newPassword := utils.GenerateRandomPassword()
+
+	// Ažuriraj lozinku u bazi
+	_, err = s.UserCollection.UpdateOne(context.Background(), bson.M{"username": username}, bson.M{"$set": bson.M{"password": newPassword}})
 	if err != nil {
-		return fmt.Errorf("failed to generate token: %v", err)
+		return fmt.Errorf("failed to update password: %v", err)
 	}
 
-	resetLink := fmt.Sprintf("http://localhost:4200/reset-password?token=%s", token)
-	subject := "Reset your password"
-	body := fmt.Sprintf("Click the link to reset your password: %s", resetLink)
-	if err := utils.SendEmail(email, subject, body); err != nil {
-		return fmt.Errorf("Failed to send email")
+	// Pošalji novu lozinku korisniku na email
+	subject := "Your new password"
+	body := fmt.Sprintf("Your new password is: %s", newPassword)
+	if err := utils.SendEmail(user.Email, subject, body); err != nil {
+		return fmt.Errorf("failed to send email: %v", err)
 	}
 
+	log.Println("New password sent to:", user.Email)
 	return nil
 }
 

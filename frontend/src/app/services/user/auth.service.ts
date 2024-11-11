@@ -26,11 +26,15 @@ export class AuthService {
       })
     );
   }
-  sendPasswordResetLink(email: string): Observable<any> {
-    return this.http.post(`${this.apiUrl}/forgot-password`, { email });
+  // Funkcija za slanje linka za reset lozinke
+  sendPasswordResetLink(username: string, email: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/forgot-password`, { username, email });
   }
   
-
+  checkUsername(username: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}/check-username/${username}`);
+  }
+  
   // Provera da li je korisnik prijavljen
   isLoggedIn(): Observable<boolean> {
     return this.loggedIn.asObservable();

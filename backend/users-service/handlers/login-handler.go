@@ -1,11 +1,15 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"trello-project/microservices/users-service/models"
 	"trello-project/microservices/users-service/services"
 	"trello-project/microservices/users-service/utils"
+
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 type LoginRequest struct {
@@ -27,15 +31,28 @@ type ForgotPasswordRequest struct {
 	Username string `json:"username"`
 }
 
-// Funkcija za reset lozinke
-func (h *LoginHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+func (h *LoginHandler) CheckUsername(w http.ResponseWriter, r *http.Request) {
+	username := r.URL.Query().Get("username")
+	if username == "" {
+		http.Error(w, "Username is required", http.StatusBadRequest)
 		return
 	}
 
+	var user models.User
+	err := h.UserService.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+	if err != nil {
+		http.Error(w, "Username not found", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("true"))
+}
+
+func (h *LoginHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Username string `json:"username"`
+		Email    string `json:"email"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -43,19 +60,34 @@ func (h *LoginHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generišemo token za reset lozinke
-	token, err := h.UserService.JWTService.GenerateEmailVerificationToken(req.Username)
+	// Proveri da li postoji korisnik sa zadatim username-om
+	var user models.User
+	err := h.UserService.UserCollection.FindOne(context.Background(), bson.M{"username": req.Username}).Decode(&user)
 	if err != nil {
-		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+		http.Error(w, "User not found", http.StatusNotFound)
 		return
 	}
 
-	resetLink := fmt.Sprintf("http://localhost:4200/reset-password?token=%s", token)
-	subject := "Reset your password"
-	body := fmt.Sprintf("Click the link to reset your password: %s", resetLink)
-	utils.SendEmail(req.Username, subject, body)
+	// Proveri da li email odgovara korisniku
+	if user.Email != req.Email {
+		http.Error(w, "Email does not match", http.StatusBadRequest)
+		return
+	}
+
+	// Generiši novu lozinku i pošalji na email
+	newPassword := utils.GenerateRandomPassword()
+	_, err = h.UserService.UserCollection.UpdateOne(context.Background(), bson.M{"username": req.Username}, bson.M{"$set": bson.M{"password": newPassword}})
+	if err != nil {
+		http.Error(w, "Failed to update password", http.StatusInternalServerError)
+		return
+	}
+
+	subject := "Your new password"
+	body := fmt.Sprintf("Your new password is: %s", newPassword)
+	utils.SendEmail(req.Email, subject, body)
 
 	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Password reset successfully"))
 }
 
 // Validacija unosa korisničkih podataka

@@ -64,6 +64,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/register", userHandler.Register)
 	mux.HandleFunc("/login", loginHandler.Login)
+	mux.HandleFunc("/check-username", loginHandler.CheckUsername)
 	mux.HandleFunc("/forgot-password", loginHandler.ForgotPassword)
 
 	// Primena CORS i JWT Middleware-a

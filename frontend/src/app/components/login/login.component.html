@@ -4,43 +4,23 @@
     <form *ngIf="!showForgotPassword" (ngSubmit)="onSubmit()">
       <div class="form-group">
         <label for="username">Username</label>
-        <input
-          type="text"
-          id="username"
-          [(ngModel)]="username"
-          name="username"
-          placeholder="Enter your username"
-          required
-        />
+        <input type="text" [(ngModel)]="username" name="username" placeholder="Enter your username" required />
       </div>
       <div class="form-group">
         <label for="password">Password</label>
-        <input
-          type="password"
-          id="password"
-          [(ngModel)]="password"
-          name="password"
-          placeholder="Enter your password"
-          required
-        />
+        <input type="password" [(ngModel)]="password" name="password" placeholder="Enter your password" required />
       </div>
       <button type="submit">Login</button>
       <p *ngIf="errorMessage" class="error">{{ errorMessage }}</p>
-      <a class="forgot-link" (click)="toggleForgotPassword()">Forgot Password?</a>
+      <a class="forgot-link" (click)="openForgotPassword()">Forgot Password?</a>
     </form>
 
-    <!-- Sekcija za "Forgot Password" -->
     <div *ngIf="showForgotPassword" class="forgot-password-section">
       <h3>Reset your password</h3>
-      <input
-        type="email"
-        [(ngModel)]="forgotEmail"
-        placeholder="Enter your email"
-        required
-      />
+      <input type="email" [(ngModel)]="forgotEmail" placeholder="Enter your email" required />
       <button (click)="sendResetLink()">Send Reset Link</button>
       <p *ngIf="resetMessage" class="reset-message">{{ resetMessage }}</p>
-      <a class="back-link" (click)="toggleForgotPassword()">Back to Login</a>
+      <a class="back-link" (click)="closeForgotPassword()">Back to Login</a>
     </div>
   </div>
 </div>
