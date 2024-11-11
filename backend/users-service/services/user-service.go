@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
-	"strings"
 
 	"trello-project/microservices/users-service/models"
 	"trello-project/microservices/users-service/utils"
@@ -61,34 +59,47 @@ func (s *UserService) RegisterUser(user models.User) error {
 	return nil
 }
 
-// LoginUser proverava kredencijale korisnika i generiše JWT token
-func (s *UserService) LoginUser(email, password string) (*models.User, string, error) {
+func (s *UserService) SendPasswordResetLink(email string) error {
 	var user models.User
-	email = strings.ToLower(email)
-	log.Println("Pokušavam pronaći korisnika sa emailom:", email)
-
-	// Pronađi korisnika po email-u
 	err := s.UserCollection.FindOne(context.Background(), bson.M{"email": email}).Decode(&user)
+	if err != nil {
+		return errors.New("user not found")
+
+	}
+	if !user.IsActive {
+		return errors.New("user is not active")
+	}
+
+	token, err := s.JWTService.GenerateEmailVerificationToken(email)
+	if err != nil {
+		return fmt.Errorf("failed to generate token: %v", err)
+	}
+
+	resetLink := fmt.Sprintf("http://localhost:4200/reset-password?token=%s", token)
+	subject := "Reset your password"
+	body := fmt.Sprintf("Click the link to reset your password: %s", resetLink)
+	if err := utils.SendEmail(email, subject, body); err != nil {
+		return fmt.Errorf("Failed to send email")
+	}
+
+	return nil
+}
+
+func (s *UserService) LoginUser(username, password string) (*models.User, string, error) {
+	var user models.User
+	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
 	if err != nil {
 		return nil, "", errors.New("user not found")
 	}
-
-	// Proveri da li se lozinka poklapa
 	if user.Password != password {
 		return nil, "", errors.New("invalid password")
 	}
-
-	// Proveri da li je korisnik aktivan
 	if !user.IsActive {
 		return nil, "", errors.New("user not active")
 	}
-
-	// Generiši JWT token
-	token, err := s.JWTService.GenerateAuthToken(user.Email, user.Role)
+	token, err := s.JWTService.GenerateAuthToken(user.Username, user.Role)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to generate token: %v", err)
 	}
-
-	// Vraćamo korisnika i generisani token
 	return &user, token, nil
 }

@@ -20,12 +20,16 @@ export class AuthService {
       tap((response: LoginResponse) => {
         // Čuvanje tokena u localStorage
         localStorage.setItem('token', response.token);
-        localStorage.setItem('email', response.email);
+        localStorage.setItem('username', response.username);
         localStorage.setItem('role', response.role);
         this.loggedIn.next(true);
       })
     );
   }
+  sendPasswordResetLink(email: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/forgot-password`, { email });
+  }
+  
 
   // Provera da li je korisnik prijavljen
   isLoggedIn(): Observable<boolean> {
@@ -35,7 +39,7 @@ export class AuthService {
   // Funkcija za odjavljivanje korisnika
   logout(): void {
     localStorage.removeItem('token');
-    localStorage.removeItem('email');
+    localStorage.removeItem('username');
     localStorage.removeItem('role');
     this.loggedIn.next(false);
   }
@@ -48,6 +52,11 @@ export class AuthService {
   // Dobijanje uloge korisnika
   getUserRole(): string | null {
     return localStorage.getItem('role');
+  }
+
+  isAuthorized(roles: string[]): boolean {
+    const userRole = this.getUserRole();
+    return userRole ? roles.includes(userRole) : false;
   }
 
   // Funkcija za proveru da li postoji token u localStorage

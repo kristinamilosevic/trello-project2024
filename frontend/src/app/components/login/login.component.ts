@@ -12,22 +12,68 @@ import { AuthService } from '../../services/user/auth.service';
   styleUrls: ['./login.component.scss']
 })
 export class LoginComponent {
-  email: string = '';
+  username: string = '';
   password: string = '';
   errorMessage: string = '';
+  forgotEmail: string = '';
+  resetMessage: string = '';
+  showForgotPassword: boolean = false;
 
   constructor(private authService: AuthService, private router: Router) {}
 
+  // Funkcija za prijavljivanje korisnika
   onSubmit(): void {
-    const credentials = { email: this.email, password: this.password };
+    const sanitizedCredentials = this.sanitizeInput({ username: this.username, password: this.password });
 
-    this.authService.login(credentials).subscribe({
+    if (!this.validateInput(sanitizedCredentials.username, sanitizedCredentials.password)) {
+      this.errorMessage = 'Invalid username or password format';
+      return;
+    }
+
+    this.authService.login(sanitizedCredentials).subscribe({
       next: () => {
-        this.router.navigate(['/add-projects']);
+        alert('Login successful!');
+        this.router.navigate(['/login']);
       },
       error: () => {
-        this.errorMessage = 'Invalid email or password';
+        this.errorMessage = 'Invalid username or password';
       }
     });
+  }
+
+  // Prebacivanje između login forme i "Forgot Password" sekcije
+  toggleForgotPassword(): void {
+    this.showForgotPassword = !this.showForgotPassword;
+  }
+
+  // Funkcija za slanje linka za reset lozinke
+  sendResetLink(): void {
+    if (!this.forgotEmail) {
+      this.resetMessage = 'Please enter a valid email';
+      return;
+    }
+
+    this.authService.sendPasswordResetLink(this.forgotEmail).subscribe({
+      next: () => {
+        this.resetMessage = 'Reset link sent to your email!';
+      },
+      error: () => {
+        this.resetMessage = 'Error sending reset link';
+      }
+    });
+  }
+
+  // Validacija unosa
+  validateInput(username: string, password: string): boolean {
+    const usernameRegex = /^[a-zA-Z0-9]+$/;
+    return usernameRegex.test(username) && password.length >= 6 && password.length <= 20;
+  }
+
+  // Sanitizacija unosa za sprečavanje XSS napada
+  sanitizeInput(data: any) {
+    return {
+      username: data.username.replace(/<[^>]*>?/gm, ''),
+      password: data.password.replace(/<[^>]*>?/gm, '')
+    };
   }
 }

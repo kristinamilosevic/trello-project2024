@@ -1,32 +1,46 @@
 <div class="login-wrapper">
-    <div class="login-form">
-      <h2>Login</h2>
-      <form (ngSubmit)="onSubmit()">
-        <div class="form-group">
-          <label for="email">Email</label>
-          <input
-            type="email"
-            id="email"
-            [(ngModel)]="email"
-            name="email"
-            placeholder="Enter your email"
-            required
-          />
-        </div>
-        <div class="form-group">
-          <label for="password">Password</label>
-          <input
-            type="password"
-            id="password"
-            [(ngModel)]="password"
-            name="password"
-            placeholder="Enter your password"
-            required
-          />
-        </div>
-        <button type="submit">Login</button>
-        <p *ngIf="errorMessage" class="error">{{ errorMessage }}</p>
-      </form>
+  <div class="login-form">
+    <h2>Login</h2>
+    <form *ngIf="!showForgotPassword" (ngSubmit)="onSubmit()">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input
+          type="text"
+          id="username"
+          [(ngModel)]="username"
+          name="username"
+          placeholder="Enter your username"
+          required
+        />
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input
+          type="password"
+          id="password"
+          [(ngModel)]="password"
+          name="password"
+          placeholder="Enter your password"
+          required
+        />
+      </div>
+      <button type="submit">Login</button>
+      <p *ngIf="errorMessage" class="error">{{ errorMessage }}</p>
+      <a class="forgot-link" (click)="toggleForgotPassword()">Forgot Password?</a>
+    </form>
+
+    <!-- Sekcija za "Forgot Password" -->
+    <div *ngIf="showForgotPassword" class="forgot-password-section">
+      <h3>Reset your password</h3>
+      <input
+        type="email"
+        [(ngModel)]="forgotEmail"
+        placeholder="Enter your email"
+        required
+      />
+      <button (click)="sendResetLink()">Send Reset Link</button>
+      <p *ngIf="resetMessage" class="reset-message">{{ resetMessage }}</p>
+      <a class="back-link" (click)="toggleForgotPassword()">Back to Login</a>
     </div>
   </div>
-  
+</div>
