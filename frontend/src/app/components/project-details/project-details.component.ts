@@ -15,6 +15,7 @@ import { CommonModule, DatePipe } from '@angular/common';
 })
 export class ProjectDetailsComponent implements OnInit {
   project: Project | null = null;
+  tasks: any[] = []; 
 
   constructor(
     private route: ActivatedRoute,
@@ -29,6 +30,7 @@ export class ProjectDetailsComponent implements OnInit {
       this.projectService.getProjectById(projectId).subscribe(
         (data) => {
           this.project = data;
+          this.getTasks(projectId);
         },
         (error) => {
           console.error('Error fetching project details:', error);
@@ -41,7 +43,6 @@ export class ProjectDetailsComponent implements OnInit {
     window.history.back();
   }
 
-  // Prazne metode za dugmad
   addTask(): void {
     if (this.project) {
       this.router.navigate(['/add-tasks', { projectId: this.project.id }]); 
@@ -61,4 +62,14 @@ export class ProjectDetailsComponent implements OnInit {
     }
   }
   
+  getTasks(projectId: string): void {
+    this.projectService.getTasksForProject(projectId).subscribe(
+      (tasks) => {
+        this.tasks = tasks; 
+      },
+      (error) => {
+        console.error('Error fetching tasks:', error);
+      }
+    );
+  }
 }

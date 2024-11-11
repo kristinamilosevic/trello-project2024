@@ -47,7 +47,7 @@ func (s *ProjectService) CreateProject(name string, description string, expected
 		MaxMembers:      maxMembers,
 		ManagerID:       managerID,
 		Members:         []models.Member{},
-		Tasks:           []models.Task{},
+		Tasks:           []primitive.ObjectID{},
 	}
 
 	// Insert the project into the collection
@@ -218,4 +218,34 @@ func (s *ProjectService) GetProjectByID(projectID string) (*models.Project, erro
 	}
 
 	return &project, nil
+}
+
+func (s *ProjectService) GetTasksForProject(projectID primitive.ObjectID) ([]*models.Task, error) {
+	var project models.Project
+	err := s.ProjectsCollection.FindOne(context.Background(), bson.M{"_id": projectID}).Decode(&project)
+	if err != nil {
+		return nil, fmt.Errorf("project not found: %v", err)
+	}
+
+	var tasks []*models.Task
+	filter := bson.M{"_id": bson.M{"$in": project.Tasks}}
+	cursor, err := s.TasksCollection.Find(context.Background(), filter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve tasks: %v", err)
+	}
+	defer cursor.Close(context.Background())
+
+	for cursor.Next(context.Background()) {
+		var task models.Task
+		if err := cursor.Decode(&task); err != nil {
+			return nil, fmt.Errorf("failed to decode task: %v", err)
+		}
+		tasks = append(tasks, &task)
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("cursor error: %v", err)
+	}
+
+	return tasks, nil
 }

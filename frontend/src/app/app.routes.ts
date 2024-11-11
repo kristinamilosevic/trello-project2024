@@ -7,6 +7,9 @@ import { AddMembersComponent } from './components/add-members/add-members.compon
 import { ProjectListComponent } from './components/project-list/project-list.component';
 import { ProjectDetailsComponent } from './components/project-details/project-details.component';
 import { TaskListComponent } from './components/task-list/task-list.component';
+import { RegisterComponent } from './components/register/register.component';
+import { LoginComponent } from './components/login/login.component';
+import { VerifyCodeComponent } from './components/verify-code/verify-code.component';
 
 
 // export const routes: Routes = [
@@ -42,6 +45,10 @@ export const routes: Routes = [
   { path: '', redirectTo: '/projects-list', pathMatch: 'full' },
   { path: 'task-list', component: TaskListComponent },
   { path: '', redirectTo: '/projects-list', pathMatch: 'full' }, 
+  { path: 'register', component: RegisterComponent },
+  { path: 'login', component: LoginComponent }, // Ruta za login
+  { path: '', redirectTo: '/login', pathMatch: 'full' },
+  { path: 'verify', component: VerifyCodeComponent },
 ];
 
 @NgModule({

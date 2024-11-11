@@ -1,0 +1,59 @@
+<div class="register-card">
+    <h2>Register</h2>
+    <form [formGroup]="registerForm" (ngSubmit)="onSubmit()">
+      <div class="form-group">
+        <label for="name">Name</label>
+        <input type="text" id="name" formControlName="name" placeholder="Enter your name">
+        <div *ngIf="registerForm.get('name')?.invalid && registerForm.get('name')?.touched" class="error">
+          Name is required.
+        </div>
+      </div>
+  
+      <div class="form-group">
+        <label for="lastName">Last Name</label>
+        <input type="text" id="lastName" formControlName="lastName" placeholder="Enter your last name">
+        <div *ngIf="registerForm.get('lastName')?.invalid && registerForm.get('lastName')?.touched" class="error">
+          Last Name is required.
+        </div>
+      </div>
+  
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" formControlName="username" placeholder="Enter a username">
+        <div *ngIf="registerForm.get('username')?.invalid && registerForm.get('username')?.touched" class="error">
+          Username must be at least 3 characters.
+        </div>
+      </div>
+  
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" formControlName="password" placeholder="Enter a password">
+        <div *ngIf="registerForm.get('password')?.invalid && registerForm.get('password')?.touched" class="error">
+          Password must be at least 6 characters.
+        </div>
+      </div>
+  
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" formControlName="email" placeholder="Enter your email">
+        <div *ngIf="registerForm.get('email')?.invalid && registerForm.get('email')?.touched" class="error">
+          Please enter a valid email address.
+        </div>
+      </div>
+  
+      <div class="form-group">
+        <label for="userRole">User Role</label>
+        <select id="userRole" formControlName="userRole">
+          <option value="">Select role</option>
+          <option value="user">Member</option>
+          <option value="manager">Manager</option>
+        </select>
+        <div *ngIf="registerForm.get('userRole')?.invalid && registerForm.get('userRole')?.touched" class="error">
+          Please select a role.
+        </div>
+      </div>
+  
+      <button type="submit">Register</button>
+    </form>
+  </div>
+  
