@@ -4,12 +4,12 @@ import { provideHttpClient } from '@angular/common/http';
 import { importProvidersFrom } from '@angular/core';
 import { RouterModule } from '@angular/router';
 import { routes } from './app/app.routes';
-import { FormsModule } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 
 bootstrapApplication(AppComponent, {
   providers: [
     importProvidersFrom(RouterModule.forRoot(routes)),
     provideHttpClient(),
-    importProvidersFrom(FormsModule) // Dodajemo FormsModule ovde
+    importProvidersFrom(FormsModule, ReactiveFormsModule)
   ]
-}).catch((err) => console.error(err));
+}).catch(err => console.error(err));
