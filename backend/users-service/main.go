@@ -57,6 +57,9 @@ func main() {
 	userCollection := client.Database("users_db").Collection("users")
 	userService := services.NewUserService(userCollection)
 
+	// Pokreni posao za brisanje korisnika kojima je istekao rok za verifikaciju
+	startUserCleanupJob(userService)
+
 	// Inicijalizacija handlera
 	userHandler := handlers.UserHandler{UserService: userService}
 	loginHandler := handlers.LoginHandler{UserService: userService}
@@ -85,4 +88,15 @@ func main() {
 
 	fmt.Println("Server is running on port 8080")
 	log.Fatal(srv.ListenAndServe())
+}
+func startUserCleanupJob(userService *services.UserService) {
+	// Periodično izvršavanje brisanja neaktivnih korisnika
+	go func() {
+		for {
+			log.Println("Pokrećem proveru za brisanje neaktivnih korisnika sa isteklim rokom za verifikaciju...")
+			userService.DeleteExpiredUnverifiedUsers()
+			log.Println("Završena provera za brisanje neaktivnih korisnika.")
+			time.Sleep(5 * time.Minute) // Periodično pokretanje svakih 5 minuta
+		}
+	}()
 }

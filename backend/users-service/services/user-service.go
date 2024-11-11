@@ -134,3 +134,21 @@ func (s *UserService) LoginUser(email, password string) (*models.User, string, e
 	// Vraćamo korisnika i generisani token
 	return &user, token, nil
 }
+
+// DeleteExpiredUnverifiedUsers briše korisnike kojima je istekao rok za verifikaciju i koji nisu aktivni
+func (s *UserService) DeleteExpiredUnverifiedUsers() {
+	filter := bson.M{
+		"isActive": false,
+		"verificationExpiry": bson.M{
+			"$lt": time.Now(),
+		},
+	}
+
+	// Brišemo sve korisnike koji odgovaraju uslovima
+	result, err := s.UserCollection.DeleteMany(context.Background(), filter)
+	if err != nil {
+		log.Printf("Greška prilikom brisanja korisnika sa isteklim verifikacionim rokom: %v", err)
+	} else {
+		log.Printf("Obrisano %d korisnika sa isteklim verifikacionim rokom.", result.DeletedCount)
+	}
+}
