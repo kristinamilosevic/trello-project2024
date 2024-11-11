@@ -118,6 +118,7 @@ func (h *UserHandler) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Location", "http://localhost:4200/login")
 	w.WriteHeader(http.StatusFound)
 }
+
 func (h *UserHandler) VerifyCode(w http.ResponseWriter, r *http.Request) {
 	var requestData struct {
 		Username string `json:"username"`
