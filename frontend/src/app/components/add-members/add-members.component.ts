@@ -19,6 +19,7 @@ export class AddMembersComponent implements OnInit {
   projectMembers: Member[] = [];
   projectId: string = '';
   errorMessage: string = '';
+  successMessage: string = '';
 
   constructor(private projectMembersService: ProjectMembersService, private route: ActivatedRoute) {}
 
@@ -68,13 +69,12 @@ export class AddMembersComponent implements OnInit {
 
   addSelectedMembers() {
     this.errorMessage = ''; // Reset error message
-  
+    
     const newMembersToAdd = this.members
       .filter(member => member.selected && !this.isMemberAlreadyAdded(member))
       .map(member => member.id);
   
     if (newMembersToAdd.length === 0) {
-      // Ako nije izabran nijedan novi član, postavi poruku o grešci i prekini funkciju
       this.errorMessage = 'No new members selected for addition.';
       return;
     }
@@ -87,7 +87,7 @@ export class AddMembersComponent implements OnInit {
       this.errorMessage = 'You cannot add more members than the maximum allowed.';
       return;
     }
-
+  
     if (currentMemberCount + newMembersToAdd.length < minMembersAllowed) {
       this.errorMessage = 'You cannot have fewer members than the minimum required.';
       return;
@@ -95,14 +95,16 @@ export class AddMembersComponent implements OnInit {
   
     this.projectMembersService.addMembers(this.projectId, newMembersToAdd).subscribe(
       () => {
-        this.errorMessage = ''; // Očisti poruku o grešci kada je dodavanje uspešno
-        alert('Members added successfully!');
+        this.errorMessage = '';
+        this.successMessage = 'Members added successfully!';
+        setTimeout(() => {
+          this.successMessage = ''; // Automatski ukloni poruku posle 3 sekunde
+        }, 3000);
         this.fetchProjectMembers();
       },
       (error) => {
         console.error('Error adding members:', error);
         if (error.status === 400) {
-          // Provera za specifične poruke grešaka koje vraća backend
           const errorText = error.error || error.message || '';
           if (errorText.includes('the number of members cannot be less than the minimum required for the project')) {
             this.errorMessage = 'The number of members cannot be less than the minimum required for the project.';
@@ -114,9 +116,13 @@ export class AddMembersComponent implements OnInit {
         } else {
           this.errorMessage = 'An unexpected error occurred while adding members.';
         }
+        setTimeout(() => {
+          this.errorMessage = ''; // Automatski ukloni poruku posle 3 sekunde
+        }, 3000);
       }
     );
   }
+  
 
   
 

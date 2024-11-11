@@ -14,6 +14,7 @@ import { CommonModule } from '@angular/common';
 export class DeleteAccountComponent implements OnInit {
   isLoading = false;
   errorMessage: string | null = null;
+  successMessage: string | null = null;
   managerId: string = '';
 
   constructor(
@@ -35,10 +36,16 @@ export class DeleteAccountComponent implements OnInit {
 
     this.isLoading = true;
     this.errorMessage = null;
+    this.successMessage = null;
 
     this.accountService.deleteAccount(this.managerId).subscribe({
       next: () => {
-        alert('Account deleted successfully.');
+        this.isLoading = false;
+        this.successMessage = 'Account deleted successfully!';
+        setTimeout(() => {
+          this.successMessage = null;
+          this.router.navigate(['/login']);
+        }, 3000);
       },
       error: (err: HttpErrorResponse) => {
         this.isLoading = false;
@@ -47,6 +54,9 @@ export class DeleteAccountComponent implements OnInit {
         } else {
           this.errorMessage = 'An error occurred while deleting the account.';
         }
+        setTimeout(() => {
+          this.errorMessage = null;
+        }, 3000);
       }
     });
   }

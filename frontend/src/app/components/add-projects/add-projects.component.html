@@ -1,5 +1,10 @@
 <div class="form-container">
   <h2>Create New Project</h2>
+
+  <p *ngIf="successMessage" class="notification success">{{ successMessage }}</p>
+
+  <p *ngIf="errorMessage" class="notification error">{{ errorMessage }}</p>
+
   <form [formGroup]="projectForm" (ngSubmit)="onSubmit()">
     <label for="name">Project Name:</label>
     <input id="name" formControlName="name" type="text" required>
