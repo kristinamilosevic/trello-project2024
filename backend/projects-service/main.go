@@ -35,7 +35,7 @@ func main() {
 	// Databases and collections
 	projectsDB := client.Database("projects_db")
 	tasksDB := client.Database("tasks_db")
-	usersDB := client.Database("users")
+	usersDB := client.Database("users_db")
 
 	// Initialize services and handlers
 	projectService := &services.ProjectService{
