@@ -13,11 +13,13 @@ import { Router } from '@angular/router';
 })
 export class AddProjectsComponent {
   projectForm: FormGroup;
+  successMessage: string | null = null;
+  errorMessage: string | null = null;
 
   constructor(
     private fb: FormBuilder, 
     private projectService: ProjectService,
-    private router: Router // Dodavanje Router servisa
+    private router: Router
   ) {
     this.projectForm = this.fb.group({
       name: ['', Validators.required],
@@ -36,37 +38,42 @@ export class AddProjectsComponent {
   
       this.projectService.createProject(projectData).subscribe(
         response => {
-          console.log('Project created:', response);
-          alert('Project successfully created!');
+          this.successMessage = 'Project successfully created!';
+          this.errorMessage = null;
+          setTimeout(() => {
+            this.successMessage = null;
+            this.router.navigate(['/projects-list']);
+          }, 3000);
           this.projectForm.reset();
-          this.router.navigate(['/projects-list']); // Redirekcija na listu projekata
         },
         error => {
-          console.error('Error creating project:', error);
-          
           if (error.status === 400) {
             if (error.error.includes("Expected end date must be in the future")) {
-              alert("Expected end date must be in the future.");
+              this.errorMessage = "Expected end date must be in the future.";
             } else if (error.error.includes("Invalid member constraints")) {
-              alert("Minimum members must be at least 1, and maximum members cannot be less than minimum members.");
+              this.errorMessage = "Minimum members must be at least 1, and maximum members cannot be less than minimum members.";
             } else if (error.error.includes("Project name is required")) {
-              alert("Project name is required.");
+              this.errorMessage = "Project name is required.";
             } else {
-              alert("Invalid request. Please check your input.");
+              this.errorMessage = "Invalid request. Please check your input.";
             }
           } else if (error.status === 401) {
-            alert("Unauthorized: Manager ID is required.");
+            this.errorMessage = "Unauthorized: Manager ID is required.";
           } else {
-            alert("Failed to create project.");
+            this.errorMessage = "Failed to create project.";
           }
+
+          this.successMessage = null;
+          setTimeout(() => {
+            this.errorMessage = null;
+          }, 3000);
         }
       );
     } else {
-      alert('Please fill out all required fields.');
+      this.errorMessage = 'Please fill out all required fields.';
+      setTimeout(() => {
+        this.errorMessage = null;
+      }, 3000);
     }
-  }
-  
-  onTasksClick() {
-    alert('Navigating to tasks page...');
   }
 }

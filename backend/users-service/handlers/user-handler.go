@@ -3,11 +3,11 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"time"
-
 	"trello-project/microservices/users-service/models"
 	"trello-project/microservices/users-service/services"
 
@@ -16,6 +16,7 @@ import (
 
 type UserHandler struct {
 	UserService *services.UserService
+	JWTService  *services.JWTService
 }
 
 // Register šalje email sa verifikacionim linkom, bez čuvanja korisnika u bazi
@@ -176,4 +177,58 @@ func (h *UserHandler) VerifyCode(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("User verified and saved successfully."))
+}
+
+func (h *UserHandler) DeleteAccountHandler(w http.ResponseWriter, r *http.Request) {
+	// Proveri Authorization header
+	tokenString := r.Header.Get("Authorization")
+	if tokenString == "" {
+		http.Error(w, "Missing Authorization header", http.StatusUnauthorized)
+		return
+	}
+
+	// Ukloni "Bearer " prefiks
+	if len(tokenString) > 7 && strings.HasPrefix(tokenString, "Bearer ") {
+		tokenString = tokenString[7:]
+	}
+
+	// Validiraj token
+	claims, err := h.JWTService.ValidateToken(tokenString)
+	if err != nil {
+		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	fmt.Println("Token validan za korisnika:", claims.Username)
+
+	// Ekstraktovanje parametara iz URL-a
+	pathParts := strings.Split(r.URL.Path, "/")
+	if len(pathParts) < 6 {
+		http.Error(w, "Invalid request parameters", http.StatusBadRequest)
+		return
+	}
+
+	username := pathParts[4]
+	role := pathParts[5]
+
+	// Proveri da li korisnik u tokenu odgovara korisniku koji se briše
+	if username != claims.Username {
+		http.Error(w, "Cannot delete another user's account", http.StatusForbidden)
+		return
+	}
+
+	// Briši nalog
+	err = h.UserService.DeleteAccount(username, role)
+	if err != nil {
+		if err.Error() == "cannot delete manager account with active projects" ||
+			err.Error() == "cannot delete member account assigned to active projects" {
+			http.Error(w, err.Error(), http.StatusConflict)
+		} else {
+			http.Error(w, "Failed to delete account", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Account deleted successfully"})
 }

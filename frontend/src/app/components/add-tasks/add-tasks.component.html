@@ -1,12 +1,19 @@
 <div *ngIf="showForm">
-    <form [formGroup]="taskForm" (ngSubmit)="onSubmit()">
-      <label for="title">Title:</label>
-      <input id="title" formControlName="title" required>
-  
-      <label for="description">Description:</label>
-      <textarea id="description" formControlName="description" required></textarea>
-  
-      <button type="submit">Submit</button>
-    </form>
-  </div>
+  <form [formGroup]="taskForm" (ngSubmit)="onSubmit()">
+    <h2>Create New Task</h2>
+
+    <p *ngIf="successMessage" class="notification success">{{ successMessage }}</p>
+
+    <p *ngIf="errorMessage" class="notification error">{{ errorMessage }}</p>
+
+    <label for="title">Title:</label>
+    <input id="title" formControlName="title" required>
+
+    <label for="description">Description:</label>
+    <textarea id="description" formControlName="description" required></textarea>
+
+    <button type="submit">Submit</button>
+  </form>
+</div>
+
   

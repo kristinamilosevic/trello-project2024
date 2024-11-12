@@ -1,5 +1,10 @@
 <div class="card">
   <h3>Select Members to Add</h3>
+
+  <p *ngIf="successMessage" class="notification success">{{ successMessage }}</p>
+
+  <p *ngIf="errorMessage" class="notification error">{{ errorMessage }}</p>
+
   <ul class="member-list">
     <li *ngFor="let member of members">
       <label>
@@ -8,8 +13,6 @@
       </label>
     </li>
   </ul>
-  <button (click)="addSelectedMembers()">Add</button>
+  <button (click)="addSelectedMembers()">Add Members</button>
 </div>
-<div *ngIf="errorMessage" class="error-message">
-  {{ errorMessage }}
-</div>
+

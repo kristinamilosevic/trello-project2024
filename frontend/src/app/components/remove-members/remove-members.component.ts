@@ -11,8 +11,10 @@ import { ActivatedRoute } from '@angular/router';
   styleUrls: ['./remove-members.component.css']
 })
 export class RemoveMembersComponent implements OnInit {
-  projectId!: string; // ID projekta
+  projectId!: string;
   members: any[] = [];
+  successMessage: string | null = null;
+  errorMessage: string | null = null;
 
   constructor(
     private projectMembersService: ProjectMembersService,
@@ -20,18 +22,18 @@ export class RemoveMembersComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    // Preuzmite ID projekta iz URL-a
     this.projectId = this.route.snapshot.paramMap.get('id')!;
-    this.loadMembers(); // Učitajte članove
+    this.loadMembers();
   }
 
   loadMembers() {
     this.projectMembersService.getProjectMembers(this.projectId).subscribe(
       (data) => {
-        this.members = data; // Dodelite dobijene članove
+        this.members = data;
       },
       (error) => {
         console.error('Error fetching members:', error);
+        this.errorMessage = 'Error fetching members.';
       }
     );
   }
@@ -39,13 +41,19 @@ export class RemoveMembersComponent implements OnInit {
   removeMember(memberId: string) {
     this.projectMembersService.removeMember(this.projectId, memberId).subscribe(
       () => {
-        this.members = this.members.filter(member => member.id !== memberId); // Uklonite člana iz lokalnog niza
-        alert('Member removed successfully'); // Obavestite korisnika
-        this.loadMembers(); // Ponovo učitajte članove
+        this.members = this.members.filter(member => member._id !== memberId);
+        this.successMessage = 'Member removed successfully!';
+        setTimeout(() => {
+          this.successMessage = null;
+        }, 3000);
+        this.loadMembers();
       },
       (error) => {
         console.error('Error removing member:', error);
-        alert('Cannot remove member assigned to an in-progress task'); // Obavestite korisnika o grešci
+        this.errorMessage = 'Cannot remove member assigned to an in-progress task.';
+        setTimeout(() => {
+          this.errorMessage = null;
+        }, 3000);
       }
     );
   }

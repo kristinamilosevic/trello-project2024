@@ -5,47 +5,57 @@ form {
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
     max-width: 500px;
     margin: 20px auto;
-}
-
-label {
+  }
+  
+  label {
     display: block;
     margin-bottom: 8px;
     font-weight: bold;
     color: #333;
-}
-
-input, textarea {
-    width: 90%;
+  }
+  
+  input, textarea {
+    width: 100%;
     padding: 10px;
     margin-bottom: 15px;
     border: 1px solid #85586F;
     border-radius: 4px;
     font-size: 16px;
-    transition: border-color 0.3s;
-}
-
-input:focus, textarea:focus {
-    border-color: #85586F;
-    outline: none;
-}
-
-button {
+  }
+  
+  button {
     background-color: #85586F;
     color: #F8ECD1;
     border: none;
-    padding: 10px 15px;
+    padding: 10px;
     border-radius: 4px;
-    font-size: 16px;
     cursor: pointer;
     transition: background-color 0.3s;
-}
-
-button:hover {
+  }
+  
+  button:hover {
     background-color: #DEB6AB;
-}
-
-p {
+  }
+  
+  .notification {
+    margin: 10px auto;
+    font-weight: bold;
     text-align: center;
-    font-style: italic;
-    color: #666;
-}
+    animation: fadeInOut 3s ease-in-out;
+  }
+  
+  .success {
+    color: #4caf50;
+  }
+  
+  .error {
+    color: #f44336;
+  }
+  
+  @keyframes fadeInOut {
+    0% { opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  

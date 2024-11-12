@@ -12,14 +12,16 @@ import { Router, ActivatedRoute } from '@angular/router';
   styleUrls: ['./add-tasks.component.css']
 })
 export class AddTasksComponent {
-  showForm: boolean = true; 
-  taskForm: FormGroup; 
+  showForm: boolean = true;
+  taskForm: FormGroup;
+  successMessage: string = '';
+  errorMessage: string = '';
 
   constructor(
-    private fb: FormBuilder, 
-    private taskService: TaskService, 
+    private fb: FormBuilder,
+    private taskService: TaskService,
     private router: Router,
-    private route: ActivatedRoute 
+    private route: ActivatedRoute
   ) {
     this.taskForm = this.fb.group({
       projectId: [''],
@@ -51,33 +53,50 @@ export class AddTasksComponent {
 
   onSubmit() {
     const taskData = this.taskForm.value;
-  
+
     if (!taskData.projectId || !taskData.title || !taskData.description) {
-      alert('Please fill in all required fields before submitting.');
-      return; 
+      this.errorMessage = 'Please fill in all required fields.';
+      this.clearMessages();
+      return;
     }
-  
-    if (this.taskForm.valid) { 
+
+    if (this.taskForm.valid) {
       taskData.projectId = taskData.projectId.toString();
-  
+
       if (this.isValidTaskData(taskData)) {
         this.taskService.createTask(taskData).subscribe(
           response => {
-            this.taskForm.reset(); 
+            this.taskForm.reset();
             this.taskForm.get('status')?.setValue('Pending');
+<<<<<<< HEAD
             alert('Task successfully created!');
             this.router.navigate([`/project/${taskData.projectId}`]);
+=======
+            this.successMessage = 'Task successfully created!';
+            this.clearMessages();
+            this.router.navigate(['/task-list']);
+>>>>>>> 9a6567d737c3fc473a9bba62398a6f3a6853154a
           },
           error => {
             console.error('Error while creating task.', error);
-            alert('Error while creating task.');
+            this.errorMessage = 'Error while creating task.';
+            this.clearMessages();
           }
         );
       } else {
-        console.error('Task data is not in the correct format:', taskData);
+        this.errorMessage = 'Invalid task data format.';
+        this.clearMessages();
       }
     } else {
-      console.error('Form is not valid. Status:', this.taskForm.errors);
+      this.errorMessage = 'Form is not valid.';
+      this.clearMessages();
     }
+  }
+
+  clearMessages() {
+    setTimeout(() => {
+      this.successMessage = '';
+      this.errorMessage = '';
+    }, 3000);
   }
 }

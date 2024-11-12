@@ -8,20 +8,28 @@ import (
 	"github.com/dgrijalva/jwt-go"
 )
 
-type JWTService struct{}
+// JWTService struktura
+type JWTService struct {
+	secretKey string
+}
 
 // Claims struktura za JWT tokene
 type Claims struct {
-	Email string `json:"email"`
-	Role  string `json:"role"`
+	Username string `json:"username"`
+	Role     string `json:"role"`
 	jwt.StandardClaims
 }
 
+// Konstruktor za `JWTService`
+func NewJWTService(secretKey string) *JWTService {
+	return &JWTService{secretKey: secretKey}
+}
+
 // GenerateEmailVerificationToken kreira JWT token za verifikaciju email-a
-func (s *JWTService) GenerateEmailVerificationToken(email string) (string, error) {
+func (s *JWTService) GenerateEmailVerificationToken(username string) (string, error) {
 	claims := jwt.MapClaims{
-		"email": email,
-		"exp":   time.Now().Add(24 * time.Hour).Unix(),
+		"username": username,
+		"exp":      time.Now().Add(24 * time.Hour).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(os.Getenv("JWT_SECRET")))
@@ -48,10 +56,10 @@ func (s *JWTService) VerifyEmailVerificationToken(tokenString string) (string, e
 }
 
 // GenerateAuthToken kreira JWT token za autentifikaciju korisnika
-func (s *JWTService) GenerateAuthToken(email, role string) (string, error) {
+func (s *JWTService) GenerateAuthToken(username, role string) (string, error) {
 	claims := Claims{
-		Email: email,
-		Role:  role,
+		Username: username,
+		Role:     role,
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: time.Now().Add(24 * time.Hour).Unix(),
 		},
@@ -69,4 +77,17 @@ func (s *JWTService) ValidateToken(tokenStr string) (*Claims, error) {
 		return nil, err
 	}
 	return token.Claims.(*Claims), nil
+}
+
+// GenerateMagicLinkToken kreira JWT token za magic link prijavu
+func (s *JWTService) GenerateMagicLinkToken(username string, role string) (string, error) {
+	claims := Claims{
+		Username: username,
+		Role:     role,
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: time.Now().Add(15 * time.Minute).Unix(),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(os.Getenv("JWT_SECRET")))
 }

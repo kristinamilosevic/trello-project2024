@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"trello-project/microservices/users-service/handlers"
@@ -15,17 +16,33 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// CORS Middleware funkcija
+/*
+	func enableCORS(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept")
+
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+*/
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept")
+		w.Header().Set("Access-Control-Max-Age", "86400")
 
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 
@@ -39,7 +56,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error loading .env file")
 	}
-	log.Println("Successfully loaded variables from .env file")
+
+	secretKey := os.Getenv("JWT_SECRET")
+	if secretKey == "" {
+		log.Fatal("JWT_SECRET is not set in the environment variables")
+	}
+
+	fmt.Println("Successfully loaded variables from .env file")
 
 	// Konektovanje na MongoDB
 	clientOptions := options.Client().ApplyURI("mongodb://mongo:27017")
@@ -53,20 +76,19 @@ func main() {
 	}
 	fmt.Println("Connected to MongoDB!")
 
-	// Kolekcija korisnika
 	userCollection := client.Database("users_db").Collection("users")
-	userService := services.NewUserService(userCollection)
+	projectCollection := client.Database("projects_db").Collection("project")
+	taskCollection := client.Database("tasks_db").Collection("tasks")
 
-	// Pokreni posao za brisanje korisnika kojima je istekao rok za verifikaciju
-	startUserCleanupJob(userService)
+	jwtService := services.NewJWTService(secretKey)
+	userService := services.NewUserService(userCollection, projectCollection, taskCollection, jwtService)
+	//userService := services.NewUserService(userCollection)
 
-	// Inicijalizacija handlera
-	userHandler := handlers.UserHandler{UserService: userService}
+	//userHandler := handlers.UserHandler{UserService: userService}
+	userHandler := handlers.UserHandler{UserService: userService, JWTService: jwtService}
 	loginHandler := handlers.LoginHandler{UserService: userService}
 
-	// Postavi rutu za registraciju
-	//http.HandleFunc("/register", userHandler.Register)
-	//http.HandleFunc("/confirm", userHandler.ConfirmEmail)
+	http.HandleFunc("/register", userHandler.Register)
 
 	// Kreiranje novog multiplexer-a i dodavanje ruta
 	mux := http.NewServeMux()
@@ -74,11 +96,21 @@ func main() {
 	mux.HandleFunc("/confirm", userHandler.ConfirmEmail)
 	mux.HandleFunc("/verify-code", userHandler.VerifyCode)
 	mux.HandleFunc("/login", loginHandler.Login)
+	mux.HandleFunc("/check-username", loginHandler.CheckUsername)
+	mux.HandleFunc("/forgot-password", loginHandler.ForgotPassword)
+	mux.HandleFunc("/api/auth/delete-account/", userHandler.DeleteAccountHandler)
+
+	mux.HandleFunc("/magic-link", loginHandler.MagicLink)
+	mux.HandleFunc("/magic-login", loginHandler.MagicLogin)
+	mux.HandleFunc("/verify-magic-link", loginHandler.VerifyMagicLink)
 
 	// Primena CORS i JWT Middleware-a
 	finalHandler := enableCORS(mux)
 
+	startUserCleanupJob(userService)
+
 	// Pokretanje servera
+
 	srv := &http.Server{
 		Addr:         ":8080",
 		Handler:      finalHandler,
@@ -88,7 +120,9 @@ func main() {
 
 	fmt.Println("Server is running on port 8080")
 	log.Fatal(srv.ListenAndServe())
+
 }
+
 func startUserCleanupJob(userService *services.UserService) {
 	// Periodično izvršavanje brisanja neaktivnih korisnika
 	go func() {
