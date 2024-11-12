@@ -5,23 +5,30 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"trello-project/microservices/users-service/handlers"
 	"trello-project/microservices/users-service/services"
 
+	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func main() {
 	// Učitavanje .env fajla
-	/*err := godotenv.Load("jwt.env")
+	err := godotenv.Load("jwt.env")
 	if err != nil {
 		log.Fatalf("Error loading .env file")
 	}
 
-	log.Println("Uspešno učitane varijable iz .env fajla")*/
+	secretKey := os.Getenv("JWT_SECRET")
+	if secretKey == "" {
+		log.Fatal("JWT_SECRET is not set in the environment variables")
+	}
+
+	fmt.Println("Successfully loaded variables from .env file")
 
 	// Konektovanje na MongoDB
 	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
@@ -37,19 +44,37 @@ func main() {
 
 	// Kolekcija korisnika
 	userCollection := client.Database("users").Collection("users")
+
 	projectCollection := client.Database("projects_db").Collection("project")
 	taskCollection := client.Database("tasks_db").Collection("tasks")
-	userService := services.NewUserService(userCollection, projectCollection, taskCollection)
-	userHandler := handlers.UserHandler{UserService: userService}
+	jwtService := services.NewJWTService(secretKey)
+	userService := services.NewUserService(userCollection, projectCollection, taskCollection, jwtService)
+
+	userHandler := handlers.UserHandler{UserService: userService, JWTService: jwtService}
+	loginHandler := handlers.LoginHandler{UserService: userService}
 
 	http.HandleFunc("/register", userHandler.Register)
-	http.Handle("/api/auth/delete-account/", enableCORS(http.HandlerFunc(userHandler.DeleteAccountHandler)))
+
+	// Kreiranje novog multiplexer-a i dodavanje ruta
+	mux := http.NewServeMux()
+	mux.HandleFunc("/register", userHandler.Register)
+	mux.HandleFunc("/login", loginHandler.Login)
+	mux.HandleFunc("/check-username", loginHandler.CheckUsername)
+	mux.HandleFunc("/forgot-password", loginHandler.ForgotPassword)
+	mux.HandleFunc("/api/auth/delete-account/", userHandler.DeleteAccountHandler)
+
+	// Primena CORS i JWT Middleware-a
+	finalHandler := enableCORS(mux)
+
+	// Pokretanje servera
 
 	srv := &http.Server{
 		Addr:         ":8080",
+		Handler:      finalHandler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
+
 	fmt.Println("Server is running on port 8080")
 	log.Fatal(srv.ListenAndServe())
 

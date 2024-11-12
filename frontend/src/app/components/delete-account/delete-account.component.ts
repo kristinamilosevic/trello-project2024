@@ -4,19 +4,18 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { AccountService } from '../../services/delete-account/delete-account.service';
 import { CommonModule } from '@angular/common';
 
-
 @Component({
+  standalone : true,
   selector: 'app-delete-account',
   templateUrl: './delete-account.component.html',
   styleUrls: ['./delete-account.component.css'],
-  standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule]
 })
 export class DeleteAccountComponent implements OnInit {
   isLoading = false;
   errorMessage: string | null = null;
   successMessage: string | null = null;
-  userId: string = '';
+  username: string = '';
   role: string = '';
 
   constructor(
@@ -25,50 +24,41 @@ export class DeleteAccountComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    const token = localStorage.getItem('token');
-    if (token) {
-      const decodedToken: any = jwt_decode(token);
-      this.userId = decodedToken.userId; // Preuzmi ID iz tokena
-      this.role = decodedToken.role; // Preuzmi ulogu iz tokena
+    // Proveri da li su username i role sačuvani u localStorage
+    const storedUsername = localStorage.getItem('username');
+    const storedRole = localStorage.getItem('role');
+
+    if (storedUsername && storedRole) {
+      this.username = storedUsername;
+      this.role = storedRole;
     } else {
-      this.router.navigate(['/login']);
+      console.error("User information is missing from local storage.");
+      this.router.navigate(['/add-projects']);
     }
   }
 
-  deleteAccount() {
-    if (!this.userId || !this.role) {
-      this.errorMessage = 'User information is missing.';
+  deleteAccount(): void {
+    const token = localStorage.getItem('token');
+    if (!this.username || !this.role || !token) {
+      this.errorMessage = 'User information is missing or not authenticated.';
       return;
     }
-
-    this.isLoading = true;
-    this.errorMessage = null;
-    this.successMessage = null;
-
-    this.accountService.deleteAccount(this.userId, this.role).subscribe({
+  
+    this.accountService.deleteAccount(this.username, this.role).subscribe({
       next: () => {
         this.successMessage = 'Account deleted successfully!';
-        setTimeout(() => {
-          this.successMessage = null;
-          localStorage.removeItem('token');
-          this.router.navigate(['/login']);
-        }, 3000);
+        localStorage.clear();
+        this.router.navigate(['/login']);
       },
-      error: (err: HttpErrorResponse) => {
-        this.isLoading = false;
-        if (err.status === 403 || err.status === 409) {
-          this.errorMessage = 'Cannot delete account with active projects.';
+      error: (err) => {
+        if (err.status === 401) {
+          this.errorMessage = 'Unauthorized. Please log in again.';
+          localStorage.clear();
+          this.router.navigate(['/login']);
         } else {
-          this.errorMessage = 'An error occurred while deleting the account.';
+          this.errorMessage = 'Failed to delete account';
         }
-        setTimeout(() => {
-          this.errorMessage = null;
-        }, 3000);
       }
     });
   }
-}
-function jwt_decode(token: string): any {
-  throw new Error('Function not implemented.');
-}
-
+}  

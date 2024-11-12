@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 
 	"trello-project/microservices/users-service/models"
 	"trello-project/microservices/users-service/utils"
@@ -13,47 +14,44 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+// UserService struktura
 type UserService struct {
 	UserCollection    *mongo.Collection
-	JWTService        *JWTService
 	ProjectCollection *mongo.Collection
 	TaskCollection    *mongo.Collection
+	JWTService        *JWTService
 }
 
-func NewUserService(userCollection, projectCollection, taskCollection *mongo.Collection) *UserService {
+func NewUserService(userCollection, projectCollection, taskCollection *mongo.Collection, jwtService *JWTService) *UserService {
 	return &UserService{
 		UserCollection:    userCollection,
 		ProjectCollection: projectCollection,
 		TaskCollection:    taskCollection,
-		JWTService:        &JWTService{},
+		JWTService:        jwtService,
 	}
 }
 
+// RegisterUser registruje novog korisnika
 func (s *UserService) RegisterUser(user models.User) error {
-	// Provera da li korisnik već postoji na osnovu email-a
 	var existingUser models.User
 	err := s.UserCollection.FindOne(context.Background(), bson.M{"email": user.Email}).Decode(&existingUser)
 	if err != mongo.ErrNoDocuments {
 		return fmt.Errorf("User with email already exists")
 	}
 
-	// Inicijalno postavljanje korisnika kao neaktivan
 	user.ID = primitive.NewObjectID()
 	user.IsActive = false
 
-	// Unos korisnika u bazu
 	_, err = s.UserCollection.InsertOne(context.Background(), user)
 	if err != nil {
 		return err
 	}
 
-	// Generisanje JWT tokena
 	token, err := s.JWTService.GenerateEmailVerificationToken(user.Email)
 	if err != nil {
 		return fmt.Errorf("Failed to generate token: %v", err)
 	}
 
-	// Slanje emaila za potvrdu registracije
 	verificationLink := fmt.Sprintf("http://localhost:4200/project-list?token=%s", token)
 	subject := "Confirm your email"
 	body := fmt.Sprintf("Click the link to confirm your registration: %s", verificationLink)
@@ -65,48 +63,34 @@ func (s *UserService) RegisterUser(user models.User) error {
 	return nil
 }
 
-// Funkcija za brisanje naloga (menadžera ili člana)
-func (s *UserService) DeleteAccount(userID primitive.ObjectID, role string) error {
+// Funkcija za brisanje naloga koristeći JWT token
+func (s *UserService) DeleteAccount(username, role string) error {
+	fmt.Println("Brisanje naloga za:", username)
 
 	var existingUser models.User
-	err := s.UserCollection.FindOne(context.Background(), bson.M{"_id": userID}).Decode(&existingUser)
+	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&existingUser)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return errors.New("user does not exist in the database")
-		}
-		return err
+		return errors.New("user not found")
 	}
 
-	fmt.Println("Korisnik pronađen:", existingUser.Name, "sa ulogom:", role)
-
 	if role == "manager" {
-		canDelete, err := s.CanDeleteManagerAccount(userID)
-		if err != nil {
-			fmt.Println("Greška pri proveri menadžera:", err)
-			return err
-		}
-		if !canDelete {
+		canDelete, err := s.CanDeleteManagerAccount(existingUser.ID)
+		if err != nil || !canDelete {
 			return errors.New("cannot delete manager account with active projects")
 		}
 	} else if role == "member" {
-		canDelete, err := s.CanDeleteMemberAccount(userID)
-		if err != nil {
-			fmt.Println("Greška pri proveri člana:", err)
-			return err
-		}
-		if !canDelete {
+		canDelete, err := s.CanDeleteMemberAccount(existingUser.ID)
+		if err != nil || !canDelete {
 			return errors.New("cannot delete member account assigned to active projects")
 		}
 	}
 
-	fmt.Println("Brisanje korisnika iz baze:", userID.Hex())
-	_, err = s.UserCollection.DeleteOne(context.Background(), bson.M{"_id": userID})
+	_, err = s.UserCollection.DeleteOne(context.Background(), bson.M{"username": username})
 	if err != nil {
-		fmt.Println("Greška pri brisanju korisnika:", err)
 		return errors.New("failed to delete user")
 	}
 
-	fmt.Println("Korisnik uspešno obrisan:", userID.Hex())
+	fmt.Println("Korisnik uspešno obrisan:", username)
 	return nil
 }
 
@@ -162,7 +146,7 @@ func (s *UserService) CanDeleteManagerAccount(managerID primitive.ObjectID) (boo
 func (s *UserService) CanDeleteMemberAccount(memberID primitive.ObjectID) (bool, error) {
 	fmt.Println("Proveravam da li član može biti obrisan...")
 
-	// Pronađi sve projekte gde je član
+	// Pronađi sve projekte gde se pojavljuje član sa datim ID-jem
 	projectFilter := bson.M{"members._id": memberID}
 	cursor, err := s.ProjectCollection.Find(context.Background(), projectFilter)
 	if err != nil {
@@ -177,6 +161,8 @@ func (s *UserService) CanDeleteMemberAccount(memberID primitive.ObjectID) (bool,
 
 	// Proveri zadatke za projekte u kojima je član dodeljen
 	for _, project := range projects {
+		fmt.Println("Proveravam projekt:", project.ID.Hex())
+
 		taskFilter := bson.M{
 			"projectId": project.ID.Hex(),
 			"assignees": memberID,
@@ -189,4 +175,55 @@ func (s *UserService) CanDeleteMemberAccount(memberID primitive.ObjectID) (bool,
 	}
 
 	return true, nil
+}
+
+// ResetPasswordByUsername resetuje lozinku korisnika i šalje novu lozinku na email
+func (s *UserService) ResetPasswordByUsername(username string) error {
+	var user models.User
+	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+	if err != nil {
+		return fmt.Errorf("user not found")
+	}
+
+	if !user.IsActive {
+		return errors.New("user is not active")
+	}
+
+	// Generiši novu lozinku
+	newPassword := utils.GenerateRandomPassword()
+
+	// Ažuriraj lozinku u bazi
+	_, err = s.UserCollection.UpdateOne(context.Background(), bson.M{"username": username}, bson.M{"$set": bson.M{"password": newPassword}})
+	if err != nil {
+		return fmt.Errorf("failed to update password: %v", err)
+	}
+
+	// Pošalji novu lozinku korisniku na email
+	subject := "Your new password"
+	body := fmt.Sprintf("Your new password is: %s", newPassword)
+	if err := utils.SendEmail(user.Email, subject, body); err != nil {
+		return fmt.Errorf("failed to send email: %v", err)
+	}
+
+	log.Println("New password sent to:", user.Email)
+	return nil
+}
+
+func (s *UserService) LoginUser(username, password string) (*models.User, string, error) {
+	var user models.User
+	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+	if err != nil {
+		return nil, "", errors.New("user not found")
+	}
+	if user.Password != password {
+		return nil, "", errors.New("invalid password")
+	}
+	if !user.IsActive {
+		return nil, "", errors.New("user not active")
+	}
+	token, err := s.JWTService.GenerateAuthToken(user.Username, user.Role)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to generate token: %v", err)
+	}
+	return &user, token, nil
 }

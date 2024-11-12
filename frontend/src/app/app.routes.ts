@@ -9,6 +9,9 @@ import { ProjectDetailsComponent } from './components/project-details/project-de
 import { TaskListComponent } from './components/task-list/task-list.component';
 import { RegisterComponent } from './components/register/register.component';
 import { DeleteAccountComponent } from './components/delete-account/delete-account.component';
+import { LoginComponent } from './components/login/login.component';
+
+
 
 
 // export const routes: Routes = [
@@ -45,8 +48,13 @@ export const routes: Routes = [
   { path: 'task-list', component: TaskListComponent },
   { path: '', redirectTo: '/projects-list', pathMatch: 'full' }, 
   { path: 'register', component: RegisterComponent },
-  { path: 'delete-account/:managerId', component: DeleteAccountComponent },
+
+  { path: 'delete-account', component: DeleteAccountComponent },
   
+
+  { path: 'login', component: LoginComponent }, // Ruta za login
+  { path: '', redirectTo: '/login', pathMatch: 'full' }
+
 ];
 
 @NgModule({
