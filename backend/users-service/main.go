@@ -63,6 +63,10 @@ func main() {
 	mux.HandleFunc("/forgot-password", loginHandler.ForgotPassword)
 	mux.HandleFunc("/api/auth/delete-account/", userHandler.DeleteAccountHandler)
 
+	mux.HandleFunc("/magic-link", loginHandler.MagicLink)
+	mux.HandleFunc("/magic-login", loginHandler.MagicLogin)
+	mux.HandleFunc("/verify-magic-link", loginHandler.VerifyMagicLink)
+
 	// Primena CORS i JWT Middleware-a
 	finalHandler := enableCORS(mux)
 

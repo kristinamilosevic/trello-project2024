@@ -30,6 +30,15 @@ export class AuthService {
   sendPasswordResetLink(username: string, email: string): Observable<any> {
     return this.http.post(`${this.apiUrl}/forgot-password`, { username, email });
   }
+
+  sendMagicLink(username: string, email: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/magic-link`, { username, email });
+  }
+
+  verifyMagicLink(token: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/magic-login?token=${token}`);
+  }
+  
   
   checkUsername(username: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/check-username/${username}`);

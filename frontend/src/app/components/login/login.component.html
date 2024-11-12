@@ -1,7 +1,7 @@
 <div class="login-wrapper">
   <div class="form-container">
     <h2>Login</h2>
-    <form *ngIf="!showForgotPassword" (ngSubmit)="onSubmit()">
+    <form *ngIf="!showForgotPassword && !showMagicLink" (ngSubmit)="onSubmit()">
       <div class="form-group">
         <label for="username">Username</label>
         <input type="text" [(ngModel)]="username" name="username" placeholder="Enter your username" required />
@@ -15,6 +15,7 @@
 
     <p *ngIf="errorMessage" class="notification error">{{ errorMessage }}</p>
       <a class="forgot-link" (click)="openForgotPassword()">Forgot Password?</a>
+      <a class="forgot-link" (click)="openMagicLink()">Magic Link</a>
     </form>
 
   
@@ -25,6 +26,14 @@
       <button (click)="sendResetLink()">Send Reset Link</button>
       <p *ngIf="resetMessage" class="reset-message">{{ resetMessage }}</p>
       <a class="back-link" (click)="closeForgotPassword()">Back to Login</a>
+    </div>
+  
+    <div *ngIf="showMagicLink">
+      <h3>Magic Link</h3>
+      <input type="email" [(ngModel)]="magicEmail" placeholder="Enter your email" required />
+      <button (click)="sendMagicLink()">Send Magic Link</button>
+      <p *ngIf="magicLinkMessage" class="notification success">{{ magicLinkMessage }}</p>
+      <a class="back-link" (click)="showMagicLink = false">Back to Login</a>
     </div>
   </div>
 </div>

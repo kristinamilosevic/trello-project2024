@@ -53,8 +53,9 @@ export const routes: Routes = [
   
 
   { path: 'login', component: LoginComponent }, // Ruta za login
-  { path: '', redirectTo: '/login', pathMatch: 'full' }
+  { path: '', redirectTo: '/login', pathMatch: 'full' },
 
+  { path: 'magic-login', component: LoginComponent }
 ];
 
 @NgModule({

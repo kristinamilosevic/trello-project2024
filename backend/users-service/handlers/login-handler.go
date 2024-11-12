@@ -25,6 +25,7 @@ type LoginResponse struct {
 
 type LoginHandler struct {
 	UserService *services.UserService
+	JWTService  *services.JWTService
 }
 
 type ForgotPasswordRequest struct {
@@ -136,5 +137,125 @@ func (h *LoginHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+//magic
+
+type MagicLinkRequest struct {
+	Username string `json:"username"`
+	Email    string `json:"email"`
+}
+
+// Funkcija za slanje magic link-a
+func (h *LoginHandler) MagicLink(w http.ResponseWriter, r *http.Request) {
+	var req MagicLinkRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	// Pronađi korisnika i proveri email
+	var user models.User
+	err := h.UserService.UserCollection.FindOne(context.Background(), bson.M{"username": req.Username}).Decode(&user)
+	if err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	// Proveri da li email odgovara korisniku
+	if user.Email != req.Email {
+		http.Error(w, "Email does not match", http.StatusBadRequest)
+		return
+	}
+
+	// Generiši JWT token sa username i role
+	token, err := h.JWTService.GenerateMagicLinkToken(req.Username, user.Role)
+	if err != nil {
+		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+		return
+	}
+
+	// Kreiraj magic link koji se šalje korisniku
+	magicLink := fmt.Sprintf("http://localhost:4200/magic-login?token=%s", token)
+
+	// Slanje email-a sa magic link-om
+	subject := "Your Magic Login Link"
+	body := fmt.Sprintf("Click here to log in: %s", magicLink)
+	if err := utils.SendEmail(req.Email, subject, body); err != nil {
+		http.Error(w, "Failed to send email", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Magic link sent successfully"))
+}
+
+// Funkcija za prijavu putem magic link-a
+func (h *LoginHandler) MagicLogin(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		http.Error(w, "Token is missing", http.StatusBadRequest)
+		return
+	}
+
+	// Validacija tokena
+	claims, err := h.JWTService.ValidateToken(token)
+	if err != nil {
+		http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+		return
+	}
+
+	// Generiši novi token za sesiju
+	authToken, err := h.JWTService.GenerateAuthToken(claims.Username, claims.Role)
+	if err != nil {
+		http.Error(w, "Failed to generate auth token", http.StatusInternalServerError)
+		return
+	}
+
+	// Vraćamo odgovor sa username i role
+	response := map[string]string{
+		"token":    authToken,
+		"username": claims.Username,
+		"role":     claims.Role,
+	}
+
+	// Dodaj log ovde da proveriš šta backend šalje
+	fmt.Println("Backend response:", response)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+// Funkcija za verifikaciju magic linka i automatsku prijavu
+func (h *LoginHandler) VerifyMagicLink(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		http.Error(w, "Missing token", http.StatusBadRequest)
+		return
+	}
+
+	// Validiraj token
+	claims, err := h.JWTService.ValidateToken(token)
+	if err != nil {
+		http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+		return
+	}
+
+	// Generiši novi token za sesiju
+	authToken, err := h.JWTService.GenerateAuthToken(claims.Username, claims.Role)
+	if err != nil {
+		http.Error(w, "Failed to generate auth token", http.StatusInternalServerError)
+		return
+	}
+
+	// Priprema odgovora
+	response := map[string]string{
+		"token":    authToken,
+		"username": claims.Username,
+		"role":     claims.Role,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }

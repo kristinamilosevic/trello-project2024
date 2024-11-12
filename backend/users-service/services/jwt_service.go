@@ -57,3 +57,16 @@ func (s *JWTService) ValidateToken(tokenStr string) (*Claims, error) {
 	}
 	return token.Claims.(*Claims), nil
 }
+
+// GenerateMagicLinkToken kreira JWT token za magic link prijavu
+func (s *JWTService) GenerateMagicLinkToken(username string, role string) (string, error) {
+	claims := Claims{
+		Username: username,
+		Role:     role,
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: time.Now().Add(15 * time.Minute).Unix(),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+}
