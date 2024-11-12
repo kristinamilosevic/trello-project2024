@@ -12,7 +12,6 @@ import (
 	"trello-project/microservices/users-service/utils"
 
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"golang.org/x/exp/rand"
 )
@@ -109,27 +108,17 @@ func (s *UserService) CreateUser(user models.User) error {
 }
 
 // Funkcija za brisanje naloga koristeći JWT token
-func (s *UserService) DeleteAccount(username, role string) error {
+func (s *UserService) DeleteAccount(username string) error {
 	fmt.Println("Brisanje naloga za:", username)
 
+	// Pronađi korisnika pre brisanja
 	var existingUser models.User
 	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&existingUser)
 	if err != nil {
 		return errors.New("user not found")
 	}
 
-	if role == "manager" {
-		canDelete, err := s.CanDeleteManagerAccount(existingUser.ID)
-		if err != nil || !canDelete {
-			return errors.New("cannot delete manager account with active projects")
-		}
-	} else if role == "member" {
-		canDelete, err := s.CanDeleteMemberAccount(existingUser.ID)
-		if err != nil || !canDelete {
-			return errors.New("cannot delete member account assigned to active projects")
-		}
-	}
-
+	// Briši korisnika iz baze podataka
 	_, err = s.UserCollection.DeleteOne(context.Background(), bson.M{"username": username})
 	if err != nil {
 		return errors.New("failed to delete user")
@@ -139,10 +128,10 @@ func (s *UserService) DeleteAccount(username, role string) error {
 	return nil
 }
 
-func (s *UserService) CanDeleteManagerAccount(managerID primitive.ObjectID) (bool, error) {
-	fmt.Println("Proveravam da li menadžer može biti obrisan...")
+func (s *UserService) CanDeleteManagerAccountByUsername(username string) (bool, error) {
+	fmt.Println("Proveravam da li menadžer može biti obrisan po username...")
 
-	projectFilter := bson.M{"manager_id": managerID}
+	projectFilter := bson.M{"manager_username": username}
 	cursor, err := s.ProjectCollection.Find(context.Background(), projectFilter)
 	if err != nil {
 		return false, err
@@ -155,66 +144,56 @@ func (s *UserService) CanDeleteManagerAccount(managerID primitive.ObjectID) (boo
 	}
 
 	for _, project := range projects {
-		projectIDStr := project.ID.Hex()
-		fmt.Println("Proveravam projekt:", projectIDStr)
-
-		taskCursor, err := s.TaskCollection.Find(context.Background(), bson.M{"projectId": projectIDStr})
-		if err != nil {
-			return false, err
-		}
-		defer taskCursor.Close(context.Background())
-
-		var tasks []models.Task
-		if err := taskCursor.All(context.Background(), &tasks); err != nil {
-			return false, err
-		}
-
-		for _, task := range tasks {
-			if task.Status == "in progress" {
-				fmt.Println("Zadatak je u statusu 'in progress', menadžer ne može biti obrisan.")
-				return false, nil
-			}
-		}
-	}
-
-	managerTaskFilter := bson.M{"assignees": managerID, "status": "in progress"}
-	count, err := s.TaskCollection.CountDocuments(context.Background(), managerTaskFilter)
-	if err != nil || count > 0 {
-		fmt.Println("Menadžer ima dodeljene zadatke u statusu 'in progress'")
-		return false, nil
-	}
-
-	fmt.Println("Menadžer može biti obrisan.")
-	return true, nil
-}
-
-func (s *UserService) CanDeleteMemberAccount(memberID primitive.ObjectID) (bool, error) {
-	fmt.Println("Proveravam da li član može biti obrisan...")
-
-	// Pronađi sve projekte gde se pojavljuje član sa datim ID-jem
-	projectFilter := bson.M{"members._id": memberID}
-	cursor, err := s.ProjectCollection.Find(context.Background(), projectFilter)
-	if err != nil {
-		return false, err
-	}
-	defer cursor.Close(context.Background())
-
-	var projects []models.Project
-	if err := cursor.All(context.Background(), &projects); err != nil {
-		return false, err
-	}
-
-	// Proveri zadatke za projekte u kojima je član dodeljen
-	for _, project := range projects {
-		fmt.Println("Proveravam projekt:", project.ID.Hex())
-
 		taskFilter := bson.M{
 			"projectId": project.ID.Hex(),
-			"assignees": memberID,
 			"status":    "in progress",
 		}
 		count, err := s.TaskCollection.CountDocuments(context.Background(), taskFilter)
-		if err != nil || count > 0 {
+		if err != nil {
+			return false, err
+		}
+
+		// Ako postoji zadatak u toku, zabrani brisanje
+		if count > 0 {
+			fmt.Println("Menadžer ima aktivne zadatke u toku.")
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+func (s *UserService) CanDeleteMemberAccountByUsername(username string) (bool, error) {
+	fmt.Println("Proveravam da li član može biti obrisan po username...")
+
+	// Pronađi sve projekte gde se pojavljuje član sa zadatim username-om
+	projectFilter := bson.M{"members.username": username}
+	cursor, err := s.ProjectCollection.Find(context.Background(), projectFilter)
+	if err != nil {
+		return false, err
+	}
+	defer cursor.Close(context.Background())
+
+	var projects []models.Project
+	if err := cursor.All(context.Background(), &projects); err != nil {
+		return false, err
+	}
+
+	// Proveri sve projekte za zadatke u toku
+	for _, project := range projects {
+		taskFilter := bson.M{
+			"projectId":          project.ID.Hex(),
+			"assignees.username": username,
+			"status":             "in progress",
+		}
+		count, err := s.TaskCollection.CountDocuments(context.Background(), taskFilter)
+		if err != nil {
+			return false, err
+		}
+
+		// Ako postoji zadatak u toku, zabrani brisanje
+		if count > 0 {
+			fmt.Println("Član je dodeljen zadatku u toku.")
 			return false, nil
 		}
 	}
