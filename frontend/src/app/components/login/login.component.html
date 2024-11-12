@@ -14,6 +14,7 @@
       <p *ngIf="successMessage" class="notification success">{{ successMessage }}</p>
 
     <p *ngIf="errorMessage" class="notification error">{{ errorMessage }}</p>
+      <a class="forgot-link" (click)="openRegister()">Already have an account?</a>
       <a class="forgot-link" (click)="openForgotPassword()">Forgot Password?</a>
       <a class="forgot-link" (click)="openMagicLink()">Magic Link</a>
     </form>

@@ -8,6 +8,7 @@ import { Project } from '../../models/project/project';
 })
 export class ProjectService {
   private apiUrl = 'http://localhost:8003/projects';
+  private mainUrl = 'http://localhost:8003';
 
   constructor(private http: HttpClient) {}
 
@@ -30,4 +31,9 @@ export class ProjectService {
   getTasksForProject(projectId: string): Observable<any[]> {
     return this.http.get<any[]>(`${this.apiUrl}/${projectId}/tasks`);
   }
+
+  getProjectsByUsername(username: string): Observable<Project[]> {
+    return this.http.get<Project[]>(`${this.mainUrl}/projects?username=${username}`);
+  }
+  
 }  

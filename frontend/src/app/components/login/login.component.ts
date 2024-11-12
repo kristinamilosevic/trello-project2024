@@ -47,7 +47,7 @@ export class LoginComponent {
   
         this.successMessage = 'Login successful!';
         setTimeout(() => {
-          this.router.navigate(['/projects-list']);
+          this.router.navigate(['/users-projects']);
         }, 2000); // Preusmeravanje nakon 2 sekunde
       },
       error: () => {
@@ -153,5 +153,9 @@ export class LoginComponent {
         this.magicLinkMessage = 'Magic link sent to your email!';
       }
     });
+  }
+
+  openRegister() {
+    this.router.navigate(['/register']);
   }
 }

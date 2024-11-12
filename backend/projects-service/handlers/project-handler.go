@@ -230,3 +230,25 @@ func (h *ProjectHandler) DisplayTasksForProjectHandler(w http.ResponseWriter, r 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(tasks)
 }
+
+func GetProjectsByUsername(s *services.ProjectService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)          // Uzmi parametre iz URL-a
+		username := vars["username"] // Username je sada deo URL-a
+		if username == "" {
+			http.Error(w, "Username is required", http.StatusBadRequest)
+			return
+		}
+
+		projects, err := s.GetProjectsByUsername(username)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error fetching projects: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(projects); err != nil {
+			http.Error(w, fmt.Sprintf("Error encoding response: %v", err), http.StatusInternalServerError)
+		}
+	}
+}

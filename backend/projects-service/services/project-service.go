@@ -119,7 +119,6 @@ func (s *ProjectService) GetProjectMembers(ctx context.Context, projectID string
 }
 
 // GetAllUsers retrieves all users from the users collection.
-// GetAllUsers retrieves all users from the users collection.
 func (s *ProjectService) GetAllUsers() ([]models.Member, error) {
 	var users []models.Member
 	cursor, err := s.UsersCollection.Find(context.Background(), bson.M{})
@@ -248,4 +247,27 @@ func (s *ProjectService) GetTasksForProject(projectID primitive.ObjectID) ([]*mo
 	}
 
 	return tasks, nil
+}
+
+func (s *ProjectService) GetProjectsByUsername(username string) ([]models.Project, error) {
+	var projects []models.Project
+
+	// Filtriraj projekte gde je username jedan od članova
+	filter := bson.M{"members": username}
+
+	cursor, err := s.ProjectsCollection.Find(context.Background(), filter)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching projects: %v", err)
+	}
+	defer cursor.Close(context.Background())
+
+	for cursor.Next(context.Background()) {
+		var project models.Project
+		if err := cursor.Decode(&project); err != nil {
+			return nil, fmt.Errorf("error decoding project: %v", err)
+		}
+		projects = append(projects, project)
+	}
+
+	return projects, nil
 }

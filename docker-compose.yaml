@@ -1,17 +1,17 @@
 version: '3.8'
 
 services:
-  frontend:
-    build:
-      context: ./frontend
-    ports:
-      - "4200:4200"  
-    depends_on:
-      - tasks-service
-      - projects-service
-      - users-service
-    networks:
-      - app-network
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #   ports:
+  #     - "4200:4200"  
+  #   depends_on:
+  #     - tasks-service
+  #     - projects-service
+  #     - users-service
+  #   networks:
+  #     - app-network
 
   tasks-service:
     build:
