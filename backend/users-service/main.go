@@ -61,7 +61,7 @@ func main() {
 	mux.HandleFunc("/login", loginHandler.Login)
 	mux.HandleFunc("/check-username", loginHandler.CheckUsername)
 	mux.HandleFunc("/forgot-password", loginHandler.ForgotPassword)
-	mux.HandleFunc("/api/auth/delete-account/", userHandler.DeleteAccountHandler)
+	mux.HandleFunc("/api/auth/delete-account", userHandler.DeleteAccountHandler)
 
 	mux.HandleFunc("/magic-link", loginHandler.MagicLink)
 	mux.HandleFunc("/magic-login", loginHandler.MagicLogin)

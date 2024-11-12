@@ -10,14 +10,13 @@ export class AccountService {
 
   constructor(private http: HttpClient) {}
 
-  deleteAccount(username: string, role: string): Observable<any> {
-    const token = localStorage.getItem('token'); // Uzimamo token iz localStorage
+  deleteAccount(): Observable<any> {
+    const token = localStorage.getItem('token');
     const headers = new HttpHeaders({
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     });
-
-    const url = `${this.apiUrl}/${username}/${role}`;
-    return this.http.delete(url, { headers });
+  
+    return this.http.delete(this.apiUrl, { headers });
   }
-}
+}  
