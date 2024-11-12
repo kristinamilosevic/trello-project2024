@@ -41,7 +41,9 @@ services:
     build:
       context: ./backend/users-service  
     ports:
-      - "8001:8000"  
+      - "8001:8080"  
+    env_file:
+      - ./backend/users-service/.env
     environment:
       - MONGO_URI=mongodb://mongo:27017/users_db
     depends_on:

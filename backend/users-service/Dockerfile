@@ -10,12 +10,13 @@ RUN go mod download
 COPY . .
 
 RUN go build -o users-service .
-RUN ls /app
 
 FROM alpine
 WORKDIR /usr/bin
 COPY --from=build_container /app/users-service .
-EXPOSE 8000
+COPY --from=build_container /app/.env .env
+
+EXPOSE 8080
 RUN chmod +x /usr/bin/users-service 
 ENTRYPOINT ["users-service"]
 

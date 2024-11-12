@@ -35,14 +35,14 @@ func enableCORS(next http.Handler) http.Handler {
 
 func main() {
 	// Učitavanje .env fajla
-	err := godotenv.Load("jwt.env")
+	err := godotenv.Load(".env")
 	if err != nil {
 		log.Fatalf("Error loading .env file")
 	}
 	log.Println("Successfully loaded variables from .env file")
 
 	// Konektovanje na MongoDB
-	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
+	clientOptions := options.Client().ApplyURI("mongodb://mongo:27017")
 	client, err := mongo.Connect(context.TODO(), clientOptions)
 	if err != nil {
 		log.Fatal(err)

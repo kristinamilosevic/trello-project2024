@@ -5,6 +5,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { HttpClient, HttpClientModule } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
 
+
 @Component({
   selector: 'app-verify-code',
   standalone: true,
@@ -37,7 +38,7 @@ export class VerifyCodeComponent implements OnInit {
         code: this.verifyCodeForm.value.code
       };
 
-      this.http.post('http://localhost:8080/verify-code', data, { responseType: 'text' }).subscribe({
+      this.http.post('http://localhost:8001/verify-code', data, { responseType: 'text' }).subscribe({
         next: (response) => {
           console.log('Response from server:', response);
           alert('Verification successful. You can now log in.');
