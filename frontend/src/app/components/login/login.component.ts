@@ -47,7 +47,7 @@ export class LoginComponent {
   
         this.successMessage = 'Login successful!';
         setTimeout(() => {
-          this.router.navigate(['/add-projects']);
+          this.router.navigate(['/projects-list']);
         }, 2000); // Preusmeravanje nakon 2 sekunde
       },
       error: () => {
