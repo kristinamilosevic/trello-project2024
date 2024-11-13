@@ -52,4 +52,19 @@
     margin-top: 5px;
   }
   
-  
+  .forgot-link,
+.back-link {
+  display: block;
+  text-align: center;
+  margin-top: 20px;
+  color: #85586F;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.3s, font-weight 0.3s;
+}
+
+.forgot-link:hover,
+.back-link:hover {
+  color: #6b3b4a;
+  font-weight: bold;
+}

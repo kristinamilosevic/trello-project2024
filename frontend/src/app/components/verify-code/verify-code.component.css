@@ -1,56 +1,57 @@
 .verify-code-card {
     max-width: 400px;
-    margin: 0 auto; /* Centriranje kartice */
-    padding: 2rem; /* Razmak unutar kartice */
-    background-color: #F8ECD1; /* Svetlo siva pozadina za karticu */
-    border-radius: 8px; /* Zaobljeni uglovi */
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Blaga senka za karticu */
-    text-align: center; /* Centriranje teksta unutar kartice */
+    margin: 0 auto; 
+    padding: 2rem; 
+    border: 1px solid #85586F;
+    background-color: #F8ECD1; 
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); 
+    text-align: center; 
   }
   
   h2 {
-    margin-bottom: 1.5rem; /* Razmak ispod naslova */
-    color: #85586F; /* Tamna boja za naslov */
+    margin-bottom: 1.5rem;
+    color: #85586F; 
   }
   
   .form-group {
-    margin-bottom: 1rem; /* Razmak između grupa formi */
+    margin-bottom: 1rem;
   }
   
   label {
-    display: block; /* Prikazivanje labele u celom redu */
-    margin-bottom: 0.5rem; /* Razmak između labele i input polja */
-    font-weight: bold; /* Debela slova za labele */
+    display: block; 
+    margin-bottom: 0.5rem;
+    font-weight: bold;
   }
   
   input {
-    width: 100%; /* Širina inputa je 100% kartice */
-    padding: 0.5rem; /* Razmak unutar inputa */
-    border: 1px solid #ccc; /* Svetlo sivi okvir */
-    border-radius: 4px; /* Zaobljeni uglovi za input */
+    width: 100%;
+    padding: 0.5rem; 
+    border: 1px solid #ccc;
+    border-radius: 4px;
   }
   
   input:focus {
-    border-color: #007bff; /* Promena boje okvira kada je input aktivan */
-    outline: none; /* Uklanjanje zadatog outline-a */
+    border-color: #007bff; 
+    outline: none; 
   }
   
   .error {
-    color: #d9534f; /* Crvena boja za greške */
-    font-size: 0.9rem; /* Manja veličina fonta za poruku o grešci */
+    color: #d9534f; 
+    font-size: 0.9rem; 
   }
   
   button {
-    background-color: #AC7D88; /* Plava pozadina za dugme */
-    color: white; /* Bela boja za tekst dugmeta */
-    padding: 0.75rem 1.5rem; /* Razmak unutar dugmeta */
-    border: none; /* Uklanjanje okvira dugmeta */
-    border-radius: 4px; /* Zaobljeni uglovi za dugme */
-    cursor: pointer; /* Promena kursora na pokazivač */
-    margin-top: 1rem; /* Razmak iznad dugmeta */
+    background-color: #AC7D88; 
+    color: white; 
+    padding: 0.75rem 1.5rem; 
+    border: none; 
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 1rem;
   }
   
   button:hover {
-    background-color: #85586F; /* Tamnija nijansa plave kada se dugme pređe */
+    background-color: #85586F;
   }
   

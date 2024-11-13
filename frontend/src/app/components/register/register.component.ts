@@ -51,4 +51,7 @@ export class RegisterComponent {
     }
   }
   
+  openLogin() {
+    this.router.navigate(['/login']);
+  }
 }
