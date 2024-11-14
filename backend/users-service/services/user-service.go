@@ -31,7 +31,6 @@ func NewUserService(userCollection, projectCollection, taskCollection *mongo.Col
 	}
 }
 
-// RegisterUser registruje novog korisnika
 func (s *UserService) RegisterUser(user models.User) error {
 	var existingUser models.User
 	err := s.UserCollection.FindOne(context.Background(), bson.M{"email": user.Email}).Decode(&existingUser)
@@ -63,97 +62,128 @@ func (s *UserService) RegisterUser(user models.User) error {
 	return nil
 }
 
-// Funkcija za brisanje naloga koristeći JWT token
 func (s *UserService) DeleteAccount(username string) error {
-	fmt.Println("Brisanje naloga za:", username)
 
-	// Pronađi korisnika pre brisanja
-	var existingUser models.User
-	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&existingUser)
+	//trazi ObjectID korisnika na osnovu username
+	var user models.User
+	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
 	if err != nil {
 		return errors.New("user not found")
 	}
+	userID := user.ID
 
-	// Briši korisnika iz baze podataka
 	_, err = s.UserCollection.DeleteOne(context.Background(), bson.M{"username": username})
 	if err != nil {
-		return errors.New("failed to delete user")
+		return errors.New("failed to delete user from users collection")
 	}
 
-	fmt.Println("Korisnik uspešno obrisan:", username)
-	return nil
-}
-
-func (s *UserService) CanDeleteManagerAccountByUsername(username string) (bool, error) {
-	fmt.Println("Proveravam da li menadžer može biti obrisan po username...")
-
-	projectFilter := bson.M{"manager_username": username}
-	cursor, err := s.ProjectCollection.Find(context.Background(), projectFilter)
+	// uklanja korisnika iz members sa projekta
+	projectUpdateFilter := bson.M{"members._id": userID}
+	projectUpdate := bson.M{"$pull": bson.M{"members": bson.M{"_id": userID}}}
+	updateResult, err := s.ProjectCollection.UpdateMany(context.Background(), projectUpdateFilter, projectUpdate)
 	if err != nil {
-		return false, err
+		fmt.Println("Greška pri ažuriranju projekata:", err)
+		return errors.New("failed to remove user from projects")
 	}
-	defer cursor.Close(context.Background())
+	fmt.Printf("Korisnik uklonjen iz %d projekata.\n", updateResult.ModifiedCount)
 
-	var projects []models.Project
-	if err := cursor.All(context.Background(), &projects); err != nil {
-		return false, err
+	taskUpdateFilter := bson.M{"assignees": userID}
+	taskUpdate := bson.M{"$pull": bson.M{"assignees": userID}}
+	taskUpdateResult, err := s.TaskCollection.UpdateMany(context.Background(), taskUpdateFilter, taskUpdate)
+	if err != nil {
+		fmt.Println("Greška pri ažuriranju zadataka:", err)
+		return errors.New("failed to remove user from tasks")
 	}
+	fmt.Printf("Korisnik uklonjen iz %d zadataka.\n", taskUpdateResult.ModifiedCount)
 
-	for _, project := range projects {
-		taskFilter := bson.M{
-			"projectId": project.ID.Hex(),
-			"status":    "in progress",
-		}
-		count, err := s.TaskCollection.CountDocuments(context.Background(), taskFilter)
-		if err != nil {
-			return false, err
-		}
-
-		// Ako postoji zadatak u toku, zabrani brisanje
-		if count > 0 {
-			fmt.Println("Menadžer ima aktivne zadatke u toku.")
-			return false, nil
-		}
+	// brisanje menadzera sa proj
+	managerUpdateFilter := bson.M{"manager_id": userID}
+	managerUpdate := bson.M{"$unset": bson.M{"manager_id": ""}}
+	_, err = s.ProjectCollection.UpdateMany(context.Background(), managerUpdateFilter, managerUpdate)
+	if err != nil {
+		return errors.New("failed to remove manager from projects")
 	}
+	fmt.Println("Menadžer uspešno uklonjen iz projekata.")
 
-	return true, nil
+	return nil
+
 }
 
 func (s *UserService) CanDeleteMemberAccountByUsername(username string) (bool, error) {
 	fmt.Println("Proveravam da li član može biti obrisan po username...")
 
-	// Pronađi sve projekte gde se pojavljuje član sa zadatim username-om
-	projectFilter := bson.M{"members.username": username}
+	var user models.User
+	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+	if err != nil {
+		fmt.Println("Korisnik nije pronađen:", err)
+		return false, err
+	}
+	userID := user.ID
+
+	taskFilter := bson.M{
+		"assignees": userID,
+		"status":    "in progress",
+	}
+	count, err := s.TaskCollection.CountDocuments(context.Background(), taskFilter)
+	if err != nil {
+		fmt.Println("Greška pri proveri zadataka:", err)
+		return false, err
+	}
+
+	if count > 0 {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+func (s *UserService) CanDeleteManagerAccountByUsername(username string) (bool, error) {
+	fmt.Println("Proveravam da li menadžer može biti obrisan po username...")
+
+	var manager models.User
+	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&manager)
+	if err != nil {
+		fmt.Println("Menadžer nije pronađen:", err)
+		return false, err
+	}
+	managerID := manager.ID
+
+	// Pronađi sve projekte koje je kreirao menadžer
+	projectFilter := bson.M{"manager_id": managerID}
 	cursor, err := s.ProjectCollection.Find(context.Background(), projectFilter)
 	if err != nil {
+		fmt.Println("Greška pri pretrazi projekata:", err)
 		return false, err
 	}
 	defer cursor.Close(context.Background())
 
 	var projects []models.Project
 	if err := cursor.All(context.Background(), &projects); err != nil {
+		fmt.Println("Greška pri učitavanju projekata:", err)
 		return false, err
 	}
 
-	// Proveri sve projekte za zadatke u toku
 	for _, project := range projects {
+		fmt.Printf("Proveravam zadatke za projekat: %s\n", project.ID.Hex())
+
 		taskFilter := bson.M{
-			"projectId":          project.ID.Hex(),
-			"assignees.username": username,
-			"status":             "in progress",
+			"projectId": project.ID.Hex(),
+			"status":    "in progress",
 		}
+
 		count, err := s.TaskCollection.CountDocuments(context.Background(), taskFilter)
 		if err != nil {
+			fmt.Println("Greška pri proveri zadataka:", err)
 			return false, err
 		}
 
-		// Ako postoji zadatak u toku, zabrani brisanje
 		if count > 0 {
-			fmt.Println("Član je dodeljen zadatku u toku.")
+			fmt.Println("Projekat ima zadatke u statusu 'Pending'.")
 			return false, nil
 		}
 	}
 
+	fmt.Println("Menadžer nema aktivnih zadataka u svojim projektima.")
 	return true, nil
 }
 

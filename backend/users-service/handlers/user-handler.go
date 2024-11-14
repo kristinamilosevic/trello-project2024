@@ -42,6 +42,7 @@ func (h *UserHandler) DeleteAccountHandler(w http.ResponseWriter, r *http.Reques
 		tokenString = tokenString[7:]
 	}
 
+	// validira token i izvlaci podatke -username i role
 	claims, err := h.JWTService.ValidateToken(tokenString)
 	if err != nil {
 		http.Error(w, "Invalid token", http.StatusUnauthorized)
@@ -51,20 +52,28 @@ func (h *UserHandler) DeleteAccountHandler(w http.ResponseWriter, r *http.Reques
 	username := claims.Username
 	role := claims.Role
 
-	if role == "manager" {
-		canDelete, err := h.UserService.CanDeleteManagerAccountByUsername(username)
-		if err != nil || !canDelete {
-			http.Error(w, "Cannot delete manager account with active tasks", http.StatusConflict)
+	var canDelete bool
+
+	if role == "member" {
+		canDelete, err = h.UserService.CanDeleteMemberAccountByUsername(username)
+		if err != nil {
+			http.Error(w, "Error checking member account deletion", http.StatusInternalServerError)
 			return
 		}
-	} else if role == "member" {
-		canDelete, err := h.UserService.CanDeleteMemberAccountByUsername(username)
-		if err != nil || !canDelete {
-			http.Error(w, "Cannot delete member account with active tasks", http.StatusConflict)
+	} else if role == "manager" {
+		canDelete, err = h.UserService.CanDeleteManagerAccountByUsername(username)
+		if err != nil {
+			http.Error(w, "Error checking manager account deletion", http.StatusInternalServerError)
 			return
 		}
 	}
 
+	if !canDelete {
+		http.Error(w, "Cannot delete account with active tasks", http.StatusConflict)
+		return
+	}
+
+	// brise se iz baze
 	err = h.UserService.DeleteAccount(username)
 	if err != nil {
 		http.Error(w, "Failed to delete account", http.StatusInternalServerError)
