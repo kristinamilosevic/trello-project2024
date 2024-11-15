@@ -15,11 +15,11 @@ services:
 
   tasks-service:
     build:
-      context: ./backend/tasks-service  
+      context: ./backend/tasks-service
     ports:
-      - "8002:8000"
+      - "${TASKS_SERVICE_PORT}:${TASKS_SERVICE_INTERNAL_PORT}"
     environment:
-      - MONGO_TASKS_URI=mongodb://mongo-tasks:27017/tasks_db  
+      - MONGO_TASKS_URI:${MONGO_TASKS_URI}
     depends_on:
       - mongo-tasks
     networks:
@@ -27,11 +27,11 @@ services:
 
   projects-service:
     build:
-      context: ./backend/projects-service  
+      context: ./backend/projects-service
     ports:
-      - "8003:8080" 
+      - "${PROJECTS_SERVICE_PORT}:${PROJECTS_SERVICE_INTERNAL_PORT}"
     environment:
-      - MONGO_PROJECTS_URI=mongodb://mongo-projects:27017/projects_db  
+      - MONGO_PROJECTS_URI:${MONGO_PROJECTS_URI}
     depends_on:
       - mongo-projects
     networks:
@@ -39,13 +39,13 @@ services:
 
   users-service:
     build:
-      context: ./backend/users-service  
+      context: ./backend/users-service
     ports:
-      - "8001:8080"  
+      - "${USERS_SERVICE_PORT}:${USERS_SERVICE_INTERNAL_PORT}"
     env_file:
       - ./backend/users-service/.env
     environment:
-      - MONGO_USERS_URI=mongodb://mongo-users:27017/users_db 
+      - MONGO_USERS_URI:${MONGO_USERS_URI}
     depends_on:
       - mongo-users
     networks:
@@ -55,9 +55,9 @@ services:
     image: mongo:latest
     container_name: mongo-tasks
     ports:
-      - "27018:27017"  
+      - "${MONGO_TASKS_PORT}:${MONGO_TASKS_INTERNAL_PORT}"
     volumes:
-      - mongo-tasks-data:/data/db 
+      - mongo-tasks-data:/data/db
     networks:
       - app-network
 
@@ -65,9 +65,9 @@ services:
     image: mongo:latest
     container_name: mongo-projects
     ports:
-      - "27019:27017"
+      - "${MONGO_PROJECTS_PORT}:${MONGO_PROJECTS_INTERNAL_PORT}"
     volumes:
-      - mongo-projects-data:/data/db 
+      - mongo-projects-data:/data/db
     networks:
       - app-network
 
@@ -75,9 +75,9 @@ services:
     image: mongo:latest
     container_name: mongo-users
     ports:
-      - "27020:27017"
+      - "${MONGO_USERS_PORT}:${MONGO_USERS_INTERNAL_PORT}"
     volumes:
-      - mongo-users-data:/data/db 
+      - mongo-users-data:/data/db
     networks:
       - app-network
 
