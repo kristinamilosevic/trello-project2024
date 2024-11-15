@@ -33,25 +33,7 @@ func enableCORS(next http.Handler) http.Handler {
 	})
 }
 
-/*
-	func enableCORS(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-			w.Header().Set("Access-Control-Max-Age", "86400")
-
-			if r.Method == http.MethodOptions {
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-
-			next.ServeHTTP(w, r)
-		})
-	}
-*/
 func main() {
-	// Učitavanje .env fajla
 	err := godotenv.Load(".env")
 	if err != nil {
 		log.Fatalf("Error loading .env file")
@@ -64,33 +46,49 @@ func main() {
 
 	fmt.Println("Successfully loaded variables from .env file")
 
-	// Konektovanje na MongoDB
-	clientOptions := options.Client().ApplyURI("mongodb://mongo:27017")
-	client, err := mongo.Connect(context.TODO(), clientOptions)
+	clientOptionsUsers := options.Client().ApplyURI("mongodb://mongo-users:27017")
+	clientUsers, err := mongo.Connect(context.TODO(), clientOptionsUsers)
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = client.Ping(context.TODO(), nil)
+	err = clientUsers.Ping(context.TODO(), nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("Connected to MongoDB!")
+	fmt.Println("Connected to MongoDB Users database!")
 
-	userCollection := client.Database("users_db").Collection("users")
-	projectCollection := client.Database("projects_db").Collection("project")
-	taskCollection := client.Database("tasks_db").Collection("tasks")
+	clientOptionsProjects := options.Client().ApplyURI("mongodb://mongo-projects:27017")
+	clientProjects, err := mongo.Connect(context.TODO(), clientOptionsProjects)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = clientProjects.Ping(context.TODO(), nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Connected to MongoDB Projects database!")
+
+	clientOptionsTasks := options.Client().ApplyURI("mongodb://mongo-tasks:27017")
+	clientTasks, err := mongo.Connect(context.TODO(), clientOptionsTasks)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = clientTasks.Ping(context.TODO(), nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Connected to MongoDB Tasks database!")
+
+	userCollection := clientUsers.Database("mongo-users").Collection("users")
+	projectCollection := clientProjects.Database("mongo-projects").Collection("projects")
+	taskCollection := clientTasks.Database("mongo-tasks").Collection("tasks")
 
 	jwtService := services.NewJWTService(secretKey)
 	userService := services.NewUserService(userCollection, projectCollection, taskCollection, jwtService)
-	//userService := services.NewUserService(userCollection)
 
-	//userHandler := handlers.UserHandler{UserService: userService}
 	userHandler := handlers.UserHandler{UserService: userService, JWTService: jwtService}
 	loginHandler := handlers.LoginHandler{UserService: userService}
 
-	//http.HandleFunc("/register", userHandler.Register)
-
-	// Kreiranje novog multiplexer-a i dodavanje ruta
 	mux := http.NewServeMux()
 	mux.HandleFunc("/register", userHandler.Register)
 	mux.HandleFunc("/confirm", userHandler.ConfirmEmail)
@@ -104,12 +102,9 @@ func main() {
 	mux.HandleFunc("/magic-login", loginHandler.MagicLogin)
 	mux.HandleFunc("/verify-magic-link", loginHandler.VerifyMagicLink)
 
-	// Primena CORS i JWT Middleware-a
 	finalHandler := enableCORS(mux)
 
 	startUserCleanupJob(userService)
-
-	// Pokretanje servera
 
 	srv := &http.Server{
 		Addr:         ":8080",
@@ -120,17 +115,15 @@ func main() {
 
 	fmt.Println("Server is running on port 8080")
 	log.Fatal(srv.ListenAndServe())
-
 }
 
 func startUserCleanupJob(userService *services.UserService) {
-	// Periodično izvršavanje brisanja neaktivnih korisnika
 	go func() {
 		for {
 			log.Println("Pokrećem proveru za brisanje neaktivnih korisnika sa isteklim rokom za verifikaciju...")
 			userService.DeleteExpiredUnverifiedUsers()
 			log.Println("Završena provera za brisanje neaktivnih korisnika.")
-			time.Sleep(5 * time.Minute) // Periodično pokretanje svakih 5 minuta
+			time.Sleep(5 * time.Minute)
 		}
 	}()
 }

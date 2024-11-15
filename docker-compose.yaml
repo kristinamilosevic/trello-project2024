@@ -1,17 +1,17 @@
 version: '3.8'
 
 services:
-  frontend:
-    build:
-      context: ./frontend
-    ports:
-      - "4200:4200"  
-    depends_on:
-      - tasks-service
-      - projects-service
-      - users-service
-    networks:
-      - app-network
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #   ports:
+  #     - "4200:4200"  
+  #   depends_on:
+  #     - tasks-service
+  #     - projects-service
+  #     - users-service
+  #   networks:
+  #     - app-network
 
   tasks-service:
     build:
@@ -19,9 +19,9 @@ services:
     ports:
       - "8002:8000"
     environment:
-      - MONGO_URI=mongodb://mongo:27017/tasks_db  
+      - MONGO_TASKS_URI=mongodb://mongo-tasks:27017/tasks_db  
     depends_on:
-      - mongo
+      - mongo-tasks
     networks:
       - app-network
 
@@ -31,9 +31,9 @@ services:
     ports:
       - "8003:8080" 
     environment:
-      - MONGO_URI=mongodb://mongo:27017/projects_db 
+      - MONGO_PROJECTS_URI=mongodb://mongo-projects:27017/projects_db  
     depends_on:
-      - mongo
+      - mongo-projects
     networks:
       - app-network
 
@@ -45,24 +45,48 @@ services:
     env_file:
       - ./backend/users-service/.env
     environment:
-      - MONGO_URI=mongodb://mongo:27017/users_db
+      - MONGO_USERS_URI=mongodb://mongo-users:27017/users_db 
     depends_on:
-      - mongo
+      - mongo-users
     networks:
       - app-network
 
-  mongo:
+  mongo-tasks:
     image: mongo:latest
-    container_name: mongo
+    container_name: mongo-tasks
     ports:
-      - "27017:27017"  
+      - "27018:27017"  
     volumes:
-      - mongo-data:/data/db 
+      - mongo-tasks-data:/data/db 
     networks:
-      - app-network 
+      - app-network
+
+  mongo-projects:
+    image: mongo:latest
+    container_name: mongo-projects
+    ports:
+      - "27019:27017"
+    volumes:
+      - mongo-projects-data:/data/db 
+    networks:
+      - app-network
+
+  mongo-users:
+    image: mongo:latest
+    container_name: mongo-users
+    ports:
+      - "27020:27017"
+    volumes:
+      - mongo-users-data:/data/db 
+    networks:
+      - app-network
 
 volumes:
-  mongo-data:
+  mongo-tasks-data:
+    driver: local
+  mongo-projects-data:
+    driver: local
+  mongo-users-data:
     driver: local
 
 networks:
