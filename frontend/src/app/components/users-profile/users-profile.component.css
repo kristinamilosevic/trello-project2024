@@ -13,13 +13,14 @@
     max-width: 500px;
     width: 100%;
     font-family: 'Arial', sans-serif;
-    text-align: center;
+    text-align: left;
   }
   
   .profile-details h2 {
     color: #2c3e50;
     margin-bottom: 20px;
     font-size: 24px;
+    text-align: center;
   }
   
   .profile-details p {
@@ -93,6 +94,7 @@
   .profile-details p strong {
     color: #2c3e50;
     font-weight: bold;
+    margin-right: 5px; 
   }
   
   .profile-details p span {
