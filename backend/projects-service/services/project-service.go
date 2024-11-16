@@ -74,9 +74,9 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, membe
 		return fmt.Errorf("maximum number of members reached for the project")
 	}
 
-	// Provera da li bi broj članova pao ispod minimalnog
-	if len(project.Members)+len(memberIDs) < project.MinMembers {
-		return fmt.Errorf("the number of members cannot be less than the minimum required for the project")
+	// Provera da li bi ukupni broj članova bio manji od minimalnog samo u slučaju kada već nema članova
+	if len(project.Members) == 0 && len(memberIDs) < project.MinMembers {
+		return fmt.Errorf("you need to add at least the minimum required members to the project")
 	}
 
 	// Dohvatanje korisničkih podataka i priprema za ažuriranje
