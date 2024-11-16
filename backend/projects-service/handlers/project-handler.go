@@ -208,3 +208,47 @@ func (h *ProjectHandler) GetProjectByIDHandler(w http.ResponseWriter, r *http.Re
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(project)
 }
+
+func (h *ProjectHandler) DisplayTasksForProjectHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	projectID, err := primitive.ObjectIDFromHex(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+
+	tasks, err := h.Service.GetTasksForProject(projectID)
+	if err != nil {
+		if strings.Contains(err.Error(), "project not found") {
+			http.Error(w, "Project not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, fmt.Sprintf("Failed to retrieve tasks: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(tasks)
+}
+
+func GetProjectsByUsername(s *services.ProjectService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)          // Uzmi parametre iz URL-a
+		username := vars["username"] // Username je sada deo URL-a
+		if username == "" {
+			http.Error(w, "Username is required", http.StatusBadRequest)
+			return
+		}
+
+		projects, err := s.GetProjectsByUsername(username)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error fetching projects: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(projects); err != nil {
+			http.Error(w, fmt.Sprintf("Error encoding response: %v", err), http.StatusInternalServerError)
+		}
+	}
+}

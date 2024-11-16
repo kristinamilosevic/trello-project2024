@@ -21,7 +21,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://localhost:27017"))
+	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://mongo:27017"))
 	if err != nil {
 		log.Fatal("Database connection failed:", err)
 	}
@@ -35,7 +35,7 @@ func main() {
 	// Databases and collections
 	projectsDB := client.Database("projects_db")
 	tasksDB := client.Database("tasks_db")
-	usersDB := client.Database("users")
+	usersDB := client.Database("users_db")
 
 	// Initialize services and handlers
 	projectService := &services.ProjectService{
@@ -55,6 +55,8 @@ func main() {
 	r.HandleFunc("/users", projectHandler.GetAllUsersHandler).Methods("GET")
 	r.HandleFunc("/projects", projectHandler.ListProjectsHandler).Methods("GET")
 	r.HandleFunc("/projects/{id}", projectHandler.GetProjectByIDHandler).Methods("GET")
+	r.HandleFunc("/projects/{id}/tasks", projectHandler.DisplayTasksForProjectHandler).Methods("GET")
+	r.HandleFunc("/projects/{username}", handlers.GetProjectsByUsername(projectService)).Methods("GET")
 
 	// Apply CORS middleware
 	corsRouter := enableCORS(r)

@@ -8,7 +8,7 @@ import { Member } from '../../models/member/member.model';
   providedIn: 'root'
 })
 export class ProjectMembersService {
-  private apiUrl = 'http://localhost:8080';
+  private apiUrl = 'http://localhost:8003';
 
   constructor(private http: HttpClient) {}
 

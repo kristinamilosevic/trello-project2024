@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "4200:4200"  
+    depends_on:
+      - tasks-service
+      - projects-service
+      - users-service
+    networks:
+      - app-network
+
+  tasks-service:
+    build:
+      context: ./backend/tasks-service  
+    ports:
+      - "8002:8000"
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/tasks_db  
+    depends_on:
+      - mongo
+    networks:
+      - app-network
+
+  projects-service:
+    build:
+      context: ./backend/projects-service  
+    ports:
+      - "8003:8080" 
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/projects_db 
+    depends_on:
+      - mongo
+    networks:
+      - app-network
+
+  users-service:
+    build:
+      context: ./backend/users-service  
+    ports:
+      - "8001:8080"  
+    env_file:
+      - ./backend/users-service/.env
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/users_db
+    depends_on:
+      - mongo
+    networks:
+      - app-network
+
+  mongo:
+    image: mongo:latest
+    container_name: mongo
+    ports:
+      - "27017:27017"  
+    volumes:
+      - mongo-data:/data/db 
+    networks:
+      - app-network 
+
+volumes:
+  mongo-data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge

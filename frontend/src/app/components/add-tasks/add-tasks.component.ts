@@ -68,9 +68,11 @@ export class AddTasksComponent {
           response => {
             this.taskForm.reset();
             this.taskForm.get('status')?.setValue('Pending');
+
+            this.router.navigate([`/project/${taskData.projectId}`]);
+
             this.successMessage = 'Task successfully created!';
             this.clearMessages();
-            this.router.navigate(['/task-list']);
           },
           error => {
             console.error('Error while creating task.', error);

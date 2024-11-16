@@ -2,26 +2,42 @@ package utils
 
 import (
 	"fmt"
+	"net/smtp"
 	"os"
-
-	"gopkg.in/gomail.v2"
 )
 
-// SendEmail šalje email na zadatu adresu sa naslovom i sadržajem
+// SendEmail šalje email na zadatu adresu sa naslovom i sadržajem koristeći net/smtp biblioteku
 func SendEmail(to, subject, body string) error {
-	mailer := gomail.NewMessage()
-	mailer.SetHeader("From", "trixtix9@gmail.com")
-	mailer.SetHeader("To", to)
-	mailer.SetHeader("Subject", subject)
-	mailer.SetBody("text/html", body)
+	// Email podaci
+	from := "trixtix9@gmail.com"
+	password := os.Getenv("EMAIL_PASSWORD")
 
-	emailPassword := os.Getenv("EMAIL_PASSWORD")
-	if emailPassword == "" {
+	// SMTP server konfiguracija
+	smtpHost := "smtp.gmail.com"
+	smtpPort := "587"
+
+	// Provera da li je postavljena lozinka
+	if password == "" {
 		return fmt.Errorf("EMAIL_PASSWORD nije postavljena")
 	}
 
-	dialer := gomail.NewDialer("smtp.gmail.com", 587, "trixtix9@gmail.com", emailPassword)
-	return dialer.DialAndSend(mailer)
+	// Priprema sadržaja poruke
+	message := []byte("Subject: " + subject + "\r\n" +
+		"From: " + from + "\r\n" +
+		"To: " + to + "\r\n" +
+		"Content-Type: text/html; charset=\"UTF-8\"\r\n\r\n" +
+		body + "\r\n")
+
+	// Autentifikacija sa SMTP serverom
+	auth := smtp.PlainAuth("", from, password, smtpHost)
+
+	// Slanje emaila
+	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, []string{to}, message)
+	if err != nil {
+		return fmt.Errorf("failed to send email: %v", err)
+	}
+
+	return nil
 }
 
 // SendRegistrationEmail šalje email za potvrdu registracije

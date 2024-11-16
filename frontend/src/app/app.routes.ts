@@ -10,6 +10,8 @@ import { TaskListComponent } from './components/task-list/task-list.component';
 import { RegisterComponent } from './components/register/register.component';
 import { DeleteAccountComponent } from './components/delete-account/delete-account.component';
 import { LoginComponent } from './components/login/login.component';
+import { VerifyCodeComponent } from './components/verify-code/verify-code.component';
+import { UsersProjectsComponent } from './users-projects/users-projects.component';
 
 
 
@@ -48,12 +50,16 @@ export const routes: Routes = [
   { path: 'task-list', component: TaskListComponent },
   { path: '', redirectTo: '/projects-list', pathMatch: 'full' }, 
   { path: 'register', component: RegisterComponent },
+  { path: 'users-projects', component: UsersProjectsComponent },
 
   { path: 'delete-account', component: DeleteAccountComponent },
   
 
   { path: 'login', component: LoginComponent }, // Ruta za login
   { path: '', redirectTo: '/login', pathMatch: 'full' },
+
+  { path: 'verify', component: VerifyCodeComponent },
+
 
   { path: 'magic-login', component: LoginComponent }
 ];
