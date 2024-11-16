@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { Member } from '../../models/member/member.model';
+import { Project } from '../../models/project/project';
 
 @Injectable({
   providedIn: 'root'
@@ -43,6 +44,14 @@ export class ProjectMembersService {
     return this.http.delete(`${this.apiUrl}/projects/${projectId}/members/${memberId}/remove`).pipe(
       catchError((error) => {
         console.error('Error in removeMember:', error);
+        return throwError(error);
+      })
+    );
+  }
+  getProjectDetails(projectId: string): Observable<Project> {
+    return this.http.get<Project>(`${this.apiUrl}/projects/${projectId}`).pipe(
+      catchError((error) => {
+        console.error('Error in getProjectDetails:', error);
         return throwError(error);
       })
     );
