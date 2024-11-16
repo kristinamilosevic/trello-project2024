@@ -16,58 +16,65 @@ import (
 )
 
 func main() {
-	// Connect to MongoDB
-
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://mongo:27017"))
+	projectsClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://mongo-projects:27017"))
 	if err != nil {
-		log.Fatal("Database connection failed:", err)
+		log.Fatal("Database connection for mongo-projects failed:", err)
 	}
-	defer client.Disconnect(context.TODO())
+	defer projectsClient.Disconnect(context.TODO())
 
-	// Provera konekcije
-	if err := client.Ping(ctx, nil); err != nil {
-		log.Fatal("MongoDB connection error:", err)
+	tasksClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://mongo-tasks:27017"))
+	if err != nil {
+		log.Fatal("Database connection for mongo-tasks failed:", err)
+	}
+	defer tasksClient.Disconnect(context.TODO())
+
+	usersClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://mongo-users:27017"))
+	if err != nil {
+		log.Fatal("Database connection for mongo-users failed:", err)
+	}
+	defer usersClient.Disconnect(context.TODO())
+
+	if err := projectsClient.Ping(ctx, nil); err != nil {
+		log.Fatal("MongoDB connection error for mongo-projects:", err)
+	}
+	if err := tasksClient.Ping(ctx, nil); err != nil {
+		log.Fatal("MongoDB connection error for mongo-tasks:", err)
+	}
+	if err := usersClient.Ping(ctx, nil); err != nil {
+		log.Fatal("MongoDB connection error for mongo-users:", err)
 	}
 
-	// Databases and collections
-	projectsDB := client.Database("projects_db")
-	tasksDB := client.Database("tasks_db")
-	usersDB := client.Database("users_db")
+	projectsDB := projectsClient.Database("mongo-projects")
+	tasksDB := tasksClient.Database("mongo-tasks")
+	usersDB := usersClient.Database("mongo-users")
 
-	// Initialize services and handlers
 	projectService := &services.ProjectService{
-		ProjectsCollection: projectsDB.Collection("project"),
+		ProjectsCollection: projectsDB.Collection("projects"),
 		TasksCollection:    tasksDB.Collection("tasks"),
 		UsersCollection:    usersDB.Collection("users"),
 	}
 	projectHandler := handlers.NewProjectHandler(projectService)
 
-	// Setup router
 	r := mux.NewRouter()
-	r.HandleFunc("/projects/{projectId}/members", projectHandler.GetProjectMembersHandler).Methods("GET")
-	r.HandleFunc("/projects/{projectId}/members/{memberId}/remove", projectHandler.RemoveMemberFromProjectHandler).Methods("DELETE")
-	r.HandleFunc("/projects", projectHandler.CreateProject).Methods("POST")
-	r.HandleFunc("/projects/{id}/members", projectHandler.AddMemberToProjectHandler).Methods("POST")
-	//r.HandleFunc("/projects/{id}/members", projectHandler.GetProjectMembersHandler).Methods("GET")
-	r.HandleFunc("/users", projectHandler.GetAllUsersHandler).Methods("GET")
-	r.HandleFunc("/projects", projectHandler.ListProjectsHandler).Methods("GET")
-	r.HandleFunc("/projects/{id}", projectHandler.GetProjectByIDHandler).Methods("GET")
-	r.HandleFunc("/projects/{id}/tasks", projectHandler.DisplayTasksForProjectHandler).Methods("GET")
-	r.HandleFunc("/projects/{username}", handlers.GetProjectsByUsername(projectService)).Methods("GET")
+	r.HandleFunc("/api/projects/{projectId}/members", projectHandler.GetProjectMembersHandler).Methods("GET")
+	r.HandleFunc("/api/projects/{projectId}/members/{memberId}/remove", projectHandler.RemoveMemberFromProjectHandler).Methods("DELETE")
+	r.HandleFunc("/api/projects", projectHandler.CreateProject).Methods("POST")
+	r.HandleFunc("/api/projects/{id}/members", projectHandler.AddMemberToProjectHandler).Methods("POST")
+	r.HandleFunc("/api/users", projectHandler.GetAllUsersHandler).Methods("GET")
+	r.HandleFunc("/api/projects", projectHandler.ListProjectsHandler).Methods("GET")
+	r.HandleFunc("/api/projects/{id}", projectHandler.GetProjectByIDHandler).Methods("GET")
+	r.HandleFunc("/api/projects/{id}/tasks", projectHandler.DisplayTasksForProjectHandler).Methods("GET")
+	r.HandleFunc("/api/projects/{username}", handlers.GetProjectsByUsername(projectService)).Methods("GET")
 
-	// Apply CORS middleware
 	corsRouter := enableCORS(r)
 
-	// Start the server
-	fmt.Println("Projects service server running on http://localhost:8080")
+	fmt.Println("Projects service server running on http://localhost:8003")
 	log.Fatal(http.ListenAndServe(":8080", corsRouter))
-
 }
 
-// enableCORS allows CORS for the Angular application running on port 4200
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:4200")
@@ -75,7 +82,6 @@ func enableCORS(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Manager-ID")
 
 		if r.Method == http.MethodOptions {
-
 			w.WriteHeader(http.StatusOK)
 			return
 		}
