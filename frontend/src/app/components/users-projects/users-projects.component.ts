@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
-import { ProjectService } from '../services/project/project.service';
-import { Project } from '../models/project/project';
+import { ProjectService } from '../../services/project/project.service';
+import { Project } from '../../models/project/project';
 import { CommonModule, DatePipe } from '@angular/common';
 import { jwtDecode } from 'jwt-decode';
 
