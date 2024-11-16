@@ -59,19 +59,19 @@ func main() {
 	projectHandler := handlers.NewProjectHandler(projectService)
 
 	r := mux.NewRouter()
-	r.HandleFunc("/projects/{projectId}/members", projectHandler.GetProjectMembersHandler).Methods("GET")
-	r.HandleFunc("/projects/{projectId}/members/{memberId}/remove", projectHandler.RemoveMemberFromProjectHandler).Methods("DELETE")
-	r.HandleFunc("/projects", projectHandler.CreateProject).Methods("POST")
-	r.HandleFunc("/projects/{id}/members", projectHandler.AddMemberToProjectHandler).Methods("POST")
-	r.HandleFunc("/users", projectHandler.GetAllUsersHandler).Methods("GET")
-	r.HandleFunc("/projects", projectHandler.ListProjectsHandler).Methods("GET")
-	r.HandleFunc("/projects/{id}", projectHandler.GetProjectByIDHandler).Methods("GET")
-	r.HandleFunc("/projects/{id}/tasks", projectHandler.DisplayTasksForProjectHandler).Methods("GET")
-	r.HandleFunc("/projects/{username}", handlers.GetProjectsByUsername(projectService)).Methods("GET")
+	r.HandleFunc("/api/projects/{projectId}/members", projectHandler.GetProjectMembersHandler).Methods("GET")
+	r.HandleFunc("/api/projects/{projectId}/members/{memberId}/remove", projectHandler.RemoveMemberFromProjectHandler).Methods("DELETE")
+	r.HandleFunc("/api/projects", projectHandler.CreateProject).Methods("POST")
+	r.HandleFunc("/api/projects/{id}/members", projectHandler.AddMemberToProjectHandler).Methods("POST")
+	r.HandleFunc("/api/users", projectHandler.GetAllUsersHandler).Methods("GET")
+	r.HandleFunc("/api/projects", projectHandler.ListProjectsHandler).Methods("GET")
+	r.HandleFunc("/api/projects/{id}", projectHandler.GetProjectByIDHandler).Methods("GET")
+	r.HandleFunc("/api/projects/{id}/tasks", projectHandler.DisplayTasksForProjectHandler).Methods("GET")
+	r.HandleFunc("/api/projects/{username}", handlers.GetProjectsByUsername(projectService)).Methods("GET")
 
 	corsRouter := enableCORS(r)
 
-	fmt.Println("Projects service server running on http://localhost:8080")
+	fmt.Println("Projects service server running on http://localhost:8003")
 	log.Fatal(http.ListenAndServe(":8080", corsRouter))
 }
 

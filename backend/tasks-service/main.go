@@ -55,7 +55,7 @@ func main() {
 	taskHandler := handlers.NewTaskHandler(taskService)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/tasks", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/tasks", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
 			taskHandler.CreateTask(w, r)

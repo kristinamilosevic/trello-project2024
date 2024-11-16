@@ -1,25 +1,28 @@
 version: '3.8'
 
 services:
-  # frontend:
-  #   build:
-  #     context: ./frontend
-  #   ports:
-  #     - "4200:4200"  
-  #   depends_on:
-  #     - tasks-service
-  #     - projects-service
-  #     - users-service
-  #   networks:
-  #     - app-network
 
+  # frontend:
+    #   build:
+    #     context: ./frontend
+    #   ports:
+    #     - "4200:4200"  
+    #   depends_on:
+    #     - tasks-service
+    #     - projects-service
+    #     - users-service
+    #   networks:
+    #     - app-network
+    
   tasks-service:
     build:
       context: ./backend/tasks-service
+      dockerfile: Dockerfile
+    hostname: tasks-service
     ports:
       - "${TASKS_SERVICE_PORT}:${TASKS_SERVICE_INTERNAL_PORT}"
     environment:
-      - MONGO_TASKS_URI:${MONGO_TASKS_URI}
+      - MONGO_TASKS_URI=${MONGO_TASKS_URI}
     depends_on:
       - mongo-tasks
     networks:
@@ -28,10 +31,12 @@ services:
   projects-service:
     build:
       context: ./backend/projects-service
+      dockerfile: Dockerfile
+    hostname: projects-service
     ports:
       - "${PROJECTS_SERVICE_PORT}:${PROJECTS_SERVICE_INTERNAL_PORT}"
     environment:
-      - MONGO_PROJECTS_URI:${MONGO_PROJECTS_URI}
+      - MONGO_PROJECTS_URI=${MONGO_PROJECTS_URI}
     depends_on:
       - mongo-projects
     networks:
@@ -40,20 +45,36 @@ services:
   users-service:
     build:
       context: ./backend/users-service
+      dockerfile: Dockerfile
+    hostname: users-service
     ports:
       - "${USERS_SERVICE_PORT}:${USERS_SERVICE_INTERNAL_PORT}"
-    env_file:
-      - ./backend/users-service/.env
     environment:
-      - MONGO_USERS_URI:${MONGO_USERS_URI}
+      - MONGO_USERS_URI=${MONGO_USERS_URI}
     depends_on:
       - mongo-users
+    networks:
+      - app-network
+
+  api_gateway:
+    build:
+      context: ./api-gateway/
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    restart: on-failure
+    ports:
+      - "${GATEWAY_PORT}:${GATEWAY_PORT}"
+    depends_on:
+      - tasks-service
+      - projects-service
+      - users-service
     networks:
       - app-network
 
   mongo-tasks:
     image: mongo:latest
     container_name: mongo-tasks
+    hostname: mongo-tasks
     ports:
       - "${MONGO_TASKS_PORT}:${MONGO_TASKS_INTERNAL_PORT}"
     volumes:
@@ -64,6 +85,7 @@ services:
   mongo-projects:
     image: mongo:latest
     container_name: mongo-projects
+    hostname: mongo-projects
     ports:
       - "${MONGO_PROJECTS_PORT}:${MONGO_PROJECTS_INTERNAL_PORT}"
     volumes:
@@ -74,6 +96,7 @@ services:
   mongo-users:
     image: mongo:latest
     container_name: mongo-users
+    hostname: mongo-users
     ports:
       - "${MONGO_USERS_PORT}:${MONGO_USERS_INTERNAL_PORT}"
     volumes:
