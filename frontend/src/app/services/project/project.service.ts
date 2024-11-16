@@ -7,6 +7,9 @@ import { Project } from '../../models/project/project';
   providedIn: 'root'
 })
 export class ProjectService {
+  updateTaskStatus(id: any, status: any) {
+    throw new Error('Method not implemented.');
+  }
   private apiUrl = 'http://localhost:8003/projects';
   private mainUrl = 'http://localhost:8003';
 
@@ -35,5 +38,7 @@ export class ProjectService {
   getProjectsByUsername(username: string): Observable<Project[]> {
     return this.http.get<Project[]>(`${this.mainUrl}/projects?username=${username}`);
   }
+
+  
   
 }  

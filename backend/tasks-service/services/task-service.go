@@ -22,10 +22,14 @@ func NewTaskService(client *mongo.Client) *TaskService {
 	}
 }
 
-func (s *TaskService) CreateTask(projectID string, title, description string) (*models.Task, error) {
+func (s *TaskService) CreateTask(projectID string, title, description string, status models.TaskStatus) (*models.Task, error) {
 	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid project ID format: %v", err)
+	}
+
+	if status == "" {
+		status = models.StatusPending
 	}
 
 	task := &models.Task{
@@ -33,7 +37,7 @@ func (s *TaskService) CreateTask(projectID string, title, description string) (*
 		ProjectID:   projectID,
 		Title:       title,
 		Description: description,
-		Status:      "Pending",
+		Status:      status,
 	}
 
 	result, err := s.tasksCollection.InsertOne(context.Background(), task)
@@ -75,4 +79,56 @@ func (s *TaskService) GetAllTasks() ([]*models.Task, error) {
 	}
 
 	return tasks, nil
+}
+
+func (s *TaskService) GetTaskByID(taskID primitive.ObjectID) (*models.Task, error) {
+	var task models.Task
+	err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskID}).Decode(&task)
+	if err != nil {
+		return nil, err
+	}
+	return &task, nil
+}
+
+// ChangeTaskStatus - menja status taska
+func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.TaskStatus) (*models.Task, error) {
+	// Pronađi task po ID-u
+	var task models.Task
+	if err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskID}).Decode(&task); err != nil {
+		return nil, fmt.Errorf("task not found: %v", err)
+	}
+
+	// Proveri zavisnost
+	if task.DependsOn != nil {
+		var dependentTask models.Task
+		if err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": *task.DependsOn}).Decode(&dependentTask); err != nil {
+			return nil, fmt.Errorf("dependent task not found: %v", err)
+		}
+
+		if dependentTask.Status != models.StatusCompleted && status == models.StatusInProgress {
+			return nil, fmt.Errorf("cannot start task due to unfinished dependency")
+		}
+	}
+
+	// Ažuriraj status taska
+	update := bson.M{"$set": bson.M{"status": status}}
+	result, err := s.tasksCollection.UpdateOne(context.Background(), bson.M{"_id": taskID}, update)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update task status: %v", err)
+	}
+
+	// Proveri da li je dokument zaista ažuriran
+	if result.MatchedCount == 0 {
+		return nil, fmt.Errorf("task not found for update")
+	}
+	if result.ModifiedCount == 0 {
+		return nil, fmt.Errorf("task status not updated")
+	}
+
+	// Vratimo ažurirani task
+	if err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskID}).Decode(&task); err != nil {
+		return nil, fmt.Errorf("failed to retrieve updated task: %v", err)
+	}
+
+	return &task, nil
 }

@@ -12,10 +12,18 @@
         <li *ngFor="let task of tasks">
           <strong>{{ task.title }}</strong>
           <p>{{ task.description }}</p>
-          <p>Status: {{ task.status }}</p>
+          
+          <label for="statusDropdown">Status:</label>
+          <select [(ngModel)]="task.status" (change)="updateTaskStatus(task)">
+            <option value="Pending">Pending</option>
+            <option value="In progress">In Progress</option>
+            <option value="Completed">Completed</option>
+          </select>
+
         </li>
       </ul>
     </div>
+
     
     <div class="action-buttons">
       <button (click)="addTask()" class="action-button">Add Task</button>

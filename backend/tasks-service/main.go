@@ -47,6 +47,14 @@ func main() {
 		}
 	})
 
+	mux.HandleFunc("/tasks/status", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			taskHandler.ChangeTaskStatus(w, r)
+		} else {
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
 	log.Println("Server pokrenut na http://localhost:8000")
 	if err := http.ListenAndServe(":8000", enableCORS(mux)); err != nil {
 		log.Fatal(err)
