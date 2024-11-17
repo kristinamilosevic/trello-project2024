@@ -11,9 +11,23 @@ import (
 	"trello-project/microservices/projects-service/services"
 
 	"github.com/gorilla/mux"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
+
+func createProjectNameIndex(collection *mongo.Collection) error {
+	indexModel := mongo.IndexModel{
+		Keys:    bson.M{"name": 1},
+		Options: options.Index().SetUnique(true),
+	}
+	_, err := collection.Indexes().CreateOne(context.TODO(), indexModel)
+	if err != nil {
+		return fmt.Errorf("failed to create unique index on project name: %v", err)
+	}
+	fmt.Println("Unique index on project name created successfully")
+	return nil
+}
 
 func main() {
 	// Connect to MongoDB
@@ -34,6 +48,8 @@ func main() {
 
 	// Databases and collections
 	projectsDB := client.Database("projects_db")
+	projectsCollection := projectsDB.Collection("projects")
+
 	tasksDB := client.Database("tasks_db")
 	usersDB := client.Database("users_db")
 
@@ -42,6 +58,10 @@ func main() {
 		ProjectsCollection: projectsDB.Collection("project"),
 		TasksCollection:    tasksDB.Collection("tasks"),
 		UsersCollection:    usersDB.Collection("users"),
+	}
+	// Kreiranje jedinstvenog indeksa
+	if err := createProjectNameIndex(projectsCollection); err != nil {
+		log.Fatal(err)
 	}
 	projectHandler := handlers.NewProjectHandler(projectService)
 

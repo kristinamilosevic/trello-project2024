@@ -29,6 +29,15 @@ func NewProjectService(projectsCollection, usersCollection, tasksCollection *mon
 
 // CreateProject creates a new project with the specified parameters.
 func (s *ProjectService) CreateProject(name string, description string, expectedEndDate time.Time, minMembers, maxMembers int, managerID primitive.ObjectID) (*models.Project, error) {
+	var existingProject models.Project
+	err := s.ProjectsCollection.FindOne(context.Background(), bson.M{"name": name}).Decode(&existingProject)
+	if err == nil {
+		return nil, errors.New("project with the same name already exists")
+	}
+
+	if err != mongo.ErrNoDocuments {
+		return nil, fmt.Errorf("database error: %v", err)
+	}
 	// Validate input parameters
 	if minMembers < 1 || maxMembers < minMembers {
 		return nil, fmt.Errorf("invalid member constraints: minMembers=%d, maxMembers=%d", minMembers, maxMembers)

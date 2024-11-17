@@ -69,10 +69,13 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		project.ManagerID,
 	)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		if err.Error() == "project with the same name already exists" {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		http.Error(w, "Failed to create project", http.StatusInternalServerError)
 		return
 	}
-
 	// Return success response with created project
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(createdProject)
