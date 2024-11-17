@@ -66,8 +66,8 @@ func main() {
 		}
 	})
 
-	log.Println("Server running on http://localhost:8000")
-	if err := http.ListenAndServe(":8000", enableCORS(mux)); err != nil {
+	log.Println("Server running on http://localhost:8002")
+	if err := http.ListenAndServe(":8002", enableCORS(mux)); err != nil {
 		log.Fatal(err)
 	}
 }

@@ -14,5 +14,5 @@ RUN go build -o tasks-service .
 FROM alpine
 WORKDIR /usr/bin
 COPY --from=build_container /app/tasks-service .
-EXPOSE 8000
+EXPOSE 8002
 ENTRYPOINT ["tasks-service"]

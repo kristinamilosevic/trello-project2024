@@ -72,7 +72,7 @@ func main() {
 	corsRouter := enableCORS(r)
 
 	fmt.Println("Projects service server running on http://localhost:8003")
-	log.Fatal(http.ListenAndServe(":8080", corsRouter))
+	log.Fatal(http.ListenAndServe(":8003", corsRouter))
 }
 
 func enableCORS(next http.Handler) http.Handler {

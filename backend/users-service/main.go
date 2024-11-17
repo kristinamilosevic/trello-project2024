@@ -107,13 +107,13 @@ func main() {
 	startUserCleanupJob(userService)
 
 	srv := &http.Server{
-		Addr:         ":8080",
+		Addr:         ":8001",
 		Handler:      finalHandler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
 
-	fmt.Println("Server is running on port 8080")
+	fmt.Println("Server is running on port 8001")
 	log.Fatal(srv.ListenAndServe())
 }
 
