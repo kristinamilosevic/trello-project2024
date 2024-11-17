@@ -16,7 +16,7 @@ WORKDIR /usr/bin
 COPY --from=build_container /app/users-service .
 COPY --from=build_container /app/.env .env
 
-EXPOSE 8080
+EXPOSE 8001
 RUN chmod +x /usr/bin/users-service 
 ENTRYPOINT ["users-service"]
 
