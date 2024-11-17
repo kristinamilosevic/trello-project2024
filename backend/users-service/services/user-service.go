@@ -269,3 +269,16 @@ func (s *UserService) DeleteExpiredUnverifiedUsers() {
 		log.Printf("Obrisano %d korisnika sa isteklim verifikacionim rokom.", result.DeletedCount)
 	}
 }
+
+func (s *UserService) GetUserForCurrentSession(ctx context.Context, username string) (models.User, error) {
+	var user models.User
+
+	err := s.UserCollection.FindOne(ctx, bson.M{"username": username}).Decode(&user)
+	if err != nil {
+		return models.User{}, fmt.Errorf("user not found")
+	}
+
+	user.Password = ""
+
+	return user, nil
+}

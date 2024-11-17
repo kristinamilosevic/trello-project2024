@@ -76,4 +76,19 @@ export class AuthService {
   private hasToken(): boolean {
     return !!localStorage.getItem('token');
   }
+
+  getUserProfile(): Observable<any> {
+    const token = this.getToken();
+    if (!token) {
+      return new Observable<any>((observer) => {
+        observer.error('No token found');
+      });
+    }
+
+    return this.http.get<any>(`${this.apiUrl}/users-profile`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+  }
 }

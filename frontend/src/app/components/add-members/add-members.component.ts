@@ -6,7 +6,6 @@ import { HttpClientModule } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 
-
 @Component({
   selector: 'app-add-members',
   standalone: true,
@@ -20,6 +19,8 @@ export class AddMembersComponent implements OnInit {
   projectId: string = '';
   errorMessage: string = '';
   successMessage: string = '';
+  maxMembersAllowed: number = 0;
+  minMembersAllowed: number = 0;
 
   constructor(private projectMembersService: ProjectMembersService, private route: ActivatedRoute) {}
 
@@ -27,7 +28,7 @@ export class AddMembersComponent implements OnInit {
     this.projectId = this.route.snapshot.paramMap.get('id') || ''; // Preuzimamo ID projekta iz parametra rute
 
     if (this.isValidObjectId(this.projectId)) {
-      this.fetchProjectMembers();
+      this.fetchProjectDetails();
     } else {
       console.error('Invalid projectId format. It should be a 24-character hex string.');
     }
@@ -37,16 +38,29 @@ export class AddMembersComponent implements OnInit {
     return /^[a-f\d]{24}$/i.test(id);
   }
 
+  fetchProjectDetails() {
+    this.projectMembersService.getProjectDetails(this.projectId).subscribe(
+      (projectData: any) => {
+        this.maxMembersAllowed = projectData.maxMembers;
+        this.minMembersAllowed = projectData.minMembers;
+        this.fetchProjectMembers();
+      },
+      (error: any) => {
+        console.error('Error fetching project details:', error);
+      }
+    );
+  }
+
   fetchProjectMembers() {
     this.projectMembersService.getProjectMembers(this.projectId).subscribe(
-      (projectMembers) => {
-        this.projectMembers = projectMembers.map(member => ({
+      (projectMembers: Member[]) => {
+        this.projectMembers = projectMembers.map((member: any) => ({
           ...member,
           id: (member as any)._id.toString()
         }));
         this.fetchUsers();
       },
-      (error) => {
+      (error: any) => {
         console.error('Error fetching project members:', error);
       }
     );
@@ -54,14 +68,14 @@ export class AddMembersComponent implements OnInit {
 
   fetchUsers() {
     this.projectMembersService.getAllUsers().subscribe(
-      (allUsers) => {
-        this.members = allUsers.map(user => {
+      (allUsers: Member[]) => {
+        this.members = allUsers.map((user: Member) => {
           const userId = user.id.toString();
-          const isSelected = this.projectMembers.some(projMember => projMember.id === userId);
+          const isSelected = this.projectMembers.some((projMember: Member) => projMember.id === userId);
           return { ...user, selected: isSelected };
         });
       },
-      (error) => {
+      (error: any) => {
         console.error('Error fetching users:', error);
       }
     );
@@ -71,8 +85,8 @@ export class AddMembersComponent implements OnInit {
     this.errorMessage = ''; // Reset error message
     
     const newMembersToAdd = this.members
-      .filter(member => member.selected && !this.isMemberAlreadyAdded(member))
-      .map(member => member.id);
+      .filter((member: Member) => member.selected && !this.isMemberAlreadyAdded(member))
+      .map((member: Member) => member.id);
   
     if (newMembersToAdd.length === 0) {
       this.errorMessage = 'No new members selected for addition.';
@@ -80,15 +94,13 @@ export class AddMembersComponent implements OnInit {
     }
   
     const currentMemberCount = this.projectMembers.length;
-    const maxMembersAllowed = 10; // Zamenite stvarnom maksimalnom vrednošću sa backenda
-    const minMembersAllowed = 2;  // Zamenite stvarnom minimalnom vrednošću sa backenda
   
-    if (currentMemberCount + newMembersToAdd.length > maxMembersAllowed) {
+    if (currentMemberCount + newMembersToAdd.length > this.maxMembersAllowed) {
       this.errorMessage = 'You cannot add more members than the maximum allowed.';
       return;
     }
   
-    if (currentMemberCount + newMembersToAdd.length < minMembersAllowed) {
+    if (currentMemberCount + newMembersToAdd.length < this.minMembersAllowed) {
       this.errorMessage = 'You cannot have fewer members than the minimum required.';
       return;
     }
@@ -102,7 +114,7 @@ export class AddMembersComponent implements OnInit {
         }, 3000);
         this.fetchProjectMembers();
       },
-      (error) => {
+      (error: any) => {
         console.error('Error adding members:', error);
         if (error.status === 400) {
           const errorText = error.error || error.message || '';
@@ -122,11 +134,8 @@ export class AddMembersComponent implements OnInit {
       }
     );
   }
-  
-
-  
 
   isMemberAlreadyAdded(member: Member): boolean {
-    return this.projectMembers.some(existingMember => existingMember.id === member.id);
+    return this.projectMembers.some((existingMember: Member) => existingMember.id === member.id);
   }
 }
