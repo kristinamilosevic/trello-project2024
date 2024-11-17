@@ -90,17 +90,17 @@ func main() {
 	loginHandler := handlers.LoginHandler{UserService: userService}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/register", userHandler.Register)
-	mux.HandleFunc("/api/confirm", userHandler.ConfirmEmail)
-	mux.HandleFunc("/api/verify-code", userHandler.VerifyCode)
-	mux.HandleFunc("/api/login", loginHandler.Login)
-	mux.HandleFunc("/api/check-username", loginHandler.CheckUsername)
-	mux.HandleFunc("/api/forgot-password", loginHandler.ForgotPassword)
-	mux.HandleFunc("/api/auth/delete-account", userHandler.DeleteAccountHandler)
+	mux.HandleFunc("/api/users/register", userHandler.Register)
+	mux.HandleFunc("/api/users/confirm", userHandler.ConfirmEmail)
+	mux.HandleFunc("/api/users/verify-code", userHandler.VerifyCode)
+	mux.HandleFunc("/api/users/login", loginHandler.Login)
+	mux.HandleFunc("/api/users/check-username", loginHandler.CheckUsername)
+	mux.HandleFunc("/api/users/forgot-password", loginHandler.ForgotPassword)
+	mux.HandleFunc("/api/users/auth/delete-account", userHandler.DeleteAccountHandler)
 
-	mux.HandleFunc("/api/magic-link", loginHandler.MagicLink)
-	mux.HandleFunc("/api/magic-login", loginHandler.MagicLogin)
-	mux.HandleFunc("/api/verify-magic-link", loginHandler.VerifyMagicLink)
+	mux.HandleFunc("/api/users/magic-link", loginHandler.MagicLink)
+	mux.HandleFunc("/api/users/magic-login", loginHandler.MagicLogin)
+	mux.HandleFunc("/api/users/verify-magic-link", loginHandler.VerifyMagicLink)
 
 	finalHandler := enableCORS(mux)
 

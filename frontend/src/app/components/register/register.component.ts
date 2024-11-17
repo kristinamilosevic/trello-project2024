@@ -28,7 +28,7 @@ export class RegisterComponent {
 
   onSubmit() {
     if (this.registerForm.valid) {
-      this.http.post('http://localhost:8001/register', this.registerForm.value).subscribe({
+      this.http.post('http://localhost:8000/api/users/register', this.registerForm.value).subscribe({
         next: (response) => {
           console.log('Response from server:', response);
           alert('Registration successful. Check your email for the verification code.');
