@@ -61,7 +61,7 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/api/projects/{projectId}/members", projectHandler.GetProjectMembersHandler).Methods("GET")
 	r.HandleFunc("/api/projects/{projectId}/members/{memberId}/remove", projectHandler.RemoveMemberFromProjectHandler).Methods("DELETE")
-	r.HandleFunc("/api/projects", projectHandler.CreateProject).Methods("POST")
+	r.HandleFunc("/api/projects/add", projectHandler.CreateProject).Methods("POST")
 	r.HandleFunc("/api/projects/{id}/members", projectHandler.AddMemberToProjectHandler).Methods("POST")
 	r.HandleFunc("/api/projects/users", projectHandler.GetAllUsersHandler).Methods("GET")
 	r.HandleFunc("/api/projects/all", projectHandler.ListProjectsHandler).Methods("GET")
