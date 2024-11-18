@@ -92,7 +92,7 @@ func main() {
 
 	// Kreiranje novog multiplexer-a i dodavanje ruta
 	mux := http.NewServeMux()
-	mux.HandleFunc("/register", userHandler.Register)
+	mux.HandleFunc("/api/users/register", userHandler.Register)
 	mux.HandleFunc("/confirm", userHandler.ConfirmEmail)
 	mux.HandleFunc("/verify-code", userHandler.VerifyCode)
 	mux.HandleFunc("/login", loginHandler.Login)

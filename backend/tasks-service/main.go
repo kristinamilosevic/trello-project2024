@@ -7,6 +7,7 @@ import (
 	"trello-project/microservices/tasks-service/handlers" // Prilagodite putanju
 	"trello-project/microservices/tasks-service/services" // Prilagodite putanju
 
+	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -34,21 +35,24 @@ func main() {
 	taskService := services.NewTaskService(client)
 	taskHandler := handlers.NewTaskHandler(taskService)
 
-	mux := http.NewServeMux()
+	// Kreiranje Gorilla Mux routera
+	router := mux.NewRouter()
 
-	mux.HandleFunc("/tasks", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
-			taskHandler.CreateTask(w, r)
-		case http.MethodGet:
-			taskHandler.GetAllTasks(w, r)
-		default:
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		}
-	})
+	// Definisanje ruta
+	router.HandleFunc("/tasks", taskHandler.CreateTask).Methods("POST")
+	router.HandleFunc("/tasks", taskHandler.GetAllTasks).Methods("GET")
 
+	// Nove rute za dodavanje i dohvatanje članova zadatka
+	router.HandleFunc("/tasks/{taskID}/project/{projectID}/available-members", taskHandler.GetAvailableMembersForTask).Methods("GET")
+	router.HandleFunc("/tasks/{taskID}/add-members", taskHandler.AddMembersToTask).Methods("POST")
+	router.HandleFunc("/tasks/{taskId}/members", taskHandler.GetMembersForTaskHandler).Methods("GET")
+
+	// Omogućavanje CORS-a
+	corsRouter := enableCORS(router)
+
+	// Pokretanje servera
 	log.Println("Server pokrenut na http://localhost:8000")
-	if err := http.ListenAndServe(":8000", enableCORS(mux)); err != nil {
-		log.Fatal(err)
+	if err := http.ListenAndServe(":8000", corsRouter); err != nil {
+		log.Fatal("Greška pri pokretanju servera:", err)
 	}
 }

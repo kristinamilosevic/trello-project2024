@@ -1,0 +1,27 @@
+<div class="container">
+    <h2>Members for Task</h2>
+  
+    <div *ngIf="members.length > 0; else noMembers">
+      <table class="member-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Username</th>
+            <th>Role</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let member of members">
+            <td>{{ member.name }}</td>
+            <td>{{ member.username }}</td>
+            <td>{{ member.role }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  
+    <ng-template #noMembers>
+      <p class="info">No members assigned to this task.</p>
+    </ng-template>
+  </div>
+  

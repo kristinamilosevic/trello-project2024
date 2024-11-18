@@ -72,4 +72,19 @@ export class ProjectDetailsComponent implements OnInit {
       }
     );
   }
+  openAddMembersToTask(taskId: string): void {
+    const projectId = this.project?.id;
+    if (projectId) {
+      this.router.navigate([`/project/${projectId}/task/${taskId}/add-members`]);
+    }
+  }
+  
+  viewMembersToTask(taskId: string): void {
+    const projectId = this.project?.id;
+    if (projectId) {
+      this.router.navigate([`/project/${projectId}/task/${taskId}/members`]);
+    } else {
+      console.error('Project ID is not available.');
+    }
+  }
 }

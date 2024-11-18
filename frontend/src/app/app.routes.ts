@@ -12,6 +12,8 @@ import { DeleteAccountComponent } from './components/delete-account/delete-accou
 import { LoginComponent } from './components/login/login.component';
 import { VerifyCodeComponent } from './components/verify-code/verify-code.component';
 import { UsersProjectsComponent } from './users-projects/users-projects.component';
+import { AddMembersToTaskComponent } from './components/add-members-to-task/add-members-to-task.component';
+import { ViewMembersTaskComponent } from './components/view-members-task/view-members-task.component';
 
 
 
@@ -59,6 +61,8 @@ export const routes: Routes = [
   { path: '', redirectTo: '/login', pathMatch: 'full' },
 
   { path: 'verify', component: VerifyCodeComponent },
+  { path: 'project/:projectId/task/:taskId/add-members', component: AddMembersToTaskComponent },
+  { path: 'project/:projectId/task/:taskId/members', component: ViewMembersTaskComponent },
 
 
   { path: 'magic-login', component: LoginComponent }

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"trello-project/microservices/tasks-service/models"
 	"trello-project/microservices/tasks-service/services"
+
+	"github.com/gorilla/mux"
 )
 
 type TaskHandler struct {
@@ -41,4 +43,53 @@ func (h *TaskHandler) GetAllTasks(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(tasks)
+}
+func (h *TaskHandler) GetAvailableMembersForTask(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	projectID := vars["projectID"]
+	taskID := vars["taskID"]
+
+	members, err := h.service.GetAvailableMembersForTask(projectID, taskID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(members)
+}
+
+func (h *TaskHandler) AddMembersToTask(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskID := vars["taskID"]
+
+	var members []models.Member
+	if err := json.NewDecoder(r.Body).Decode(&members); err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	err := h.service.AddMembersToTask(taskID, members)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"message": "Members added successfully"}`))
+}
+
+// GetMembersForTaskHandler dohvaća članove dodeljene određenom tasku
+func (h *TaskHandler) GetMembersForTaskHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskID := vars["taskId"]
+
+	members, err := h.service.GetMembersForTask(taskID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(members)
 }

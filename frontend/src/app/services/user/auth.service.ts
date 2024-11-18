@@ -9,7 +9,7 @@ import { LoginRequest, LoginResponse } from '../../models/user/user';
   providedIn: 'root'
 })
 export class AuthService {
-  private apiUrl = 'http://localhost:8001';
+  private apiUrl = 'http://localhost:8001/api/users';
   private loggedIn = new BehaviorSubject<boolean>(this.hasToken());
 
   constructor(private http: HttpClient) {}
