@@ -12,14 +12,17 @@
         <li *ngFor="let task of tasks">
           <strong>{{ task.title }}</strong>
           <p>{{ task.description }}</p>
-          
+
+          <div *ngIf="getTaskDependencyTitle(task)">
+            <p>Depends on: <em>{{ getTaskDependencyTitle(task) }}</em></p>
+          </div>
+
           <label for="statusDropdown">Status:</label>
           <select [(ngModel)]="task.status" (change)="updateTaskStatus(task)">
             <option value="Pending">Pending</option>
-            <option value="In progress">In Progress</option>
+            <option value="In progress">In progress</option>
             <option value="Completed">Completed</option>
           </select>
-
         </li>
       </ul>
     </div>

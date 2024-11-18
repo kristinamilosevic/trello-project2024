@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"trello-project/microservices/tasks-service/models"
 	"trello-project/microservices/tasks-service/services"
 
@@ -30,7 +31,7 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Sada prosleđujemo status prilikom kreiranja taska
-	createdTask, err := h.service.CreateTask(task.ProjectID, task.Title, task.Description, task.Status)
+	createdTask, err := h.service.CreateTask(task.ProjectID, task.Title, task.Description, task.DependsOn, task.Status)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -48,6 +49,28 @@ func (h *TaskHandler) GetAllTasks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(tasks)
+}
+
+func (h *TaskHandler) GetTasksByProjectID(w http.ResponseWriter, r *http.Request) {
+	segments := strings.Split(r.URL.Path, "/")
+	if len(segments) < 4 {
+		http.Error(w, "Invalid URL format", http.StatusBadRequest)
+		return
+	}
+
+	projectID := segments[3]
+	if projectID == "" {
+		http.Error(w, "Missing project ID", http.StatusBadRequest)
+		return
+	}
+
+	tasks, err := h.service.GetTasksByProject(projectID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	json.NewEncoder(w).Encode(tasks)
 }
 

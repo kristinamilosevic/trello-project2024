@@ -12,6 +12,14 @@
     <label for="description">Description:</label>
     <textarea id="description" formControlName="description" required></textarea>
 
+    <label for="dependsOn">Depends On:</label>
+    <select id="dependsOn" formControlName="dependsOn">
+      <option value="">None</option>
+      <option *ngFor="let task of tasks" [value]="task.id">{{ task.title }}</option>
+    </select>
+
+
+
 
     <button type="submit">Submit</button>
   </form>

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
 	"trello-project/microservices/tasks-service/models"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -22,7 +23,16 @@ func NewTaskService(client *mongo.Client) *TaskService {
 	}
 }
 
-func (s *TaskService) CreateTask(projectID string, title, description string, status models.TaskStatus) (*models.Task, error) {
+func (s *TaskService) CreateTask(projectID string, title, description string, dependsOn *primitive.ObjectID, status models.TaskStatus) (*models.Task, error) {
+
+	if dependsOn != nil {
+		var dependentTask models.Task
+		err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": *dependsOn}).Decode(&dependentTask)
+		if err != nil {
+			return nil, fmt.Errorf("dependent task not found")
+		}
+	}
+
 	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid project ID format: %v", err)
@@ -38,6 +48,7 @@ func (s *TaskService) CreateTask(projectID string, title, description string, st
 		Title:       title,
 		Description: description,
 		Status:      status,
+		DependsOn:   dependsOn,
 	}
 
 	result, err := s.tasksCollection.InsertOne(context.Background(), task)
@@ -90,42 +101,68 @@ func (s *TaskService) GetTaskByID(taskID primitive.ObjectID) (*models.Task, erro
 	return &task, nil
 }
 
-// ChangeTaskStatus - menja status taska
+func (s *TaskService) GetTasksByProject(projectID string) ([]*models.Task, error) {
+	var tasks []*models.Task
+
+	filter := bson.M{"projectId": projectID}
+	cursor, err := s.tasksCollection.Find(context.Background(), filter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve tasks: %v", err)
+	}
+	defer cursor.Close(context.Background())
+
+	for cursor.Next(context.Background()) {
+		var task models.Task
+		if err := cursor.Decode(&task); err != nil {
+			return nil, fmt.Errorf("failed to decode task: %v", err)
+		}
+		tasks = append(tasks, &task)
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("cursor error: %v", err)
+	}
+
+	return tasks, nil
+}
+
 func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.TaskStatus) (*models.Task, error) {
-	// Pronađi task po ID-u
 	var task models.Task
 	if err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskID}).Decode(&task); err != nil {
 		return nil, fmt.Errorf("task not found: %v", err)
 	}
 
-	// Proveri zavisnost
+	fmt.Printf("Task '%s' current status: %s\n", task.Title, task.Status)
+	fmt.Printf("Attempting to change status to: %s\n", status)
+
+	//d
 	if task.DependsOn != nil {
+		fmt.Printf("Checking dependent task with ID: %v\n", task.DependsOn)
+
+		// Pronadji zavisni task u bazi
 		var dependentTask models.Task
-		if err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": *task.DependsOn}).Decode(&dependentTask); err != nil {
+		if err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": task.DependsOn}).Decode(&dependentTask); err != nil {
 			return nil, fmt.Errorf("dependent task not found: %v", err)
 		}
 
-		if dependentTask.Status != models.StatusCompleted && status == models.StatusInProgress {
-			return nil, fmt.Errorf("cannot start task due to unfinished dependency")
+		fmt.Printf("Dependent task '%s' status: '%s'\n", dependentTask.Title, dependentTask.Status)
+		fmt.Printf("Expected status for comparison: '%s'\n", models.StatusCompleted)
+
+		// Ako zavisni task nije zavrsen promena statusa nije dozvoljena
+		if strings.TrimSpace(string(dependentTask.Status)) != string(models.StatusCompleted) && status != models.StatusPending {
+			return nil, fmt.Errorf("cannot change status because dependent task '%s' is not completed", dependentTask.Title)
 		}
 	}
 
-	// Ažuriraj status taska
+	// update status trenutnog taska
 	update := bson.M{"$set": bson.M{"status": status}}
-	result, err := s.tasksCollection.UpdateOne(context.Background(), bson.M{"_id": taskID}, update)
+	_, err := s.tasksCollection.UpdateOne(context.Background(), bson.M{"_id": taskID}, update)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update task status: %v", err)
 	}
 
-	// Proveri da li je dokument zaista ažuriran
-	if result.MatchedCount == 0 {
-		return nil, fmt.Errorf("task not found for update")
-	}
-	if result.ModifiedCount == 0 {
-		return nil, fmt.Errorf("task status not updated")
-	}
+	fmt.Printf("Status of task '%s' successfully updated to: %s\n", task.Title, status)
 
-	// Vratimo ažurirani task
 	if err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskID}).Decode(&task); err != nil {
 		return nil, fmt.Errorf("failed to retrieve updated task: %v", err)
 	}

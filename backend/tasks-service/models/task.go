@@ -5,9 +5,9 @@ import "go.mongodb.org/mongo-driver/bson/primitive"
 type TaskStatus string
 
 const (
-	StatusPending    TaskStatus = "pending"
-	StatusInProgress TaskStatus = "in progress"
-	StatusCompleted  TaskStatus = "completed"
+	StatusPending    TaskStatus = "Pending"
+	StatusInProgress TaskStatus = "In progress"
+	StatusCompleted  TaskStatus = "Completed"
 )
 
 type Task struct {

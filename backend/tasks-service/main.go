@@ -47,6 +47,14 @@ func main() {
 		}
 	})
 
+	mux.HandleFunc("/tasks/project/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			taskHandler.GetTasksByProjectID(w, r)
+		} else {
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
 	mux.HandleFunc("/tasks/status", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			taskHandler.ChangeTaskStatus(w, r)

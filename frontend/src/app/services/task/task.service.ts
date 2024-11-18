@@ -22,6 +22,11 @@ export class TaskService {
     
   }
   
+  getTasksByProject(projectId: string): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}/project/${projectId}`);
+  }
+  
+  
   updateTaskStatus(taskId: string, status: string): Observable<any> {
     const url = `${this.apiUrl}/status`;
     const body = { taskId, status };
