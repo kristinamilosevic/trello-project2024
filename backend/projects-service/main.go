@@ -61,10 +61,10 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/api/projects/{projectId}/members", projectHandler.GetProjectMembersHandler).Methods("GET")
 	r.HandleFunc("/api/projects/{projectId}/members/{memberId}/remove", projectHandler.RemoveMemberFromProjectHandler).Methods("DELETE")
-	r.HandleFunc("/api/projects", projectHandler.CreateProject).Methods("POST")
+	r.HandleFunc("/api/projects/add", projectHandler.CreateProject).Methods("POST")
 	r.HandleFunc("/api/projects/{id}/members", projectHandler.AddMemberToProjectHandler).Methods("POST")
-	r.HandleFunc("/api/users", projectHandler.GetAllUsersHandler).Methods("GET")
-	r.HandleFunc("/api/projects", projectHandler.ListProjectsHandler).Methods("GET")
+	r.HandleFunc("/api/projects/users", projectHandler.GetAllUsersHandler).Methods("GET")
+	r.HandleFunc("/api/projects/all", projectHandler.ListProjectsHandler).Methods("GET")
 	r.HandleFunc("/api/projects/{id}", projectHandler.GetProjectByIDHandler).Methods("GET")
 	r.HandleFunc("/api/projects/{id}/tasks", projectHandler.DisplayTasksForProjectHandler).Methods("GET")
 	r.HandleFunc("/api/projects/{username}", handlers.GetProjectsByUsername(projectService)).Methods("GET")
@@ -72,7 +72,7 @@ func main() {
 	corsRouter := enableCORS(r)
 
 	fmt.Println("Projects service server running on http://localhost:8003")
-	log.Fatal(http.ListenAndServe(":8080", corsRouter))
+	log.Fatal(http.ListenAndServe(":8003", corsRouter))
 }
 
 func enableCORS(next http.Handler) http.Handler {

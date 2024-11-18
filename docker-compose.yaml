@@ -64,10 +64,10 @@ services:
     restart: on-failure
     ports:
       - "${GATEWAY_PORT}:${GATEWAY_PORT}"
-    depends_on:
-      - tasks-service
-      - projects-service
-      - users-service
+    # depends_on:
+    #   - tasks-service
+    #   - projects-service
+    #   - users-service
     networks:
       - app-network
 
@@ -114,4 +114,5 @@ volumes:
 
 networks:
   app-network:
+    name: app-network
     driver: bridge

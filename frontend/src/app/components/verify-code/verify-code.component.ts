@@ -38,7 +38,7 @@ export class VerifyCodeComponent implements OnInit {
         code: this.verifyCodeForm.value.code
       };
 
-      this.http.post('http://localhost:8001/api/verify-code', data, { responseType: 'text' }).subscribe({
+      this.http.post('http://localhost:8000/api/users/verify-code', data, { responseType: 'text' }).subscribe({
         next: (response) => {
           console.log('Response from server:', response);
           alert('Verification successful. You can now log in.');

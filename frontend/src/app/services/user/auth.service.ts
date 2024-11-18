@@ -9,7 +9,7 @@ import { LoginRequest, LoginResponse } from '../../models/user/user';
   providedIn: 'root'
 })
 export class AuthService {
-  private apiUrl = 'http://localhost:8001/api';
+  private apiUrl = 'http://localhost:8000/api/users';
   private loggedIn = new BehaviorSubject<boolean>(this.hasToken());
 
   constructor(private http: HttpClient) {}
@@ -75,5 +75,20 @@ export class AuthService {
   // Funkcija za proveru da li postoji token u localStorage
   private hasToken(): boolean {
     return !!localStorage.getItem('token');
+  }
+
+  getUserProfile(): Observable<any> {
+    const token = this.getToken();
+    if (!token) {
+      return new Observable<any>((observer) => {
+        observer.error('No token found');
+      });
+    }
+
+    return this.http.get<any>(`${this.apiUrl}/users-profile`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
   }
 }
