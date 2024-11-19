@@ -35,5 +35,15 @@ export class TaskService {
     const apiUrl = `http://localhost:8002/api/tasks/${taskId}/members`;
     return this.http.get(apiUrl);
   }
+
+  removeMemberFromTask(taskId: string, memberId: string): Observable<any> {
+    const apiUrl = `http://localhost:8002/api/tasks/${taskId}/members/${memberId}`;  // Ruta za uklanjanje člana
+    const token = localStorage.getItem('token');  // Uzimanje JWT tokena iz localStorage
+
+    const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`).set('Content-Type', 'application/json');  // Dodaj Content-Type ako je potrebno
+
+    return this.http.delete(apiUrl, { headers });
+}
+
   
 }

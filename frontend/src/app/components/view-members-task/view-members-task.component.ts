@@ -6,7 +6,7 @@ import { TaskService } from '../../services/task/task.service';
 @Component({
   selector: 'app-view-members-task',
   standalone: true,
-  imports: [CommonModule], // Dodaj CommonModule ovde
+  imports: [CommonModule],
   templateUrl: './view-members-task.component.html',
   styleUrls: ['./view-members-task.component.css']
 })
@@ -52,9 +52,27 @@ export class ViewMembersTaskComponent implements OnInit {
   }
 
   deleteMember(member: any): void {
-    console.log('Deleting member:', member);
-    // Ovdje će kasnije biti logika za brisanje člana
+    if (this.taskId && member.id) {
+      this.taskService.removeMemberFromTask(this.taskId, member.id).subscribe({
+        next: (response) => {
+          alert('Member removed successfully');
+          this.loadTaskMembers();  // Ponovno učitaj članove nakon uklanjanja
+        },
+        error: (error) => {
+          // Proveri specifičnu grešku vezanu za status
+          if (error && error.error && error.error.message) {
+            alert(error.error.message);  // Ovdje se koristi ispravan ključ "message"
+          } else {
+            alert('Only members of completed tasks can be removed!');
+          }
+        }
+      });
+    } else {
+      alert('Invalid task or member');
+    }
   }
+  
+  
 }
 
 

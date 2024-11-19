@@ -205,7 +205,6 @@ func (s *TaskService) GetAllTasks() ([]*models.Task, error) {
 	return tasks, nil
 }
 
-// RemoveMemberFromTask uklanja člana sa zadatka
 func (s *TaskService) RemoveMemberFromTask(taskID string, memberID primitive.ObjectID) error {
 	// Konvertovanje taskID u ObjectID
 	taskObjectID, err := primitive.ObjectIDFromHex(taskID)
@@ -220,7 +219,12 @@ func (s *TaskService) RemoveMemberFromTask(taskID string, memberID primitive.Obj
 		return fmt.Errorf("task not found: %v", err)
 	}
 
-	// Provera da li je član već dodeljen zadatku
+	// Provera da li je zadatak završeni (Completed)
+	if task.Status != "Completed" {
+		return fmt.Errorf("only members of completed tasks can be removed")
+	}
+
+	// Uklanjanje člana sa zadatka
 	memberFound := false
 	for i, member := range task.Members {
 		if member.ID == memberID {
