@@ -24,10 +24,18 @@ export class ViewMembersTaskComponent implements OnInit {
   ngOnInit(): void {
     this.projectId = this.route.snapshot.paramMap.get('projectId');
     this.taskId = this.route.snapshot.paramMap.get('taskId');
+    
+    console.log('Project ID:', this.projectId);
+    console.log('Task ID:', this.taskId);
+  
     if (this.taskId) {
       this.loadTaskMembers();
+    } else {
+      this.errorMessage = 'Invalid task ID';
+      console.error(this.errorMessage);
     }
   }
+  
 
   loadTaskMembers(): void {
     if (this.taskId) {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/smtp"
 	"os"
 	"time"
 
@@ -42,7 +41,7 @@ func main() {
 	}
 	fmt.Println("EMAIL_PASSWORD:", os.Getenv("EMAIL_PASSWORD"))
 
-	err = utils.SendEmail("katarina9stevanovic@gmail.com", "Test Subject", "<p>This is a test email</p>")
+	err = utils.SendEmail("tijanamtc.7@gmail.com", "Test Subject", "<p>This is a test email</p>")
 	if err != nil {
 		log.Fatalf("Failed to send email: %v", err)
 	}
@@ -124,29 +123,6 @@ func main() {
 
 	fmt.Println("Server is running on port 8001")
 	log.Fatal(srv.ListenAndServe())
-}
-func testSMTP() error {
-	// SMTP server konfiguracija
-	smtpHost := "smtp.gmail.com"
-	smtpPort := "587"
-	from := "trixtix9@gmail.com" // Zameni sa svojim emailom
-	password := os.Getenv("EMAIL_PASSWORD")
-	to := "tijanamtc.7@gmail.com" // Zameni sa emailom kome želiš da šalješ test mejl
-
-	// Priprema poruke
-	message := []byte("Subject: SMTP Test\n\nThis is a test email.")
-
-	// Autentifikacija
-	auth := smtp.PlainAuth("", from, password, smtpHost)
-
-	// Slanje emaila
-	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, []string{to}, message)
-	if err != nil {
-		return fmt.Errorf("SMTP test failed: %v", err)
-	}
-
-	log.Println("SMTP test email sent successfully!")
-	return nil
 }
 
 func startUserCleanupJob(userService *services.UserService) {

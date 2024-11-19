@@ -28,28 +28,34 @@ export class AddMembersToTaskComponent implements OnInit {
   ngOnInit(): void {
     this.projectId = this.route.snapshot.paramMap.get('projectId') || '';
     this.taskId = this.route.snapshot.paramMap.get('taskId') || '';
+    console.log('Project ID:', this.projectId);
+    console.log('Task ID:', this.taskId);
+  
     if (this.projectId && this.taskId) {
       this.loadAvailableMembers();
     }
   }
-
   loadAvailableMembers(): void {
     if (this.projectId && this.taskId) {
-        this.taskService.getAvailableMembers(this.projectId, this.taskId).subscribe(
-            (data) => {
-                // Filtriramo članove koji već nisu dodati ovom tasku
-                this.members = data.filter(member => !member.assigned);
-            },
-            (error) => {
-                console.error('Error fetching members:', error);
-            }
-        );
+      this.taskService.getAvailableMembers(this.projectId, this.taskId).subscribe(
+        (data) => {
+          this.members = data || []; 
+        },
+        (error) => {
+          console.error('Error fetching members:', error);
+          this.errorMessage = 'Failed to load available members';
+          this.members = []; 
+        }
+      );
     }
-}
-
-  toggleMemberSelection(member: any): void {
-    member.selected = !member.selected;
   }
+  
+  
+
+  onCheckboxChange(): void {
+    this.isAnyMemberSelected(); 
+  }
+  
 
   isAnyMemberSelected(): boolean {
     return this.members.some(member => member.selected);
@@ -57,18 +63,16 @@ export class AddMembersToTaskComponent implements OnInit {
 
   addSelectedMembers(): void {
     const selectedMembers = this.members.filter(member => member.selected);
-
+  
     if (!this.taskId || !this.projectId) {
       this.errorMessage = 'Invalid task or project ID';
       return;
     }
-
+  
     this.taskService.addMembersToTask(this.taskId, selectedMembers).subscribe(
       () => {
         this.successMessage = 'Members added successfully!';
-        setTimeout(() => {
-          this.router.navigate([`/project/${this.projectId}`]);
-        }, 2000);
+        this.loadAvailableMembers(); 
       },
       (error) => {
         console.error('Error adding members:', error);

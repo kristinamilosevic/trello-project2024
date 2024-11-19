@@ -21,16 +21,19 @@ export class TaskService {
   }
   // Dohvati dostupne članove za dodavanje na task
   getAvailableMembers(projectId: string, taskId: string): Observable<any[]> {
-    return this.http.get<any[]>(`${this.apiUrl}/tasks/${taskId}/project/${projectId}/available-members`);
+    const apiUrl = `http://localhost:8002/api/tasks/${taskId}/project/${projectId}/available-members`;
+    return this.http.get<any[]>(apiUrl);
   }
-
+  
   // Dodaj članove na zadatak
   addMembersToTask(taskId: string, members: any[]): Observable<any> {
-    const headers = new HttpHeaders({ 'Content-Type': 'application/json' });
-    return this.http.post(`${this.apiUrl}/tasks/${taskId}/add-members`, members, { headers });
+    const apiUrl = `http://localhost:8002/api/tasks/${taskId}/add-members`;
+    return this.http.post(apiUrl, members);
   }
-  getTaskMembers(taskId: string): Observable<any[]> {
-    return this.http.get<any[]>(`http://localhost:8002/tasks/${taskId}/members`);
+  
+  getTaskMembers(taskId: string): Observable<any> {
+    const apiUrl = `http://localhost:8002/api/tasks/${taskId}/members`;
+    return this.http.get(apiUrl);
   }
   
 }

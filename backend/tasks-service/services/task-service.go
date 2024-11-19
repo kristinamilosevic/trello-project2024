@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"trello-project/microservices/tasks-service/models"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -22,23 +23,28 @@ func NewTaskService(tasksCollection, projectsCollection *mongo.Collection) *Task
 	}
 }
 
-// Dohvati članove projekta koji nisu dodati zadatku
 func (s *TaskService) GetAvailableMembersForTask(projectID, taskID string) ([]models.Member, error) {
+	// Pretvori projectID u ObjectID ako je potrebno
 	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
 	if err != nil {
-		return nil, fmt.Errorf("invalid project ID format")
+		return nil, fmt.Errorf("invalid project ID format: %v", err)
 	}
-	taskObjectID, err := primitive.ObjectIDFromHex(taskID)
-	if err != nil {
-		return nil, fmt.Errorf("invalid task ID format")
-	}
-
 	// Dohvatanje članova projekta
 	var project struct {
 		Members []models.Member `bson:"members"`
 	}
+	// Pretvori taskID u ObjectID
+	taskObjectID, err := primitive.ObjectIDFromHex(taskID)
+	if err != nil {
+		log.Printf("Error converting taskID to ObjectID: %s, error: %v", taskID, err)
+		return nil, fmt.Errorf("invalid task ID format")
+	}
+
+	log.Printf("Searching for project with projectID: %s", projectID)
+
 	err = s.projectsCollection.FindOne(context.Background(), bson.M{"_id": projectObjectID}).Decode(&project)
 	if err != nil {
+		log.Printf("Failed to fetch project members for projectID: %s, error: %v", projectID, err)
 		return nil, fmt.Errorf("failed to fetch project members: %v", err)
 	}
 
@@ -46,16 +52,19 @@ func (s *TaskService) GetAvailableMembersForTask(projectID, taskID string) ([]mo
 	var task models.Task
 	err = s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskObjectID}).Decode(&task)
 	if err != nil {
+		log.Printf("Failed to fetch task members for taskID: %s, error: %v", taskID, err)
 		return nil, fmt.Errorf("failed to fetch task members: %v", err)
 	}
 
-	// Filtriranje članova koji još nisu dodati zadatku
-	var availableMembers []models.Member
+	// Filtriraj članove koji nisu dodati na ovaj task
+	// Filtriraj članove koji nisu već dodeljeni ovom zadatku
+	availableMembers := []models.Member{}
 	for _, member := range project.Members {
 		if !containsMember(task.Members, member.ID) {
 			availableMembers = append(availableMembers, member)
 		}
 	}
+
 	return availableMembers, nil
 }
 
@@ -70,19 +79,33 @@ func containsMember(members []models.Member, memberID primitive.ObjectID) bool {
 
 // Dodaj članove zadatku
 func (s *TaskService) AddMembersToTask(taskID string, membersToAdd []models.Member) error {
+	// Konvertovanje taskID u ObjectID
 	taskObjectID, err := primitive.ObjectIDFromHex(taskID)
 	if err != nil {
 		return fmt.Errorf("invalid task ID format")
 	}
 
-	// Dohvatamo task iz baze
+	// Dohvati zadatak iz baze
 	var task models.Task
 	err = s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskObjectID}).Decode(&task)
 	if err != nil {
 		return fmt.Errorf("task not found: %v", err)
 	}
 
-	// Filtriramo članove koji su već dodeljeni zadatku
+	// Proveri i inicijalizuj polje `members` ako je `nil`
+	if task.Members == nil {
+		task.Members = []models.Member{}
+		_, err := s.tasksCollection.UpdateOne(
+			context.Background(),
+			bson.M{"_id": taskObjectID},
+			bson.M{"$set": bson.M{"members": task.Members}}, // Postavi `members` kao prazan niz
+		)
+		if err != nil {
+			return fmt.Errorf("failed to initialize members field: %v", err)
+		}
+	}
+
+	// Filtriraj nove članove koji nisu već dodeljeni
 	newMembers := []models.Member{}
 	for _, member := range membersToAdd {
 		alreadyAssigned := false
@@ -97,34 +120,30 @@ func (s *TaskService) AddMembersToTask(taskID string, membersToAdd []models.Memb
 		}
 	}
 
-	if len(newMembers) == 0 {
-		return fmt.Errorf("no new members to add")
-	}
-
-	update := bson.M{"$addToSet": bson.M{"members": bson.M{"$each": newMembers}}}
-	_, err = s.tasksCollection.UpdateOne(context.Background(), bson.M{"_id": taskObjectID}, update)
-	if err != nil {
-		return fmt.Errorf("failed to add members to task: %v", err)
+	if len(newMembers) > 0 {
+		update := bson.M{"$addToSet": bson.M{"members": bson.M{"$each": newMembers}}}
+		_, err = s.tasksCollection.UpdateOne(context.Background(), bson.M{"_id": taskObjectID}, update)
+		if err != nil {
+			return fmt.Errorf("failed to add members to task: %v", err)
+		}
 	}
 
 	return nil
 }
 
 // GetMembersForTask vraća listu članova koji su dodati na određeni task
-func (s *TaskService) GetMembersForTask(taskID string) ([]models.Member, error) {
-	taskObjectID, err := primitive.ObjectIDFromHex(taskID)
-	if err != nil {
-		return nil, fmt.Errorf("invalid task ID format")
-	}
-
+func (s *TaskService) GetMembersForTask(taskID primitive.ObjectID) ([]models.Member, error) {
 	var task models.Task
-	err = s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskObjectID}).Decode(&task)
+
+	// Dohvati zadatak iz baze koristeći ObjectID
+	err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskID}).Decode(&task)
 	if err != nil {
+		log.Printf("Task not found: %v", err)
 		return nil, fmt.Errorf("task not found")
 	}
 
-	// Vraćamo članove dodeljene tom tasku
-	return task.Assignees, nil
+	// Vrati članove povezane sa zadatkom
+	return task.Members, nil
 }
 
 func (s *TaskService) CreateTask(projectID string, title, description string) (*models.Task, error) {
@@ -139,6 +158,7 @@ func (s *TaskService) CreateTask(projectID string, title, description string) (*
 		Title:       title,
 		Description: description,
 		Status:      "Pending",
+		Members:     []models.Member{},
 	}
 
 	// Unos u kolekciju zadataka
