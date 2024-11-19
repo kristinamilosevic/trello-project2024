@@ -252,8 +252,8 @@ func (s *ProjectService) GetTasksForProject(projectID primitive.ObjectID) ([]*mo
 func (s *ProjectService) GetProjectsByUsername(username string) ([]models.Project, error) {
 	var projects []models.Project
 
-	// Filtriraj projekte gde je username jedan od članova
-	filter := bson.M{"members": username}
+	// Filtriraj projekte gde "members.username" sadrži dati username
+	filter := bson.M{"members.username": username}
 
 	cursor, err := s.ProjectsCollection.Find(context.Background(), filter)
 	if err != nil {

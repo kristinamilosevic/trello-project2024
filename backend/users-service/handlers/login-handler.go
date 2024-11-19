@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"trello-project/microservices/users-service/models"
 	"trello-project/microservices/users-service/services"
@@ -149,22 +150,28 @@ type MagicLinkRequest struct {
 
 // Funkcija za slanje magic link-a
 func (h *LoginHandler) MagicLink(w http.ResponseWriter, r *http.Request) {
+	// Dekodiraj telo zahteva u MagicLinkRequest strukturu
 	var req MagicLinkRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Error decoding request body: %v", err) // Logovanje greške pri dekodiranju
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
+	log.Printf("Received magic link request: %+v", req) // Logovanje podataka zahteva
 
-	// Pronađi korisnika i proveri email
+	// Pronađi korisnika u bazi podataka
 	var user models.User
 	err := h.UserService.UserCollection.FindOne(context.Background(), bson.M{"username": req.Username}).Decode(&user)
 	if err != nil {
+		log.Printf("User not found for username: %s, error: %v", req.Username, err) // Logovanje greške pri traženju korisnika
 		http.Error(w, "User not found", http.StatusNotFound)
 		return
 	}
+	log.Printf("User found: %+v", user) // Logovanje podataka o korisniku
 
 	// Proveri da li email odgovara korisniku
 	if user.Email != req.Email {
+		log.Printf("Email mismatch: expected %s, got %s", user.Email, req.Email) // Logovanje greške ako email ne odgovara
 		http.Error(w, "Email does not match", http.StatusBadRequest)
 		return
 	}
@@ -172,23 +179,30 @@ func (h *LoginHandler) MagicLink(w http.ResponseWriter, r *http.Request) {
 	// Generiši JWT token sa username i role
 	token, err := h.JWTService.GenerateMagicLinkToken(req.Username, user.Role)
 	if err != nil {
+		log.Printf("Error generating token: %v", err) // Logovanje greške pri generisanju tokena
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
+	log.Printf("Generated token: %s", token) // Logovanje generisanog tokena
 
 	// Kreiraj magic link koji se šalje korisniku
 	magicLink := fmt.Sprintf("http://localhost:4200/magic-login?token=%s", token)
+	log.Printf("Generated magic link: %s", magicLink) // Logovanje magic linka
 
 	// Slanje email-a sa magic link-om
 	subject := "Your Magic Login Link"
 	body := fmt.Sprintf("Click here to log in: %s", magicLink)
 	if err := utils.SendEmail(req.Email, subject, body); err != nil {
+		log.Printf("Failed to send email to %s: %v", req.Email, err) // Logovanje greške pri slanju emaila
 		http.Error(w, "Failed to send email", http.StatusInternalServerError)
 		return
 	}
+	log.Printf("Magic link successfully sent to: %s", req.Email) // Logovanje uspešnog slanja emaila
 
+	// Odgovori korisniku sa uspehom
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Magic link sent successfully"))
+	log.Println("Magic link request processed successfully") // Logovanje uspeha obrade zahteva
 }
 
 // Funkcija za prijavu putem magic link-a

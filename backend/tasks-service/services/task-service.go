@@ -16,10 +16,10 @@ type TaskService struct {
 	projectsCollection *mongo.Collection
 }
 
-func NewTaskService(client *mongo.Client) *TaskService {
+func NewTaskService(tasksCollection, projectsCollection *mongo.Collection) *TaskService {
 	return &TaskService{
-		tasksCollection:    client.Database("tasks_db").Collection("tasks"),
-		projectsCollection: client.Database("projects_db").Collection("project"),
+		tasksCollection:    tasksCollection,
+		projectsCollection: projectsCollection,
 	}
 }
 
@@ -51,6 +51,7 @@ func (s *TaskService) CreateTask(projectID string, title, description string, de
 		DependsOn:   dependsOn,
 	}
 
+	// Unos u kolekciju zadataka
 	result, err := s.tasksCollection.InsertOne(context.Background(), task)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create task: %v", err)
@@ -58,6 +59,7 @@ func (s *TaskService) CreateTask(projectID string, title, description string, de
 
 	task.ID = result.InsertedID.(primitive.ObjectID)
 
+	// Ažuriranje projekta sa ID-em zadatka
 	filter := bson.M{"_id": projectObjectID}
 	update := bson.M{"$push": bson.M{"taskIDs": task.ID}}
 
@@ -77,6 +79,7 @@ func (s *TaskService) GetAllTasks() ([]*models.Task, error) {
 	}
 	defer cursor.Close(context.Background())
 
+	// Iteracija kroz sve zadatke
 	for cursor.Next(context.Background()) {
 		var task models.Task
 		if err := cursor.Decode(&task); err != nil {

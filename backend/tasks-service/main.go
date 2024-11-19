@@ -2,20 +2,24 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
-	"trello-project/microservices/tasks-service/handlers" // Prilagodite putanju
-	"trello-project/microservices/tasks-service/services" // Prilagodite putanju
+	"time"
+	"trello-project/microservices/tasks-service/handlers"
+	"trello-project/microservices/tasks-service/services"
 
+	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:4200") // Angular aplikacija radi na portu 4200
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:4200")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -25,46 +29,50 @@ func enableCORS(next http.Handler) http.Handler {
 }
 
 func main() {
-	clientOptions := options.Client().ApplyURI("mongodb://mongo:27017")
-	client, err := mongo.Connect(context.Background(), clientOptions)
+	// MongoDB konekcija
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	tasksClient, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://mongo-tasks:27017"))
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Database connection for mongo-tasks failed:", err)
+	}
+	defer tasksClient.Disconnect(ctx)
+
+	projectsClient, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://mongo-projects:27017"))
+	if err != nil {
+		log.Fatal("Database connection for mongo-projects failed:", err)
+	}
+	defer projectsClient.Disconnect(ctx)
+
+	if err := tasksClient.Ping(ctx, nil); err != nil {
+		log.Fatal("MongoDB connection error for mongo-tasks:", err)
+	}
+	if err := projectsClient.Ping(ctx, nil); err != nil {
+		log.Fatal("MongoDB connection error for mongo-projects:", err)
 	}
 
-	taskService := services.NewTaskService(client)
+	// Kolekcije
+	tasksCollection := tasksClient.Database("mongo-tasks").Collection("tasks")
+	projectsCollection := projectsClient.Database("mongo-projects").Collection("projects")
+
+	// Servisi i handleri
+	taskService := services.NewTaskService(tasksCollection, projectsCollection)
 	taskHandler := handlers.NewTaskHandler(taskService)
 
-	mux := http.NewServeMux()
+	// Kreiranje routera
+	r := mux.NewRouter()
 
-	mux.HandleFunc("/tasks", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
-			taskHandler.CreateTask(w, r)
-		case http.MethodGet:
-			taskHandler.GetAllTasks(w, r)
-		default:
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		}
-	})
+	// Rute za zadatke
+	r.HandleFunc("/api/tasks/all", taskHandler.GetAllTasks).Methods("GET")                         // Prikaz svih zadataka
+	r.HandleFunc("/api/tasks/create", taskHandler.CreateTask).Methods("POST")                      // Kreiranje novog zadatka
+	r.HandleFunc("/api/tasks/project/{projectId}", taskHandler.GetTasksByProjectID).Methods("GET") // Zadatke po ID-u projekta
+	r.HandleFunc("/api/tasks/status", taskHandler.ChangeTaskStatus).Methods("POST")                // Promena statusa zadatka
 
-	mux.HandleFunc("/tasks/project/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			taskHandler.GetTasksByProjectID(w, r)
-		} else {
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		}
-	})
+	// Omogućavanje CORS-a
+	corsRouter := enableCORS(r)
 
-	mux.HandleFunc("/tasks/status", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			taskHandler.ChangeTaskStatus(w, r)
-		} else {
-			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		}
-	})
-
-	log.Println("Server pokrenut na http://localhost:8000")
-	if err := http.ListenAndServe(":8000", enableCORS(mux)); err != nil {
-		log.Fatal(err)
-	}
+	// Pokretanje servera
+	fmt.Println("Tasks service server running on http://localhost:8002")
+	log.Fatal(http.ListenAndServe(":8002", corsRouter))
 }

@@ -6,7 +6,6 @@ import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TaskService } from '../../services/task/task.service';
 
-
 @Component({
   selector: 'app-project-details',
   standalone: true,
@@ -17,7 +16,8 @@ import { TaskService } from '../../services/task/task.service';
 })
 export class ProjectDetailsComponent implements OnInit {
   project: Project | null = null;
-  tasks: any[] = []; 
+  tasks: any[] = [];
+  isLoading = false;
 
   constructor(
     private route: ActivatedRoute,
@@ -29,16 +29,19 @@ export class ProjectDetailsComponent implements OnInit {
 
   ngOnInit(): void {
     const projectId = this.route.snapshot.paramMap.get('id');
-    
+
     if (projectId) {
       console.log('Project ID fetched:', projectId);
       this.loadProjectAndTasks(projectId);
     } else {
-      console.error('Project ID is undefined');
+      console.error('Project ID is undefined or null');
+      alert('Invalid Project ID. Redirecting to the projects list.');
+      this.router.navigate(['/projects']); // Preusmeravanje na listu projekata
     }
   }
-  
+
   loadProjectAndTasks(projectId: string): void {
+    this.isLoading = true;
     this.projectService.getProjectById(projectId).subscribe(
       (data) => {
         this.project = data;
@@ -47,10 +50,84 @@ export class ProjectDetailsComponent implements OnInit {
       },
       (error) => {
         console.error('Error fetching project details:', error);
+        this.isLoading = false;
       }
     );
   }
-  
+
+  getTasks(projectId: string): void {
+    this.projectService.getTasksForProject(projectId).subscribe(
+      (tasks) => {
+        this.tasks = tasks; 
+      },
+      (error) => {
+        console.error('Error fetching tasks:', error);
+      }
+    );
+  }
+
+  getTaskDependencyTitle(task: any): string | null {
+    console.log('Checking dependency for task:', task);
+
+    if (task.dependsOn) {
+      const dependentTask = this.tasks.find(
+        t => t.id === task.dependsOn || t.id === task.dependsOn?.toString()
+      );
+
+      if (dependentTask) {
+        console.log(`Dependent task found: ${dependentTask.title}`);
+        return dependentTask.title;
+      } else {
+        console.warn(`Dependent task not found for ID: ${task.dependsOn}`);
+        return 'Dependency not found';
+      }
+    }
+    return null;
+  }
+
+  updateTaskStatus(task: any): void {
+    if (!task || !task.id || !task.status) {
+      console.error('Task data is incomplete or invalid:', task);
+      alert('Cannot update task status. Task data is invalid.');
+      return;
+    }
+
+    // Check for dependencies
+    if (task.dependsOn) {
+      const dependentTask = this.tasks.find(t => t.id === task.dependsOn);
+      if (
+        dependentTask &&
+        dependentTask.status !== 'Completed' &&
+        task.status !== 'Pending'
+      ) {
+        alert(
+          `Cannot change status to "${task.status}" because dependent task "${dependentTask.title}" is not completed.`
+        );
+        return;
+      }
+    }
+
+    console.log(
+      `Attempting to update status for task "${task.title}" to "${task.status}"`
+    );
+
+    this.taskService.updateTaskStatus(task.id, task.status).subscribe({
+      next: () => {
+        console.log(
+          `Status for task "${task.title}" successfully updated to "${task.status}"`
+        );
+        this.getTasks(this.project?.id!); // Refresh tasks
+      },
+      error: (err: any) => {
+        console.error('Error updating task status:', err);
+        alert(
+          `Failed to update status for task "${task.title}": ${
+            err.error || err.message
+          }`
+        );
+      }
+    });
+  }
 
   goBack(): void {
     window.history.back();
@@ -58,13 +135,13 @@ export class ProjectDetailsComponent implements OnInit {
 
   addTask(): void {
     if (this.project) {
-      this.router.navigate(['/add-tasks', { projectId: this.project.id }]); 
+      this.router.navigate(['/add-tasks', { projectId: this.project.id }]);
     }
   }
 
   viewMembers(): void {
     if (this.project) {
-      this.router.navigate(['/remove-members', this.project.id]); 
+      this.router.navigate(['/remove-members', this.project.id]);
     }
   }
 
@@ -74,67 +151,4 @@ export class ProjectDetailsComponent implements OnInit {
       this.router.navigate([`/project/${projectId}/add-members`]);
     }
   }
-  
-  
-  getTasks(projectId: string): void {
-    this.taskService.getTasksByProject(projectId).subscribe(
-      (tasks) => {
-        this.tasks = tasks;
-        console.log('Fetched tasks:', this.tasks);
-        this.tasks.forEach(task => {
-          console.log(`Task: ${task.title}, DependsOn: ${task.dependsOn}`);
-        });
-      },
-      (error) => console.error('Error fetching tasks:', error)
-    );
-  }
-  
-  getTaskDependencyTitle(task: any): string | null {
-    console.log('Checking dependency for task:', task);
-    
-    if (task.dependsOn) {
-      const dependentTask = this.tasks.find(t => t.id === task.dependsOn || t.id === task.dependsOn?.toString());
-      
-      if (dependentTask) {
-        console.log(`Dependent task found: ${dependentTask.title}`);
-        return dependentTask.title;
-      } else {
-        console.warn(`Dependent task not found for ID: ${task.dependsOn}`);
-      }
-    }
-    return null;
-  }
-  
-  
-  
-  
-  updateTaskStatus(task: any): void {
-    if (task && task.id && task.status) {
-      if (task.dependsOn) {
-        const dependentTask = this.tasks.find(t => t.id === task.dependsOn);
-        if (dependentTask && dependentTask.status !== 'Completed' && task.status !== 'Pending') {
-          alert(`Cannot change status to "${task.status}" because dependent task "${dependentTask.title}" is not completed.`);
-          return;
-        }
-      }
-  
-      console.log(`Attempting to update status for task "${task.title}" to "${task.status}"`);
-  
-      this.taskService.updateTaskStatus(task.id, task.status).subscribe({
-        next: () => {
-          console.log(`Status for task "${task.title}" successfully updated to "${task.status}"`);
-          this.getTasks(this.project?.id!); 
-        },
-        error: (err: any) => {
-          console.error('Error updating task status:', err);
-          alert(`Failed to update status for task "${task.title}": ${err.error || err.message}`);
-        }
-      });
-    }
-  }
-  
-  
 }
-
-  
-  

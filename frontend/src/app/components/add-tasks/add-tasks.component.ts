@@ -53,16 +53,19 @@ export class AddTasksComponent {
   
   
   loadProjectTasks(projectId: string): void {
-    this.taskService.getTasksByProject(projectId).subscribe(
+    this.taskService.getTasksForProject(projectId).subscribe(
       (tasks: any[] | null) => {
-        this.tasks = tasks || []; 
-        console.log('Tasks fetched for project:', this.tasks);
+        this.tasks = tasks || [];
+        console.log('Tasks fetched for project:', this.tasks); // Log za debug
       },
       (error: any) => {
-        console.error('Error fetching tasks:', error);
+        console.error('Error fetching tasks:', error); // Log za grešku
       }
     );
   }
+  
+
+  
   
 
   toggleForm() {

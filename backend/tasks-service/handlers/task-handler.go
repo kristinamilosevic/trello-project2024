@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 	"trello-project/microservices/tasks-service/models"
@@ -53,24 +54,23 @@ func (h *TaskHandler) GetAllTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) GetTasksByProjectID(w http.ResponseWriter, r *http.Request) {
-	segments := strings.Split(r.URL.Path, "/")
-	if len(segments) < 4 {
-		http.Error(w, "Invalid URL format", http.StatusBadRequest)
-		return
-	}
+	log.Println("Requested URL:", r.URL.Path)
+	projectID := strings.TrimPrefix(r.URL.Path, "/tasks/project/")
+	log.Println("Extracted Project ID:", projectID)
 
-	projectID := segments[3]
-	if projectID == "" {
+	if projectID == "" || projectID == "/" {
 		http.Error(w, "Missing project ID", http.StatusBadRequest)
 		return
 	}
 
 	tasks, err := h.service.GetTasksByProject(projectID)
 	if err != nil {
+		log.Println("Error fetching tasks:", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(tasks)
 }
 

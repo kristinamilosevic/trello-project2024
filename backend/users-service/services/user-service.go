@@ -13,6 +13,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/exp/rand"
 )
 
@@ -43,6 +44,13 @@ func (s *UserService) RegisterUser(user models.User) error {
 	if err := s.UserCollection.FindOne(context.Background(), bson.M{"username": user.Username}).Decode(&existingUser); err == nil {
 		return fmt.Errorf("User with username already exists")
 	}
+
+	// Hashiranje lozinke pre nego što se sačuva
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("Failed to hash password: %v", err)
+	}
+	user.Password = string(hashedPassword)
 
 	// Generisanje verifikacionog koda i podešavanje vremena isteka
 	verificationCode := fmt.Sprintf("%06d", rand.Intn(1000000))
@@ -270,16 +278,21 @@ func (s UserService) LoginUser(username, password string) (models.User, string, 
 	if err != nil {
 		return models.User{}, "", errors.New("user not found")
 	}
-	if user.Password != password {
+
+	// Provera hashirane lozinke
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
 		return models.User{}, "", errors.New("invalid password")
 	}
+
 	if !user.IsActive {
 		return models.User{}, "", errors.New("user not active")
 	}
+
 	token, err := s.JWTService.GenerateAuthToken(user.Username, user.Role)
 	if err != nil {
 		return models.User{}, "", fmt.Errorf("failed to generate token: %v", err)
 	}
+
 	return user, token, nil
 }
 
@@ -299,4 +312,55 @@ func (s *UserService) DeleteExpiredUnverifiedUsers() {
 	} else {
 		log.Printf("Obrisano %d korisnika sa isteklim verifikacionim rokom.", result.DeletedCount)
 	}
+}
+
+func (s *UserService) GetUserForCurrentSession(ctx context.Context, username string) (models.User, error) {
+	var user models.User
+
+	err := s.UserCollection.FindOne(ctx, bson.M{"username": username}).Decode(&user)
+	if err != nil {
+		return models.User{}, fmt.Errorf("user not found")
+	}
+
+	user.Password = ""
+
+	return user, nil
+}
+
+// ChangePassword menja lozinku korisniku
+func (s *UserService) ChangePassword(username, oldPassword, newPassword, confirmPassword string) error {
+	// Proveri da li se nova lozinka poklapa sa potvrdom
+	if newPassword != confirmPassword {
+		return fmt.Errorf("new password and confirmation do not match")
+	}
+
+	// Pronađi korisnika u bazi
+	var user models.User
+	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+	if err != nil {
+		return fmt.Errorf("user not found")
+	}
+
+	// Proveri staru lozinku
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(oldPassword)); err != nil {
+		return fmt.Errorf("old password is incorrect")
+	}
+
+	// Hashuj novu lozinku
+	hashedNewPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash new password: %v", err)
+	}
+
+	// Ažuriraj lozinku u bazi
+	_, err = s.UserCollection.UpdateOne(
+		context.Background(),
+		bson.M{"username": username},
+		bson.M{"$set": bson.M{"password": string(hashedNewPassword)}},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update password: %v", err)
+	}
+
+	return nil
 }
