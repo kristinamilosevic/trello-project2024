@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 	"trello-project/microservices/projects-service/models"
 
@@ -251,12 +252,13 @@ func (s *ProjectService) GetTasksForProject(projectID primitive.ObjectID) ([]*mo
 
 func (s *ProjectService) GetProjectsByUsername(username string) ([]models.Project, error) {
 	var projects []models.Project
-
-	// Filtriraj projekte gde je username jedan od članova
 	filter := bson.M{"members": username}
+
+	log.Printf("Executing MongoDB query with filter: %v", filter)
 
 	cursor, err := s.ProjectsCollection.Find(context.Background(), filter)
 	if err != nil {
+		log.Printf("Error fetching projects from MongoDB: %v", err)
 		return nil, fmt.Errorf("error fetching projects: %v", err)
 	}
 	defer cursor.Close(context.Background())
@@ -264,10 +266,17 @@ func (s *ProjectService) GetProjectsByUsername(username string) ([]models.Projec
 	for cursor.Next(context.Background()) {
 		var project models.Project
 		if err := cursor.Decode(&project); err != nil {
+			log.Printf("Error decoding project document: %v", err)
 			return nil, fmt.Errorf("error decoding project: %v", err)
 		}
 		projects = append(projects, project)
 	}
 
+	if err := cursor.Err(); err != nil {
+		log.Printf("Cursor error: %v", err)
+		return nil, fmt.Errorf("cursor error: %v", err)
+	}
+
+	log.Printf("Found %d projects for username %s", len(projects), username)
 	return projects, nil
 }

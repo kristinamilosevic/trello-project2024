@@ -12,6 +12,8 @@ COPY . .
 RUN go build -o users-service .
 
 FROM alpine
+RUN apk add --no-cache ca-certificates && update-ca-certificates
+
 WORKDIR /usr/bin
 COPY --from=build_container /app/users-service .
 COPY --from=build_container /app/.env .env

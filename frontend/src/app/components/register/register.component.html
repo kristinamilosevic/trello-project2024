@@ -42,13 +42,13 @@
       </div>
   
       <div class="form-group">
-        <label for="userRole">User Role</label>
-        <select id="userRole" formControlName="userRole">
+        <label for="role">User Role</label>
+        <select id="role" formControlName="role">
           <option value="">Select role</option>
           <option value="user">Member</option>
           <option value="manager">Manager</option>
         </select>
-        <div *ngIf="registerForm.get('userRole')?.invalid && registerForm.get('userRole')?.touched" class="error">
+        <div *ngIf="registerForm.get('role')?.invalid && registerForm.get('role')?.touched" class="error">
           Please select a role.
         </div>
       </div>

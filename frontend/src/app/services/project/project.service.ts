@@ -8,7 +8,7 @@ import { Project } from '../../models/project/project';
 })
 export class ProjectService {
   private apiUrl = 'http://localhost:8000/api/projects';
-  private mainUrl = 'http://localhost:8000/api/';
+  private mainUrl = 'http://localhost:8000/api';
   private addUrl = 'http://localhost:8000/api/projects/add';
 
   constructor(private http: HttpClient) {}
