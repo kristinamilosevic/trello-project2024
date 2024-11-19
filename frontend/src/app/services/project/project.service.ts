@@ -14,6 +14,9 @@ export class ProjectService {
 
   private apiUrl = 'http://localhost:8000/api/projects';
 
+
+  private mainUrl = 'http://localhost:8000/api';
+
   private addUrl = 'http://localhost:8000/api/projects/add';
 
 

@@ -165,6 +165,7 @@ func (s *UserService) DeleteAccount(username string) error {
 func (s *UserService) CanDeleteMemberAccountByUsername(username string) (bool, error) {
 	fmt.Println("Proveravam da li član može biti obrisan po username...")
 
+	// Pronađi korisnika po username
 	var user models.User
 	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
 	if err != nil {
@@ -173,20 +174,39 @@ func (s *UserService) CanDeleteMemberAccountByUsername(username string) (bool, e
 	}
 	userID := user.ID
 
+	// Pronađi sve zadatke koje korisnik ima
 	taskFilter := bson.M{
 		"assignees": userID,
-		"status":    "in progress",
 	}
-	count, err := s.TaskCollection.CountDocuments(context.Background(), taskFilter)
+	cursor, err := s.TaskCollection.Find(context.Background(), taskFilter)
 	if err != nil {
-		fmt.Println("Greška pri proveri zadataka:", err)
+		fmt.Println("Greška pri pronalaženju zadataka:", err)
+		return false, err
+	}
+	defer cursor.Close(context.Background())
+
+	// Proveri da li je svaki zadatak završen
+	for cursor.Next(context.Background()) {
+		var task models.Task
+		if err := cursor.Decode(&task); err != nil {
+			fmt.Println("Greška pri dekodiranju zadatka:", err)
+			return false, err
+		}
+
+		// Ako zadatak nije završen, vrati grešku
+		if task.Status != "Completed" {
+			fmt.Printf("Zadatak '%s' nije završen. Status: %s\n", task.ID, task.Status)
+			return false, nil
+		}
+	}
+
+	if err := cursor.Err(); err != nil {
+		fmt.Println("Greška pri iteraciji kroz zadatke:", err)
 		return false, err
 	}
 
-	if count > 0 {
-		return false, nil
-	}
-
+	// Svi zadaci su završeni, korisnik može biti obrisan
+	fmt.Println("Svi zadaci korisnika su završeni. Korisnik može biti obrisan.")
 	return true, nil
 }
 
