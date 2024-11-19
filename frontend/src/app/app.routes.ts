@@ -11,6 +11,9 @@ import { RegisterComponent } from './components/register/register.component';
 import { DeleteAccountComponent } from './components/delete-account/delete-account.component';
 import { LoginComponent } from './components/login/login.component';
 import { VerifyCodeComponent } from './components/verify-code/verify-code.component';
+import { AddMembersToTaskComponent } from './components/add-members-to-task/add-members-to-task.component';
+import { ViewMembersTaskComponent } from './components/view-members-task/view-members-task.component';
+
 import { UsersProjectsComponent } from './components/users-projects/users-projects.component';
 import { UsersProfileComponent } from './components/users-profile/users-profile.component';
 import { ChangePasswordComponent } from './components/change-password/change-password.component';
@@ -35,29 +38,66 @@ import { ChangePasswordComponent } from './components/change-password/change-pas
 
 // ];
 
+// export const routes: Routes = [
+//   { path: 'add-tasks', component: AddTasksComponent },
+//   { path: 'remove-members', component: RemoveMembersComponent },
+//   { path: 'remove-members/:id', component: RemoveMembersComponent },
+//   { path: 'add-projects', component: AddProjectsComponent }, 
+//   { path: '', redirectTo: '/add-projects', pathMatch: 'full' },
+//   { path: 'project/:id/add-members', component: AddMembersComponent },
+//   { path: 'projects-list', component: ProjectListComponent },
+//   { path: 'project/:id', component: ProjectDetailsComponent }, 
+//   { path: '', redirectTo: '/projects-list', pathMatch: 'full' },
+//   { path: 'task-list', component: TaskListComponent },
+//   { path: '', redirectTo: '/projects-list', pathMatch: 'full' }, 
+//   { path: 'register', component: RegisterComponent },
+//   { path: 'users-projects', component: UsersProjectsComponent },
+//   { path: 'delete-account', component: DeleteAccountComponent },
+//   { path: 'login', component: LoginComponent }, 
+//   { path: '', redirectTo: '/login', pathMatch: 'full' },
+//   { path: 'verify', component: VerifyCodeComponent },
+//   { path: 'project/:projectId/task/:taskId/add-members', component: AddMembersToTaskComponent },
+//   { path: 'project/:projectId/task/:taskId/members', component: ViewMembersTaskComponent },
+//   { path: 'magic-login', component: LoginComponent },
+//   { path: 'users-profile', component: UsersProfileComponent }
+// ];
+
 export const routes: Routes = [
-  { path: 'add-tasks', component: AddTasksComponent },
-  { path: 'remove-members', component: RemoveMembersComponent },
-  { path: 'remove-members/:id', component: RemoveMembersComponent },
-  { path: 'add-projects', component: AddProjectsComponent }, 
-  { path: '', redirectTo: '/add-projects', pathMatch: 'full' },
-  { path: 'project/:id/add-members', component: AddMembersComponent },
+  // Početna stranica
+  { path: '', redirectTo: '/projects-list', pathMatch: 'full' },
+
+  // Rute za projekte
   { path: 'projects-list', component: ProjectListComponent },
   { path: 'project/:id', component: ProjectDetailsComponent },
-  { path: 'project/:id', component: ProjectDetailsComponent }, 
-  { path: '', redirectTo: '/projects-list', pathMatch: 'full' },
+  { path: 'project/:id/add-members', component: AddMembersComponent },
+
+  // Rute za taskove
+  { path: 'project/:projectId/task/:taskId/add-members', component: AddMembersToTaskComponent },
+  { path: 'project/:projectId/task/:taskId/members', component: ViewMembersTaskComponent },
   { path: 'task-list', component: TaskListComponent },
-  { path: '', redirectTo: '/projects-list', pathMatch: 'full' }, 
+
+  // Rute za korisnike
   { path: 'register', component: RegisterComponent },
+  { path: 'login', component: LoginComponent },
+  { path: 'magic-login', component: LoginComponent },
+  { path: 'users-profile', component: UsersProfileComponent },
   { path: 'users-projects', component: UsersProjectsComponent },
   { path: 'delete-account', component: DeleteAccountComponent },
-  { path: 'login', component: LoginComponent }, 
-  { path: '', redirectTo: '/login', pathMatch: 'full' },
+
+  // Rute za dodavanje i uklanjanje članova
+  { path: 'add-tasks', component: AddTasksComponent },
+  { path: 'add-projects', component: AddProjectsComponent },
+  { path: 'remove-members', component: RemoveMembersComponent },
+  { path: 'remove-members/:id', component: RemoveMembersComponent },
+
+  // Ostale rute
   { path: 'verify', component: VerifyCodeComponent },
   { path: 'magic-login', component: LoginComponent },
   { path: 'users-profile', component: UsersProfileComponent },
-  { path: 'change-password',component:ChangePasswordComponent }
+  { path: 'change-password',component:ChangePasswordComponent },
+  { path: '**', redirectTo: '/projects-list' },
 ];
+
 
 @NgModule({
   imports: [RouterModule.forRoot(routes)],

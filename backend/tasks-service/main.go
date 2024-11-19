@@ -8,6 +8,7 @@ import (
 	"trello-project/microservices/tasks-service/handlers"
 	"trello-project/microservices/tasks-service/services"
 
+	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -26,6 +27,7 @@ func enableCORS(next http.Handler) http.Handler {
 }
 
 func main() {
+	// Konektovanje sa MongoDB bazama
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -48,14 +50,25 @@ func main() {
 		log.Fatal("MongoDB connection error for mongo-projects:", err)
 	}
 
+	// Kolekcije
 	tasksCollection := tasksClient.Database("mongo-tasks").Collection("tasks")
 	projectsCollection := projectsClient.Database("mongo-projects").Collection("projects")
 
+	// Servis i handler
 	taskService := services.NewTaskService(tasksCollection, projectsCollection)
 	taskHandler := handlers.NewTaskHandler(taskService)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/tasks", func(w http.ResponseWriter, r *http.Request) {
+	// Kreiranje mux routera
+	r := mux.NewRouter()
+
+	// Definisanje rute sa parametrima za zadatke i članove
+	r.HandleFunc("/api/tasks/{taskID}/project/{projectID}/available-members", taskHandler.GetAvailableMembersForTask).Methods(http.MethodGet)
+	r.HandleFunc("/api/tasks/{taskID}/add-members", taskHandler.AddMembersToTask).Methods(http.MethodPost)
+	r.HandleFunc("/api/tasks/{taskID}/members", taskHandler.GetMembersForTaskHandler).Methods(http.MethodGet)
+	r.HandleFunc("/api/tasks/{taskID}/members/{memberID}", taskHandler.RemoveMemberFromTaskHandler).Methods(http.MethodDelete)
+
+	// Svi ostali taskovi
+	r.HandleFunc("/api/tasks", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
 			taskHandler.CreateTask(w, r)
@@ -66,8 +79,9 @@ func main() {
 		}
 	})
 
+	// Pokretanje servera
 	log.Println("Server running on http://localhost:8002")
-	if err := http.ListenAndServe(":8002", enableCORS(mux)); err != nil {
+	if err := http.ListenAndServe(":8002", enableCORS(r)); err != nil {
 		log.Fatal(err)
 	}
 }

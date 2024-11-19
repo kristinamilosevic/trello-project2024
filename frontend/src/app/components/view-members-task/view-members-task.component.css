@@ -1,0 +1,32 @@
+.container {
+    max-width: 600px;
+    margin: 20px auto;
+    padding: 20px;
+    background-color: #F8ECD1;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    text-align: center;
+  }
+  
+  h2 {
+    color: #85586F;
+    margin-bottom: 20px;
+  }
+  
+  .member-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  .member-table th, .member-table td {
+    padding: 10px;
+    border: 1px solid #ddd;
+    text-align: center;
+  }
+  
+  .info {
+    margin-top: 20px;
+    color: #999;
+    font-style: italic;
+  }
+  

@@ -8,4 +8,6 @@ type Task struct {
 	Title       string             `json:"title" bson:"title"`
 	Description string             `json:"description" bson:"description"`
 	Status      string             `json:"status" bson:"status"`
+	Members     []Member           `json:"members" bson:"members"`
+	Assignees   []Member           `bson:"assignees" json:"assignees"`
 }

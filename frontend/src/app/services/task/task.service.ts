@@ -19,5 +19,21 @@ export class TaskService {
   getAllTasks(): Observable<any[]> {
     return this.http.get<any[]>(this.apiUrl);
   }
+  // Dohvati dostupne članove za dodavanje na task
+  getAvailableMembers(projectId: string, taskId: string): Observable<any[]> {
+    const apiUrl = `http://localhost:8002/api/tasks/${taskId}/project/${projectId}/available-members`;
+    return this.http.get<any[]>(apiUrl);
+  }
+  
+  // Dodaj članove na zadatak
+  addMembersToTask(taskId: string, members: any[]): Observable<any> {
+    const apiUrl = `http://localhost:8002/api/tasks/${taskId}/add-members`;
+    return this.http.post(apiUrl, members);
+  }
+  
+  getTaskMembers(taskId: string): Observable<any> {
+    const apiUrl = `http://localhost:8002/api/tasks/${taskId}/members`;
+    return this.http.get(apiUrl);
+  }
   
 }
