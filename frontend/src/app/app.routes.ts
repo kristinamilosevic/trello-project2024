@@ -13,6 +13,7 @@ import { LoginComponent } from './components/login/login.component';
 import { VerifyCodeComponent } from './components/verify-code/verify-code.component';
 import { UsersProjectsComponent } from './components/users-projects/users-projects.component';
 import { UsersProfileComponent } from './components/users-profile/users-profile.component';
+import { ChangePasswordComponent } from './components/change-password/change-password.component';
 
 
 
@@ -54,7 +55,8 @@ export const routes: Routes = [
   { path: '', redirectTo: '/login', pathMatch: 'full' },
   { path: 'verify', component: VerifyCodeComponent },
   { path: 'magic-login', component: LoginComponent },
-  { path: 'users-profile', component: UsersProfileComponent }
+  { path: 'users-profile', component: UsersProfileComponent },
+  { path: 'change-password',component:ChangePasswordComponent }
 ];
 
 @NgModule({

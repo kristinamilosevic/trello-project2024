@@ -295,3 +295,41 @@ func (s *UserService) GetUserForCurrentSession(ctx context.Context, username str
 
 	return user, nil
 }
+
+// ChangePassword menja lozinku korisniku
+func (s *UserService) ChangePassword(username, oldPassword, newPassword, confirmPassword string) error {
+	// Proveri da li se nova lozinka poklapa sa potvrdom
+	if newPassword != confirmPassword {
+		return fmt.Errorf("new password and confirmation do not match")
+	}
+
+	// Pronađi korisnika u bazi
+	var user models.User
+	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+	if err != nil {
+		return fmt.Errorf("user not found")
+	}
+
+	// Proveri staru lozinku
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(oldPassword)); err != nil {
+		return fmt.Errorf("old password is incorrect")
+	}
+
+	// Hashuj novu lozinku
+	hashedNewPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash new password: %v", err)
+	}
+
+	// Ažuriraj lozinku u bazi
+	_, err = s.UserCollection.UpdateOne(
+		context.Background(),
+		bson.M{"username": username},
+		bson.M{"$set": bson.M{"password": string(hashedNewPassword)}},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update password: %v", err)
+	}
+
+	return nil
+}
