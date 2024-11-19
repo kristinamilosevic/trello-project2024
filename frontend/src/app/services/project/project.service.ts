@@ -7,8 +7,9 @@ import { Project } from '../../models/project/project';
   providedIn: 'root'
 })
 export class ProjectService {
-  private apiUrl = 'http://localhost:8003/projects';
-  private mainUrl = 'http://localhost:8003';
+  private apiUrl = 'http://localhost:8000/api/projects';
+  private mainUrl = 'http://localhost:8000/api/';
+  private addUrl = 'http://localhost:8000/api/projects/add';
 
   constructor(private http: HttpClient) {}
 
@@ -17,11 +18,11 @@ export class ProjectService {
       'Content-Type': 'application/json',
       'Manager-ID': '507f191e810c19729de860ea'
     });
-    return this.http.post(this.apiUrl, projectData, { headers });
+    return this.http.post(this.addUrl, projectData, { headers });
   }
 
   getProjects(): Observable<Project[]> {
-    return this.http.get<Project[]>(this.apiUrl);
+    return this.http.get<Project[]>(`${this.apiUrl}/all`);
   }
 
   getProjectById(id: string): Observable<Project> {

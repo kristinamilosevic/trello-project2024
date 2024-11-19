@@ -11,10 +11,11 @@ import { RegisterComponent } from './components/register/register.component';
 import { DeleteAccountComponent } from './components/delete-account/delete-account.component';
 import { LoginComponent } from './components/login/login.component';
 import { VerifyCodeComponent } from './components/verify-code/verify-code.component';
-import { UsersProjectsComponent } from './users-projects/users-projects.component';
 import { AddMembersToTaskComponent } from './components/add-members-to-task/add-members-to-task.component';
 import { ViewMembersTaskComponent } from './components/view-members-task/view-members-task.component';
 
+import { UsersProjectsComponent } from './components/users-projects/users-projects.component';
+import { UsersProfileComponent } from './components/users-profile/users-profile.component';
 
 
 
@@ -44,28 +45,21 @@ export const routes: Routes = [
   { path: '', redirectTo: '/add-projects', pathMatch: 'full' },
   { path: 'project/:id/add-members', component: AddMembersComponent },
   { path: 'projects-list', component: ProjectListComponent },
-
   { path: 'project/:id', component: ProjectDetailsComponent },
-
   { path: 'project/:id', component: ProjectDetailsComponent }, 
   { path: '', redirectTo: '/projects-list', pathMatch: 'full' },
   { path: 'task-list', component: TaskListComponent },
   { path: '', redirectTo: '/projects-list', pathMatch: 'full' }, 
   { path: 'register', component: RegisterComponent },
   { path: 'users-projects', component: UsersProjectsComponent },
-
   { path: 'delete-account', component: DeleteAccountComponent },
-  
-
-  { path: 'login', component: LoginComponent }, // Ruta za login
+  { path: 'login', component: LoginComponent }, 
   { path: '', redirectTo: '/login', pathMatch: 'full' },
-
   { path: 'verify', component: VerifyCodeComponent },
   { path: 'project/:projectId/task/:taskId/add-members', component: AddMembersToTaskComponent },
   { path: 'project/:projectId/task/:taskId/members', component: ViewMembersTaskComponent },
-
-
-  { path: 'magic-login', component: LoginComponent }
+  { path: 'magic-login', component: LoginComponent },
+  { path: 'users-profile', component: UsersProfileComponent }
 ];
 
 @NgModule({

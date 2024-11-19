@@ -14,5 +14,5 @@ RUN go build -o projects-service .
 FROM alpine
 WORKDIR /usr/bin
 COPY --from=build_container /app/projects-service .
-EXPOSE 8080
+EXPOSE 8003
 ENTRYPOINT ["projects-service"]

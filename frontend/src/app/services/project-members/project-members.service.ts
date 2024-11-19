@@ -9,7 +9,7 @@ import { Project } from '../../models/project/project';
   providedIn: 'root'
 })
 export class ProjectMembersService {
-  private apiUrl = 'http://localhost:8003';
+  private apiUrl = 'http://localhost:8000/api';
 
   constructor(private http: HttpClient) {}
 
@@ -23,7 +23,7 @@ export class ProjectMembersService {
   }
 
   getAllUsers(): Observable<Member[]> {
-    return this.http.get<Member[]>(`${this.apiUrl}/users`).pipe(
+    return this.http.get<Member[]>(`${this.apiUrl}/projects/users`).pipe(
       catchError((error) => {
         console.error('Error in getAllUsers:', error);
         return throwError(error);
