@@ -4,7 +4,9 @@ export class Task {
       public projectId: string,
       public title: string,
       public description: string,
-      public completed: boolean
+      public completed: boolean,
+      public dependsOn?: string
+      
     ) {}
   }
   

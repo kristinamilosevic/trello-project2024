@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+
 	"log"
 	"net/http"
 	"time"
@@ -15,13 +16,19 @@ import (
 
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
 		w.Header().Set("Access-Control-Allow-Origin", "*")                                // Možeš da postaviš i specifičnu domenu ako je potrebno
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS") // Omogućavamo DELETE metodu
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")     // Uključeni relevantni headeri
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 
 		// Ako je OPTIONS request, odgovori odmah
-		if r.Method == "OPTIONS" {
+		//if r.Method == "OPTIONS" {
+
+		//w.Header().Set("Access-Control-Allow-Origin", "http://localhost:4200")
+
+		if r.Method == http.MethodOptions {
+
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -31,7 +38,7 @@ func enableCORS(next http.Handler) http.Handler {
 }
 
 func main() {
-	// Konektovanje sa MongoDB bazama
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -70,6 +77,10 @@ func main() {
 	r.HandleFunc("/api/tasks/{taskID}/add-members", taskHandler.AddMembersToTask).Methods(http.MethodPost)
 	r.HandleFunc("/api/tasks/{taskID}/members", taskHandler.GetMembersForTaskHandler).Methods(http.MethodGet)
 	r.HandleFunc("/api/tasks/{taskID}/members/{memberID}", taskHandler.RemoveMemberFromTaskHandler).Methods(http.MethodDelete)
+	r.HandleFunc("/api/tasks/all", taskHandler.GetAllTasks).Methods("GET")                         // Prikaz svih zadataka
+	r.HandleFunc("/api/tasks/create", taskHandler.CreateTask).Methods("POST")                      // Kreiranje novog zadatka
+	r.HandleFunc("/api/tasks/project/{projectId}", taskHandler.GetTasksByProjectID).Methods("GET") // Zadatke po ID-u projekta
+	r.HandleFunc("/api/tasks/status", taskHandler.ChangeTaskStatus).Methods("POST")
 
 	// Svi ostali taskovi
 	r.HandleFunc("/api/tasks", func(w http.ResponseWriter, r *http.Request) {
@@ -82,10 +93,11 @@ func main() {
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		}
 	})
-
+	//corsRouter := enableCORS(r)
 	// Pokretanje servera
 	log.Println("Server running on http://localhost:8002")
 	if err := http.ListenAndServe(":8002", enableCORS(r)); err != nil {
 		log.Fatal(err)
 	}
+
 }

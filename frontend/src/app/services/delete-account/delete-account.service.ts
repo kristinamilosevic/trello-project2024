@@ -12,11 +12,14 @@ export class AccountService {
 
   deleteAccount(): Observable<any> {
     const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('No token found');
+    }
+
     const headers = new HttpHeaders({
-      'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     });
-  
+
     return this.http.delete(this.apiUrl, { headers });
   }
-}  
+}

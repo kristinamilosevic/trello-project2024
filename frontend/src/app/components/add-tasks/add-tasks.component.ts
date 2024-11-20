@@ -16,6 +16,7 @@ export class AddTasksComponent {
   taskForm: FormGroup;
   successMessage: string = '';
   errorMessage: string = '';
+  tasks: any[] = [];
 
   constructor(
     private fb: FormBuilder,
@@ -27,6 +28,7 @@ export class AddTasksComponent {
       projectId: [''],
       title: [''],
       description: [''],
+      dependsOn: [''],
       status: ['Pending']
     });
 
@@ -37,6 +39,34 @@ export class AddTasksComponent {
       }
     });
   }
+
+  ngOnInit(): void {
+    this.route.params.subscribe(params => {
+      const projectId = params['projectId'];
+      if (projectId) {
+        this.taskForm.get('projectId')?.setValue(projectId);
+        console.log('Project ID:', projectId);
+        this.loadProjectTasks(projectId); 
+      }
+    });
+  }
+  
+  
+  loadProjectTasks(projectId: string): void {
+    this.taskService.getTasksForProject(projectId).subscribe(
+      (tasks: any[] | null) => {
+        this.tasks = tasks || [];
+        console.log('Tasks fetched for project:', this.tasks); // Log za debug
+      },
+      (error: any) => {
+        console.error('Error fetching tasks:', error); // Log za grešku
+      }
+    );
+  }
+  
+
+  
+  
 
   toggleForm() {
     this.showForm = !this.showForm;
@@ -53,6 +83,10 @@ export class AddTasksComponent {
 
   onSubmit() {
     const taskData = this.taskForm.value;
+
+    if (taskData.dependsOn === '') {
+      taskData.dependsOn = null;
+    }
 
     if (!taskData.projectId || !taskData.title || !taskData.description) {
       this.errorMessage = 'Please fill in all required fields.';

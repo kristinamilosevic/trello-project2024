@@ -93,7 +93,7 @@ func main() {
 	r.HandleFunc("/api/projects/all", projectHandler.ListProjectsHandler).Methods("GET")
 	r.HandleFunc("/api/projects/{id}", projectHandler.GetProjectByIDHandler).Methods("GET")
 	r.HandleFunc("/api/projects/{id}/tasks", projectHandler.DisplayTasksForProjectHandler).Methods("GET")
-	r.HandleFunc("/api/projects/{username}", handlers.GetProjectsByUsername(projectService)).Methods("GET")
+	r.HandleFunc("/api/projects/{username}", handlers.GetProjectsByUsername(projectService)).Methods("GET", "OPTIONS")
 
 	corsRouter := enableCORS(r)
 

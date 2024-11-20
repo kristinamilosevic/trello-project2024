@@ -4,6 +4,8 @@
   align-items: center;
   justify-content: center;
   height: 100vh;
+  padding: 20px;
+  overflow: auto; 
 }
 
 .project-details {
@@ -30,7 +32,6 @@
   margin: 10px 0;
 }
 
-/* Stil za dugmad */
 .action-button {
   background-color: #85586F;
   color: #F8ECD1;
@@ -50,20 +51,22 @@
 .action-buttons {
   display: flex;
   justify-content: center;
+  flex-wrap: wrap;
   margin-top: 20px;
 }
 
 .action-buttons .action-button {
-  margin: 0 10px;
+  margin: 10px;
 }
 
-/* Stil za task listu */
 .task-list {
   background-color: #F1E5D1;
   border-radius: 8px;
   padding: 20px;
   margin-top: 20px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  overflow-y: auto; 
+  max-height: 300px; 
 }
 
 .task-list h3 {
