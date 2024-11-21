@@ -13,6 +13,7 @@ import { CommonModule } from '@angular/common';
 })
 export class ChangePasswordComponent {
   changePasswordForm: FormGroup;
+  errorMessage: string = '';
 
   constructor(private fb: FormBuilder, private userService: UserService, private router: Router) {
     this.changePasswordForm = this.fb.group({
@@ -25,26 +26,41 @@ export class ChangePasswordComponent {
   onSave() {
     if (this.changePasswordForm.valid) {
       const { oldPassword, newPassword, confirmPassword } = this.changePasswordForm.value;
-
+  
       if (newPassword !== confirmPassword) {
-        alert('Nova lozinka i potvrda lozinke se ne poklapaju!');
+        alert('The new password and the confirmation password do not match!');
         return;
       }
-
+  
       // Pozivanje UserService-a za promenu lozinke
       this.userService.changePassword(oldPassword, newPassword, confirmPassword).subscribe({
-        next: (response) => {
-          alert('Lozinka je uspešno promenjena!');
+        next: () => {
+          alert('Password changed successfully!');
           // Nakon uspešne promene lozinke, preusmeravamo korisnika na njegov profil
           this.router.navigate(['/users-profile']);
         },
         error: (error) => {
           console.error('Error:', error);
-          alert('Greška pri promeni lozinke: ' + (error.error?.message || error.message || 'Unknown error'));
-        }
+  
+          // Hendlovanje specifičnih poruka grešaka
+          if (error.status === 400 && error.error) {
+            // Proveri da li poruka sadrži specifične ključne reči
+            if (error.error.includes('old password is incorrect')) {
+              alert('The old password is incorrect. Please try again.');
+            } else if (error.error.includes('new password and confirmation do not match')) {
+              alert('The new password and confirmation password do not match!');
+            } else {
+              alert('Error changing password: ' + error.error);
+            }
+          } else {
+            alert('An unexpected error occurred. Please try again later.');
+          }
+        },
       });
     } else {
-      alert('Popunite sva polja ispravno!');
+      alert('Please fill out all fields correctly!');
     }
   }
+  
+  
 }
