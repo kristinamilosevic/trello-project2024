@@ -37,7 +37,7 @@ services:
       - "${PROJECTS_SERVICE_PORT}:${PROJECTS_SERVICE_INTERNAL_PORT}"
     environment:
       - MONGO_PROJECTS_URI=${MONGO_PROJECTS_URI}
-    depends_on:
+    depends_on: 
       - mongo-projects
     networks:
       - app-network

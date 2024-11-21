@@ -11,9 +11,23 @@ import (
 	"trello-project/microservices/projects-service/services"
 
 	"github.com/gorilla/mux"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
+
+func createProjectNameIndex(collection *mongo.Collection) error {
+	indexModel := mongo.IndexModel{
+		Keys:    bson.M{"name": 1},
+		Options: options.Index().SetUnique(true),
+	}
+	_, err := collection.Indexes().CreateOne(context.TODO(), indexModel)
+	if err != nil {
+		return fmt.Errorf("failed to create unique index on project name: %v", err)
+	}
+	fmt.Println("Unique index on project name created successfully")
+	return nil
+}
 
 func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -47,6 +61,13 @@ func main() {
 		log.Fatal("MongoDB connection error for mongo-users:", err)
 	}
 
+	// // Databases and collections
+	// projectsDB := client.Database("projects_db")
+	// projectsCollection := projectsDB.Collection("projects")
+
+	// tasksDB := client.Database("tasks_db")
+	// usersDB := client.Database("users_db")
+
 	projectsDB := projectsClient.Database("mongo-projects")
 	tasksDB := tasksClient.Database("mongo-tasks")
 	usersDB := usersClient.Database("mongo-users")
@@ -56,6 +77,11 @@ func main() {
 		TasksCollection:    tasksDB.Collection("tasks"),
 		UsersCollection:    usersDB.Collection("users"),
 	}
+	// Kreiranje jedinstvenog indeksa
+	if err := createProjectNameIndex(projectsDB.Collection("projects")); err != nil {
+		log.Fatal(err)
+	}
+
 	projectHandler := handlers.NewProjectHandler(projectService)
 
 	r := mux.NewRouter()
@@ -67,7 +93,7 @@ func main() {
 	r.HandleFunc("/api/projects/all", projectHandler.ListProjectsHandler).Methods("GET")
 	r.HandleFunc("/api/projects/{id}", projectHandler.GetProjectByIDHandler).Methods("GET")
 	r.HandleFunc("/api/projects/{id}/tasks", projectHandler.DisplayTasksForProjectHandler).Methods("GET")
-	r.HandleFunc("/api/projects/{username}", handlers.GetProjectsByUsername(projectService)).Methods("GET")
+	r.HandleFunc("/api/projects/{username}", handlers.GetProjectsByUsername(projectService)).Methods("GET", "OPTIONS")
 
 	corsRouter := enableCORS(r)
 

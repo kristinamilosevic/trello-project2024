@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -69,10 +70,13 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		project.ManagerID,
 	)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		if err.Error() == "project with the same name already exists" {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		http.Error(w, "Failed to create project", http.StatusInternalServerError)
 		return
 	}
-
 	// Return success response with created project
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(createdProject)
@@ -233,21 +237,25 @@ func (h *ProjectHandler) DisplayTasksForProjectHandler(w http.ResponseWriter, r 
 
 func GetProjectsByUsername(s *services.ProjectService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		vars := mux.Vars(r)          // Uzmi parametre iz URL-a
-		username := vars["username"] // Username je sada deo URL-a
+		vars := mux.Vars(r)
+		username := vars["username"]
 		if username == "" {
 			http.Error(w, "Username is required", http.StatusBadRequest)
 			return
 		}
 
+		log.Printf("Fetching projects for username: %s", username)
+
 		projects, err := s.GetProjectsByUsername(username)
 		if err != nil {
+			log.Printf("Error fetching projects for username %s: %v", username, err)
 			http.Error(w, fmt.Sprintf("Error fetching projects: %v", err), http.StatusInternalServerError)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(projects); err != nil {
+			log.Printf("Error encoding response for username %s: %v", username, err)
 			http.Error(w, fmt.Sprintf("Error encoding response: %v", err), http.StatusInternalServerError)
 		}
 	}

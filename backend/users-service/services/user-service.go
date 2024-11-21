@@ -115,98 +115,83 @@ func (s *UserService) CreateUser(user models.User) error {
 	return nil
 }
 
-// Funkcija za brisanje naloga koristeći JWT token
 func (s *UserService) DeleteAccount(username string) error {
-	fmt.Println("Brisanje naloga za:", username)
-
-	// Pronađi korisnika pre brisanja
-	var existingUser models.User
-	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&existingUser)
+	// Pronađi korisnika po username
+	var user models.User
+	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
 	if err != nil {
-		return errors.New("user not found")
+		return fmt.Errorf("user not found")
 	}
+	userID := user.ID
 
-	// Briši korisnika iz baze podataka
-	_, err = s.UserCollection.DeleteOne(context.Background(), bson.M{"username": username})
-	if err != nil {
-		return errors.New("failed to delete user")
-	}
+	// Provera zadataka za sve projekte korisnika
+	projectFilter := bson.M{"$or": []bson.M{
+		{"manager_id": userID},  // Ako je korisnik menadžer projekta
+		{"members._id": userID}, // Ako je korisnik član projekta
+	}}
 
-	fmt.Println("Korisnik uspešno obrisan:", username)
-	return nil
-}
-
-func (s *UserService) CanDeleteManagerAccountByUsername(username string) (bool, error) {
-	fmt.Println("Proveravam da li menadžer može biti obrisan po username...")
-
-	projectFilter := bson.M{"manager_username": username}
 	cursor, err := s.ProjectCollection.Find(context.Background(), projectFilter)
 	if err != nil {
-		return false, err
+		return fmt.Errorf("failed to fetch projects for user: %v", err)
 	}
 	defer cursor.Close(context.Background())
 
-	var projects []models.Project
-	if err := cursor.All(context.Background(), &projects); err != nil {
-		return false, err
-	}
+	for cursor.Next(context.Background()) {
+		var project models.Project
+		if err := cursor.Decode(&project); err != nil {
+			return fmt.Errorf("failed to decode project: %v", err)
+		}
 
-	for _, project := range projects {
+		// Provera zadataka na projektu
 		taskFilter := bson.M{
 			"projectId": project.ID.Hex(),
-			"status":    "in progress",
-		}
-		count, err := s.TaskCollection.CountDocuments(context.Background(), taskFilter)
-		if err != nil {
-			return false, err
+			"status":    bson.M{"$ne": "Completed"}, // Pronalaženje nezavršenih zadataka
 		}
 
-		// Ako postoji zadatak u toku, zabrani brisanje
+		count, err := s.TaskCollection.CountDocuments(context.Background(), taskFilter)
+		if err != nil {
+			return fmt.Errorf("failed to check tasks for project '%s': %v", project.ID.Hex(), err)
+		}
+
 		if count > 0 {
-			fmt.Println("Menadžer ima aktivne zadatke u toku.")
-			return false, nil
+			return fmt.Errorf("cannot delete account: project '%s' has unfinished tasks", project.ID.Hex())
 		}
 	}
 
-	return true, nil
-}
+	if err := cursor.Err(); err != nil {
+		return fmt.Errorf("error iterating through projects: %v", err)
+	}
 
-func (s *UserService) CanDeleteMemberAccountByUsername(username string) (bool, error) {
-	fmt.Println("Proveravam da li član može biti obrisan po username...")
-
-	// Pronađi sve projekte gde se pojavljuje član sa zadatim username-om
-	projectFilter := bson.M{"members.username": username}
-	cursor, err := s.ProjectCollection.Find(context.Background(), projectFilter)
+	// Ako nema nezavršenih zadataka, obriši nalog
+	_, err = s.UserCollection.DeleteOne(context.Background(), bson.M{"username": username})
 	if err != nil {
-		return false, err
-	}
-	defer cursor.Close(context.Background())
-
-	var projects []models.Project
-	if err := cursor.All(context.Background(), &projects); err != nil {
-		return false, err
+		return fmt.Errorf("failed to delete user: %v", err)
 	}
 
-	// Proveri sve projekte za zadatke u toku
-	for _, project := range projects {
-		taskFilter := bson.M{
-			"projectId":          project.ID.Hex(),
-			"assignees.username": username,
-			"status":             "in progress",
-		}
-		count, err := s.TaskCollection.CountDocuments(context.Background(), taskFilter)
-		if err != nil {
-			return false, err
-		}
-
-		// Ako postoji zadatak u toku, zabrani brisanje
-		if count > 0 {
-			fmt.Println("Član je dodeljen zadatku u toku.")
-			return false, nil
-		}
+	// Ukloni korisnika iz članova i menadžera
+	projectUpdateFilter := bson.M{"members._id": userID}
+	projectUpdate := bson.M{"$pull": bson.M{"members": bson.M{"_id": userID}}}
+	_, err = s.ProjectCollection.UpdateMany(context.Background(), projectUpdateFilter, projectUpdate)
+	if err != nil {
+		return fmt.Errorf("failed to remove user from projects: %v", err)
 	}
 
-	return true, nil
+	managerUpdateFilter := bson.M{"manager_id": userID}
+	managerUpdate := bson.M{"$unset": bson.M{"manager_id": ""}}
+	_, err = s.ProjectCollection.UpdateMany(context.Background(), managerUpdateFilter, managerUpdate)
+	if err != nil {
+		return fmt.Errorf("failed to remove user as manager: %v", err)
+	}
+
+	// Ukloni korisnika iz zadataka
+	taskUpdateFilter := bson.M{"assignees": userID}
+	taskUpdate := bson.M{"$pull": bson.M{"assignees": userID}}
+	_, err = s.TaskCollection.UpdateMany(context.Background(), taskUpdateFilter, taskUpdate)
+	if err != nil {
+		return fmt.Errorf("failed to remove user from tasks: %v", err)
+	}
+
+	return nil
 }
 
 // ResetPasswordByUsername resetuje lozinku korisnika i šalje novu lozinku na email
@@ -294,4 +279,42 @@ func (s *UserService) GetUserForCurrentSession(ctx context.Context, username str
 	user.Password = ""
 
 	return user, nil
+}
+
+// ChangePassword menja lozinku korisniku
+func (s *UserService) ChangePassword(username, oldPassword, newPassword, confirmPassword string) error {
+	// Proveri da li se nova lozinka poklapa sa potvrdom
+	if newPassword != confirmPassword {
+		return fmt.Errorf("new password and confirmation do not match")
+	}
+
+	// Pronađi korisnika u bazi
+	var user models.User
+	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+	if err != nil {
+		return fmt.Errorf("user not found")
+	}
+
+	// Proveri staru lozinku
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(oldPassword)); err != nil {
+		return fmt.Errorf("old password is incorrect")
+	}
+
+	// Hashuj novu lozinku
+	hashedNewPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash new password: %v", err)
+	}
+
+	// Ažuriraj lozinku u bazi
+	_, err = s.UserCollection.UpdateOne(
+		context.Background(),
+		bson.M{"username": username},
+		bson.M{"$set": bson.M{"password": string(hashedNewPassword)}},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update password: %v", err)
+	}
+
+	return nil
 }

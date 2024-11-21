@@ -59,6 +59,9 @@ export class AddProjectsComponent {
             }
           } else if (error.status === 401) {
             this.errorMessage = "Unauthorized: Manager ID is required.";
+          }else if (error.status === 409) {
+            // Obrada greške za duplirano ime projekta
+            this.errorMessage = "A project with this name already exists. Please choose a different name.";
           } else {
             this.errorMessage = "Failed to create project.";
           }

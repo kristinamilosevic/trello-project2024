@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 	"trello-project/microservices/projects-service/models"
 
@@ -29,6 +30,15 @@ func NewProjectService(projectsCollection, usersCollection, tasksCollection *mon
 
 // CreateProject creates a new project with the specified parameters.
 func (s *ProjectService) CreateProject(name string, description string, expectedEndDate time.Time, minMembers, maxMembers int, managerID primitive.ObjectID) (*models.Project, error) {
+	var existingProject models.Project
+	err := s.ProjectsCollection.FindOne(context.Background(), bson.M{"name": name}).Decode(&existingProject)
+	if err == nil {
+		return nil, errors.New("project with the same name already exists")
+	}
+
+	if err != mongo.ErrNoDocuments {
+		return nil, fmt.Errorf("database error: %v", err)
+	}
 	// Validate input parameters
 	if minMembers < 1 || maxMembers < minMembers {
 		return nil, fmt.Errorf("invalid member constraints: minMembers=%d, maxMembers=%d", minMembers, maxMembers)
@@ -252,11 +262,14 @@ func (s *ProjectService) GetTasksForProject(projectID primitive.ObjectID) ([]*mo
 func (s *ProjectService) GetProjectsByUsername(username string) ([]models.Project, error) {
 	var projects []models.Project
 
-	// Filtriraj projekte gde je username jedan od članova
-	filter := bson.M{"members": username}
+	// Filtriraj projekte gde "members.username" sadrži dati username
+	filter := bson.M{"members.username": username}
+
+	log.Printf("Executing MongoDB query with filter: %v", filter)
 
 	cursor, err := s.ProjectsCollection.Find(context.Background(), filter)
 	if err != nil {
+		log.Printf("Error fetching projects from MongoDB: %v", err)
 		return nil, fmt.Errorf("error fetching projects: %v", err)
 	}
 	defer cursor.Close(context.Background())
@@ -264,10 +277,17 @@ func (s *ProjectService) GetProjectsByUsername(username string) ([]models.Projec
 	for cursor.Next(context.Background()) {
 		var project models.Project
 		if err := cursor.Decode(&project); err != nil {
+			log.Printf("Error decoding project document: %v", err)
 			return nil, fmt.Errorf("error decoding project: %v", err)
 		}
 		projects = append(projects, project)
 	}
 
+	if err := cursor.Err(); err != nil {
+		log.Printf("Cursor error: %v", err)
+		return nil, fmt.Errorf("cursor error: %v", err)
+	}
+
+	log.Printf("Found %d projects for username %s", len(projects), username)
 	return projects, nil
 }

@@ -2,30 +2,43 @@ package main
 
 import (
 	"context"
+
 	"log"
 	"net/http"
 	"time"
 	"trello-project/microservices/tasks-service/handlers"
 	"trello-project/microservices/tasks-service/services"
 
+	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:4200")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		w.Header().Set("Access-Control-Allow-Origin", "*")                                // Možeš da postaviš i specifičnu domenu ako je potrebno
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS") // Omogućavamo DELETE metodu
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")     // Uključeni relevantni headeri
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+		// Ako je OPTIONS request, odgovori odmah
+		//if r.Method == "OPTIONS" {
+
+		//w.Header().Set("Access-Control-Allow-Origin", "http://localhost:4200")
+
 		if r.Method == http.MethodOptions {
+
 			w.WriteHeader(http.StatusOK)
 			return
 		}
+
 		next.ServeHTTP(w, r)
 	})
 }
 
 func main() {
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -48,14 +61,29 @@ func main() {
 		log.Fatal("MongoDB connection error for mongo-projects:", err)
 	}
 
+	// Kolekcije
 	tasksCollection := tasksClient.Database("mongo-tasks").Collection("tasks")
 	projectsCollection := projectsClient.Database("mongo-projects").Collection("projects")
 
+	// Servis i handler
 	taskService := services.NewTaskService(tasksCollection, projectsCollection)
 	taskHandler := handlers.NewTaskHandler(taskService)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/tasks", func(w http.ResponseWriter, r *http.Request) {
+	// Kreiranje mux routera
+	r := mux.NewRouter()
+
+	// Definisanje rute sa parametrima za zadatke i članove
+	r.HandleFunc("/api/tasks/{taskID}/project/{projectID}/available-members", taskHandler.GetAvailableMembersForTask).Methods(http.MethodGet)
+	r.HandleFunc("/api/tasks/{taskID}/add-members", taskHandler.AddMembersToTask).Methods(http.MethodPost)
+	r.HandleFunc("/api/tasks/{taskID}/members", taskHandler.GetMembersForTaskHandler).Methods(http.MethodGet)
+	r.HandleFunc("/api/tasks/{taskID}/members/{memberID}", taskHandler.RemoveMemberFromTaskHandler).Methods(http.MethodDelete)
+	r.HandleFunc("/api/tasks/all", taskHandler.GetAllTasks).Methods("GET")                         // Prikaz svih zadataka
+	r.HandleFunc("/api/tasks/create", taskHandler.CreateTask).Methods("POST")                      // Kreiranje novog zadatka
+	r.HandleFunc("/api/tasks/project/{projectId}", taskHandler.GetTasksByProjectID).Methods("GET") // Zadatke po ID-u projekta
+	r.HandleFunc("/api/tasks/status", taskHandler.ChangeTaskStatus).Methods("POST")
+
+	// Svi ostali taskovi
+	r.HandleFunc("/api/tasks", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
 			taskHandler.CreateTask(w, r)
@@ -65,9 +93,11 @@ func main() {
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		}
 	})
-
+	//corsRouter := enableCORS(r)
+	// Pokretanje servera
 	log.Println("Server running on http://localhost:8002")
-	if err := http.ListenAndServe(":8002", enableCORS(mux)); err != nil {
+	if err := http.ListenAndServe(":8002", enableCORS(r)); err != nil {
 		log.Fatal(err)
 	}
+
 }

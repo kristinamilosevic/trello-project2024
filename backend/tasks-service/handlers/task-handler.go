@@ -2,9 +2,14 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
+	"strings"
 	"trello-project/microservices/tasks-service/models"
 	"trello-project/microservices/tasks-service/services"
+
+	"github.com/gorilla/mux"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type TaskHandler struct {
@@ -22,7 +27,13 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	createdTask, err := h.service.CreateTask(task.ProjectID, task.Title, task.Description)
+	// Ako status nije naveden, postavi ga na "pending"
+	if task.Status == "" {
+		task.Status = models.StatusPending
+	}
+
+	// Sada prosleđujemo status prilikom kreiranja taska
+	createdTask, err := h.service.CreateTask(task.ProjectID, task.Title, task.Description, task.DependsOn, task.Status)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -41,4 +52,155 @@ func (h *TaskHandler) GetAllTasks(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(tasks)
+}
+func (h *TaskHandler) GetAvailableMembersForTask(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskID := vars["taskID"]
+	projectID := vars["projectID"]
+
+	log.Printf("Extracted taskID: %s, projectID: %s", taskID, projectID)
+
+	// Ako nedostaju taskID ili projectID, vraćamo grešku
+	if taskID == "" || projectID == "" {
+		http.Error(w, "taskID or projectID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Pozivamo servis za dobijanje dostupnih članova
+	members, err := h.service.GetAvailableMembersForTask(projectID, taskID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Vraćamo listu dostupnih članova
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(members)
+}
+
+func (h TaskHandler) GetTasksByProjectID(w http.ResponseWriter, r *http.Request) {
+	log.Println("Requested URL:", r.URL.Path)
+	projectID := strings.TrimPrefix(r.URL.Path, "/tasks/project/")
+	log.Println("Extracted Project ID:", projectID)
+
+	if projectID == "" || projectID == "/" {
+		http.Error(w, "Missing project ID", http.StatusBadRequest)
+		return
+	}
+
+	tasks, err := h.service.GetTasksByProject(projectID)
+	if err != nil {
+		log.Println("Error fetching tasks:", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(tasks)
+}
+func (h *TaskHandler) AddMembersToTask(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskID := vars["taskID"]
+
+	log.Printf("Task ID received: %s", taskID) // Dodaj log za Task ID
+
+	var members []models.Member
+	if err := json.NewDecoder(r.Body).Decode(&members); err != nil {
+		log.Printf("Error decoding request body: %v", err)
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Members received: %+v", members) // Dodaj log za članove
+
+	err := h.service.AddMembersToTask(taskID, members)
+	if err != nil {
+		log.Printf("Error adding members to task: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Println("Members added successfully")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"message": "Members added successfully"}`))
+}
+
+// GetMembersForTaskHandler dohvaća članove dodeljene određenom tasku
+func (h *TaskHandler) GetMembersForTaskHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskID := vars["taskID"]
+
+	// Konverzija taskID u ObjectID
+	taskObjectID, err := primitive.ObjectIDFromHex(taskID)
+	if err != nil {
+		log.Printf("Invalid task ID format: %v", err)
+		http.Error(w, "Invalid task ID format", http.StatusBadRequest)
+		return
+	}
+
+	// Pozovi servis za dobijanje članova zadatka
+	members, err := h.service.GetMembersForTask(taskObjectID)
+	if err != nil {
+		log.Printf("Error fetching members for task: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Vrati članove kao odgovor
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(members)
+}
+
+// promena statusa
+func (h TaskHandler) ChangeTaskStatus(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		TaskID   string            `json:"taskId"`
+		Status   models.TaskStatus `json:"status"`
+		Username string            `json:"username"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	taskObjectID, err := primitive.ObjectIDFromHex(request.TaskID)
+	if err != nil {
+		http.Error(w, "Invalid task ID format", http.StatusBadRequest)
+		return
+	}
+
+	updatedTask, err := h.service.ChangeTaskStatus(taskObjectID, request.Status)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(updatedTask)
+}
+
+// RemoveMemberFromTaskHandler uklanja člana sa zadatka
+func (h *TaskHandler) RemoveMemberFromTaskHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskID := vars["taskID"]
+	memberIDStr := vars["memberID"]
+
+	// Konvertuj memberID u ObjectID
+	memberID, err := primitive.ObjectIDFromHex(memberIDStr)
+	if err != nil {
+		http.Error(w, "Invalid member ID format", http.StatusBadRequest)
+		return
+	}
+
+	// Pozivamo servis za uklanjanje člana
+	err = h.service.RemoveMemberFromTask(taskID, memberID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Uspešno uklanjanje
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"message": "Member removed from task successfully"}`))
 }

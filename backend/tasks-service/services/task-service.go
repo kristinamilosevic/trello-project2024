@@ -3,6 +3,8 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
+	"strings"
 	"trello-project/microservices/tasks-service/models"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -22,10 +24,146 @@ func NewTaskService(tasksCollection, projectsCollection *mongo.Collection) *Task
 	}
 }
 
-func (s *TaskService) CreateTask(projectID string, title, description string) (*models.Task, error) {
+func (s *TaskService) GetAvailableMembersForTask(projectID, taskID string) ([]models.Member, error) {
+	// Pretvori projectID u ObjectID ako je potrebno
 	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid project ID format: %v", err)
+	}
+	// Dohvatanje članova projekta
+	var project struct {
+		Members []models.Member `bson:"members"`
+	}
+	// Pretvori taskID u ObjectID
+	taskObjectID, err := primitive.ObjectIDFromHex(taskID)
+	if err != nil {
+		log.Printf("Error converting taskID to ObjectID: %s, error: %v", taskID, err)
+		return nil, fmt.Errorf("invalid task ID format")
+	}
+
+	log.Printf("Searching for project with projectID: %s", projectID)
+
+	err = s.projectsCollection.FindOne(context.Background(), bson.M{"_id": projectObjectID}).Decode(&project)
+	if err != nil {
+		log.Printf("Failed to fetch project members for projectID: %s, error: %v", projectID, err)
+		return nil, fmt.Errorf("failed to fetch project members: %v", err)
+	}
+
+	// Dohvatanje članova zadatka
+	var task models.Task
+	err = s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskObjectID}).Decode(&task)
+	if err != nil {
+		log.Printf("Failed to fetch task members for taskID: %s, error: %v", taskID, err)
+		return nil, fmt.Errorf("failed to fetch task members: %v", err)
+	}
+
+	// Filtriraj članove koji nisu dodati na ovaj task
+	// Filtriraj članove koji nisu već dodeljeni ovom zadatku
+	availableMembers := []models.Member{}
+	for _, member := range project.Members {
+		if !containsMember(task.Members, member.ID) {
+			availableMembers = append(availableMembers, member)
+		}
+	}
+
+	return availableMembers, nil
+}
+
+func containsMember(members []models.Member, memberID primitive.ObjectID) bool {
+	for _, m := range members {
+		if m.ID == memberID {
+			return true
+		}
+	}
+	return false
+}
+
+// Dodaj članove zadatku
+func (s *TaskService) AddMembersToTask(taskID string, membersToAdd []models.Member) error {
+	// Konvertovanje taskID u ObjectID
+	taskObjectID, err := primitive.ObjectIDFromHex(taskID)
+	if err != nil {
+		return fmt.Errorf("invalid task ID format")
+	}
+
+	// Dohvati zadatak iz baze
+	var task models.Task
+	err = s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskObjectID}).Decode(&task)
+	if err != nil {
+		return fmt.Errorf("task not found: %v", err)
+	}
+
+	// Proveri i inicijalizuj polje `members` ako je `nil`
+	if task.Members == nil {
+		task.Members = []models.Member{}
+		_, err := s.tasksCollection.UpdateOne(
+			context.Background(),
+			bson.M{"_id": taskObjectID},
+			bson.M{"$set": bson.M{"members": task.Members}}, // Postavi `members` kao prazan niz
+		)
+		if err != nil {
+			return fmt.Errorf("failed to initialize members field: %v", err)
+		}
+	}
+
+	// Filtriraj nove članove koji nisu već dodeljeni
+	newMembers := []models.Member{}
+	for _, member := range membersToAdd {
+		alreadyAssigned := false
+		for _, assigned := range task.Members {
+			if assigned.ID == member.ID {
+				alreadyAssigned = true
+				break
+			}
+		}
+		if !alreadyAssigned {
+			newMembers = append(newMembers, member)
+		}
+	}
+
+	if len(newMembers) > 0 {
+		update := bson.M{"$addToSet": bson.M{"members": bson.M{"$each": newMembers}}}
+		_, err = s.tasksCollection.UpdateOne(context.Background(), bson.M{"_id": taskObjectID}, update)
+		if err != nil {
+			return fmt.Errorf("failed to add members to task: %v", err)
+		}
+	}
+
+	return nil
+}
+
+// GetMembersForTask vraća listu članova koji su dodati na određeni task
+func (s *TaskService) GetMembersForTask(taskID primitive.ObjectID) ([]models.Member, error) {
+	var task models.Task
+
+	// Dohvati zadatak iz baze koristeći ObjectID
+	err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskID}).Decode(&task)
+	if err != nil {
+		log.Printf("Task not found: %v", err)
+		return nil, fmt.Errorf("task not found")
+	}
+
+	// Vrati članove povezane sa zadatkom
+	return task.Members, nil
+}
+
+func (s *TaskService) CreateTask(projectID string, title, description string, dependsOn *primitive.ObjectID, status models.TaskStatus) (*models.Task, error) {
+
+	if dependsOn != nil {
+		var dependentTask models.Task
+		err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": *dependsOn}).Decode(&dependentTask)
+		if err != nil {
+			return nil, fmt.Errorf("dependent task not found")
+		}
+	}
+
+	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid project ID format: %v", err)
+	}
+
+	if status == "" {
+		status = models.StatusPending
 	}
 
 	task := &models.Task{
@@ -33,7 +171,9 @@ func (s *TaskService) CreateTask(projectID string, title, description string) (*
 		ProjectID:   projectID,
 		Title:       title,
 		Description: description,
-		Status:      "Pending",
+
+		Status:    status,
+		DependsOn: dependsOn,
 	}
 
 	// Unos u kolekciju zadataka
@@ -78,4 +218,129 @@ func (s *TaskService) GetAllTasks() ([]*models.Task, error) {
 	}
 
 	return tasks, nil
+}
+
+func (s *TaskService) RemoveMemberFromTask(taskID string, memberID primitive.ObjectID) error {
+	// Konvertovanje taskID u ObjectID
+	taskObjectID, err := primitive.ObjectIDFromHex(taskID)
+	if err != nil {
+		return fmt.Errorf("invalid task ID format")
+	}
+
+	// Dohvatanje zadatka iz baze
+	var task models.Task
+	err = s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskObjectID}).Decode(&task)
+	if err != nil {
+		return fmt.Errorf("task not found: %v", err)
+	}
+
+	// Provera da li je zadatak završeni (Completed)
+	if task.Status != "Completed" {
+		return fmt.Errorf("only members of completed tasks can be removed")
+	}
+
+	// Uklanjanje člana sa zadatka
+	memberFound := false
+	for i, member := range task.Members {
+		if member.ID == memberID {
+			// Uklanjanje člana sa zadatka
+			task.Members = append(task.Members[:i], task.Members[i+1:]...)
+			memberFound = true
+			break
+		}
+	}
+
+	if !memberFound {
+		return fmt.Errorf("member not found in the task")
+	}
+
+	// Ažuriranje zadatka u bazi
+	_, err = s.tasksCollection.UpdateOne(
+		context.Background(),
+		bson.M{"_id": taskObjectID},
+		bson.M{"$set": bson.M{"members": task.Members}},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update task: %v", err)
+	}
+
+	return nil
+}
+func (s *TaskService) GetTaskByID(taskID primitive.ObjectID) (*models.Task, error) {
+	var task models.Task
+	err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskID}).Decode(&task)
+	if err != nil {
+		return nil, err
+	}
+	return &task, nil
+}
+
+func (s *TaskService) GetTasksByProject(projectID string) ([]*models.Task, error) {
+	var tasks []*models.Task
+
+	filter := bson.M{"projectId": projectID}
+	cursor, err := s.tasksCollection.Find(context.Background(), filter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve tasks: %v", err)
+	}
+	defer cursor.Close(context.Background())
+
+	for cursor.Next(context.Background()) {
+		var task models.Task
+		if err := cursor.Decode(&task); err != nil {
+			return nil, fmt.Errorf("failed to decode task: %v", err)
+		}
+		tasks = append(tasks, &task)
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("cursor error: %v", err)
+	}
+
+	return tasks, nil
+}
+
+func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.TaskStatus) (*models.Task, error) {
+	var task models.Task
+	if err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskID}).Decode(&task); err != nil {
+		return nil, fmt.Errorf("task not found: %v", err)
+	}
+
+	fmt.Printf("Task '%s' current status: %s\n", task.Title, task.Status)
+	fmt.Printf("Attempting to change status to: %s\n", status)
+
+	//d
+	if task.DependsOn != nil {
+		fmt.Printf("Checking dependent task with ID: %v\n", task.DependsOn)
+
+		// Pronadji zavisni task u bazi
+		var dependentTask models.Task
+		if err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": task.DependsOn}).Decode(&dependentTask); err != nil {
+			return nil, fmt.Errorf("dependent task not found: %v", err)
+		}
+
+		fmt.Printf("Dependent task '%s' status: '%s'\n", dependentTask.Title, dependentTask.Status)
+		fmt.Printf("Expected status for comparison: '%s'\n", models.StatusCompleted)
+
+		// Ako zavisni task nije zavrsen promena statusa nije dozvoljena
+		if strings.TrimSpace(string(dependentTask.Status)) != string(models.StatusCompleted) && status != models.StatusPending {
+			return nil, fmt.Errorf("cannot change status because dependent task '%s' is not completed", dependentTask.Title)
+		}
+	}
+
+	// update status trenutnog taska
+	update := bson.M{"$set": bson.M{"status": status}}
+	_, err := s.tasksCollection.UpdateOne(context.Background(), bson.M{"_id": taskID}, update)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update task status: %v", err)
+	}
+
+	fmt.Printf("Status of task '%s' successfully updated to: %s\n", task.Title, status)
+
+	if err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskID}).Decode(&task); err != nil {
+		return nil, fmt.Errorf("failed to retrieve updated task: %v", err)
+	}
+
+	return &task, nil
+
 }

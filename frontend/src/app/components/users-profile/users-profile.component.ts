@@ -47,6 +47,6 @@ export class UsersProfileComponent implements OnInit {
   }
 
   changePassword() {
-    this.router.navigate(['/josNista']);
+    this.router.navigate(['/change-password']);
   }
 }

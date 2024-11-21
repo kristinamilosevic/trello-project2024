@@ -1,8 +1,11 @@
+/* Stil za glavni kontejner */
 .project-details-container {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100vh; 
+  height: 100vh;
+  padding: 20px;
+  overflow: auto; 
 }
 
 .project-details {
@@ -10,12 +13,13 @@
   border-radius: 12px;
   padding: 30px;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
-  max-width: 500px;
+  max-width: 600px;
   width: 100%;
   font-family: 'Arial', sans-serif;
-  text-align: center; 
+  text-align: center;
 }
 
+/* Stil za naslov */
 .project-details h2 {
   color: #2c3e50;
   margin-bottom: 20px;
@@ -47,19 +51,22 @@
 .action-buttons {
   display: flex;
   justify-content: center;
+  flex-wrap: wrap;
   margin-top: 20px;
 }
 
 .action-buttons .action-button {
-  margin: 0 10px;
+  margin: 10px;
 }
 
 .task-list {
-  background-color: #F1E5D1; 
+  background-color: #F1E5D1;
   border-radius: 8px;
   padding: 20px;
   margin-top: 20px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  overflow-y: auto; 
+  max-height: 300px; 
 }
 
 .task-list h3 {
@@ -69,11 +76,11 @@
 }
 
 .task-list ul {
-  list-style-type: none; 
+  list-style-type: none;
   padding-left: 0;
 }
 
-.task-list li {
+.task-card {
   background-color: #ffffff;
   border-radius: 6px;
   padding: 15px;
@@ -82,13 +89,49 @@
   text-align: left;
 }
 
-.task-list li strong {
+.task-card strong {
   font-size: 18px;
   color: #2c3e50;
 }
 
-.task-list li p {
+.task-card p {
   font-size: 14px;
   color: #4d4d4d;
   margin: 5px 0;
+}
+
+/* Stil za dugme "Add Member" unutar taska */
+.add-member-btn {
+  background-color: #85586F;
+  color: white;
+  border: none;
+  padding: 4px 8px;  /* Još manja veličina */
+  font-size: 10px;   /* Još manja veličina fonta */
+  border-radius: 3px;
+  cursor: pointer;
+  margin-top: 6px;
+  display: block;
+  width: 100%;
+}
+
+.add-member-btn:hover {
+  background-color: #DEB6AB;
+}
+
+/* Stil za dugme "View Members" unutar taska */
+.view-members-btn {
+  background-color: #85586F;
+  color: white;
+  border: none;
+  padding: 4px 8px;  /* Još manja veličina */
+  font-size: 10px;   /* Još manja veličina fonta */
+  border-radius: 3px;
+  cursor: pointer;
+  margin-top: 6px;
+  display: block;
+  width: 100%;
+}
+
+.view-members-btn:hover {
+  background-color: #DEB6AB;
 }
