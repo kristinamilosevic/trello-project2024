@@ -13,6 +13,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/exp/rand"
 )
 
@@ -43,6 +44,13 @@ func (s *UserService) RegisterUser(user models.User) error {
 	if err := s.UserCollection.FindOne(context.Background(), bson.M{"username": user.Username}).Decode(&existingUser); err == nil {
 		return fmt.Errorf("User with username already exists")
 	}
+
+	// Hashiranje lozinke pre nego što se sačuva
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("Failed to hash password: %v", err)
+	}
+	user.Password = string(hashedPassword)
 
 	// Generisanje verifikacionog koda i podešavanje vremena isteka
 	verificationCode := fmt.Sprintf("%06d", rand.Intn(1000000))
@@ -239,16 +247,21 @@ func (s UserService) LoginUser(username, password string) (models.User, string, 
 	if err != nil {
 		return models.User{}, "", errors.New("user not found")
 	}
-	if user.Password != password {
+
+	// Provera hashirane lozinke
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
 		return models.User{}, "", errors.New("invalid password")
 	}
+
 	if !user.IsActive {
 		return models.User{}, "", errors.New("user not active")
 	}
+
 	token, err := s.JWTService.GenerateAuthToken(user.Username, user.Role)
 	if err != nil {
 		return models.User{}, "", fmt.Errorf("failed to generate token: %v", err)
 	}
+
 	return user, token, nil
 }
 
