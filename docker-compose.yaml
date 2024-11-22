@@ -13,6 +13,35 @@ services:
     #     - users-service
     #   networks:
     #     - app-network
+  notifications-service:
+    build:
+      context: ./backend/notifications-service
+      dockerfile: Dockerfile
+    hostname: notifications-service
+    depends_on:
+      - cassandra
+    ports:
+      - "8004:8080"
+    environment:
+      - CASS_DB=cassandra
+      - CASSANDRA_CONTACT_POINTS=cassandra
+      - CASSANDRA_KEYSPACE=notifications
+      - CASSANDRA_PORT=9042
+    networks:
+      - app-network
+    restart: always
+  
+  cassandra:
+    image: cassandra:4.1
+    container_name: cassandra
+    hostname: cassandra
+    ports:
+      - "${CASSANDRA_PORT}:${CASSANDRA_PORT}"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=TrelloCluster
+      - CASSANDRA_NUM_TOKENS=256
+    networks:
+      - app-network
     
   tasks-service:
     build:
