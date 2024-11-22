@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 	"trello-project/microservices/tasks-service/models"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -320,11 +319,10 @@ func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.
 		}
 
 		fmt.Printf("Dependent task '%s' status: '%s'\n", dependentTask.Title, dependentTask.Status)
-		fmt.Printf("Expected status for comparison: '%s'\n", models.StatusCompleted)
 
-		// Ako zavisni task nije zavrsen promena statusa nije dozvoljena
-		if strings.TrimSpace(string(dependentTask.Status)) != string(models.StatusCompleted) && status != models.StatusPending {
-			return nil, fmt.Errorf("cannot change status because dependent task '%s' is not completed", dependentTask.Title)
+		//promenu statusa samo ako je zavisni task u statusu In progress ili Completed
+		if dependentTask.Status != models.StatusInProgress && dependentTask.Status != models.StatusCompleted && status != models.StatusPending {
+			return nil, fmt.Errorf("cannot change status because dependent task '%s' is not in progress or completed", dependentTask.Title)
 		}
 	}
 
