@@ -53,6 +53,8 @@ services:
       - MONGO_USERS_URI=${MONGO_USERS_URI}
     depends_on:
       - mongo-users
+    volumes:
+      - ./backend/blacklist.txt:/app/blacklist.txt
     networks:
       - app-network
 

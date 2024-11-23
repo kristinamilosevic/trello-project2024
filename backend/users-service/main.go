@@ -47,6 +47,12 @@ func main() {
 
 	fmt.Println("Successfully loaded variables from .env file")
 
+	// Učitaj black listu
+	blackList, err := services.LoadBlackList("/app/blacklist.txt")
+	if err != nil {
+		log.Fatalf("Failed to load black list: %v", err)
+	}
+
 	clientOptionsUsers := options.Client().ApplyURI("mongodb://mongo-users:27017")
 	clientUsers, err := mongo.Connect(context.TODO(), clientOptionsUsers)
 	if err != nil {
@@ -87,7 +93,7 @@ func main() {
 	jwtService := services.NewJWTService(secretKey)
 	userService := services.NewUserService(userCollection, projectCollection, taskCollection, jwtService)
 
-	userHandler := handlers.UserHandler{UserService: userService, JWTService: jwtService}
+	userHandler := handlers.UserHandler{UserService: userService, JWTService: jwtService, BlackList: blackList}
 	loginHandler := handlers.LoginHandler{UserService: userService}
 
 	mux := http.NewServeMux()

@@ -17,6 +17,7 @@ import (
 type UserHandler struct {
 	UserService *services.UserService
 	JWTService  *services.JWTService
+	BlackList   map[string]bool
 }
 
 // Register šalje email sa verifikacionim linkom, bez čuvanja korisnika u bazi
@@ -24,6 +25,17 @@ func (h *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var user models.User
 	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
 		http.Error(w, "Invalid request data", http.StatusBadRequest)
+		return
+	}
+
+	// Proveri da li je lozinka na black listi
+	if h.BlackList[user.Password] {
+		log.Println("Lozinka je na black listi:", user.Password)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"message": "Password is too common. Please choose a stronger one.",
+		})
 		return
 	}
 
