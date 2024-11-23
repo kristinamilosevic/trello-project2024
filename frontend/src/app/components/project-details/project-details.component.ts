@@ -36,7 +36,7 @@ export class ProjectDetailsComponent implements OnInit {
     } else {
       console.error('Project ID is undefined or null');
       alert('Invalid Project ID. Redirecting to the projects list.');
-      this.router.navigate(['/projects']); // Preusmeravanje na listu projekata
+      this.router.navigate(['/projects']);
     }
   }
 
@@ -119,6 +119,14 @@ export class ProjectDetailsComponent implements OnInit {
         return;
       }
     }
+
+    const payload = {
+      taskId: task.id,
+      status: task.status,
+      username: localStorage.getItem('username') 
+    };
+  
+    console.log('Payload za ažuriranje statusa taska:', payload);
 
     console.log(
       `Attempting to update status for task "${task.title}" to "${task.status}"`

@@ -299,7 +299,7 @@ func (s *TaskService) GetTasksByProject(projectID string) ([]*models.Task, error
 	return tasks, nil
 }
 
-func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.TaskStatus) (*models.Task, error) {
+func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.TaskStatus, username string) (*models.Task, error) {
 	var task models.Task
 	if err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskID}).Decode(&task); err != nil {
 		return nil, fmt.Errorf("task not found: %v", err)
@@ -307,6 +307,19 @@ func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.
 
 	fmt.Printf("Task '%s' current status: %s\n", task.Title, task.Status)
 	fmt.Printf("Attempting to change status to: %s\n", status)
+
+	var isAuthorized bool
+	for _, member := range task.Members {
+		fmt.Printf("Checking member: %s\n", member.Username)
+		if member.Username == username {
+			isAuthorized = true
+			break
+		}
+	}
+
+	if !isAuthorized {
+		return nil, fmt.Errorf("user '%s' is not authorized to change the status of this task because they are not assigned to it", username)
+	}
 
 	//d
 	if task.DependsOn != nil {

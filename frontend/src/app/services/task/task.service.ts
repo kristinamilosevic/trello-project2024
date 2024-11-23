@@ -33,20 +33,24 @@ export class TaskService {
   
   
   updateTaskStatus(taskId: string, status: string): Observable<any> {
-    const url = `${this.apiUrl}/status`;
-    const body = { taskId, status };
+    const url = `${this.apiUrl}/status`; 
+    const username = localStorage.getItem('username'); 
+    const body = { taskId, status, username }; 
+  
     console.log('Sending request to update status:', body);
+  
     return this.http.post(url, body, {
-      headers: new HttpHeaders({ 'Content-Type': 'application/json' })
+      headers: new HttpHeaders({ 'Content-Type': 'application/json' }) 
     });
   }
-  // Dohvati dostupne članove za dodavanje na task
+
+
   getAvailableMembers(projectId: string, taskId: string): Observable<any[]> {
     const apiUrl = `http://localhost:8002/api/tasks/${taskId}/project/${projectId}/available-members`;
     return this.http.get<any[]>(apiUrl);
   }
   
-  // Dodaj članove na zadatak
+
   addMembersToTask(taskId: string, members: any[]): Observable<any> {
     const apiUrl = `http://localhost:8002/api/tasks/${taskId}/add-members`;
     return this.http.post(apiUrl, members);
@@ -58,10 +62,10 @@ export class TaskService {
   }
 
   removeMemberFromTask(taskId: string, memberId: string): Observable<any> {
-    const apiUrl = `http://localhost:8002/api/tasks/${taskId}/members/${memberId}`;  // Ruta za uklanjanje člana
-    const token = localStorage.getItem('token');  // Uzimanje JWT tokena iz localStorage
+    const apiUrl = `http://localhost:8002/api/tasks/${taskId}/members/${memberId}`;  
+    const token = localStorage.getItem('token');  
 
-    const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`).set('Content-Type', 'application/json');  // Dodaj Content-Type ako je potrebno
+    const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`).set('Content-Type', 'application/json');  
 
     return this.http.delete(apiUrl, { headers });
 }
