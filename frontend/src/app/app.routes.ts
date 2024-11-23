@@ -17,6 +17,7 @@ import { ViewMembersTaskComponent } from './components/view-members-task/view-me
 import { UsersProjectsComponent } from './components/users-projects/users-projects.component';
 import { UsersProfileComponent } from './components/users-profile/users-profile.component';
 import { ChangePasswordComponent } from './components/change-password/change-password.component';
+import { NotificationsUserComponent } from './components/notifications-user/notifications-user.component';
 
 
 
@@ -83,6 +84,7 @@ export const routes: Routes = [
   { path: 'users-profile', component: UsersProfileComponent },
   { path: 'users-projects', component: UsersProjectsComponent },
   { path: 'delete-account', component: DeleteAccountComponent },
+  { path: 'notifications-user', component: NotificationsUserComponent },
 
   // Rute za dodavanje i uklanjanje članova
   { path: 'add-tasks', component: AddTasksComponent },
