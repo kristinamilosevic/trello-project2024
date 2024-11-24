@@ -28,6 +28,12 @@ func (h *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 1. Provera whitelist pravila za lozinku
+	if !ValidPassword(user.Password) {
+		http.Error(w, "Password does not meet the required criteria (e.g., at least 8 characters, one uppercase letter, one number, one special character).", http.StatusBadRequest)
+		return
+	}
+
 	// Proveri da li je lozinka na black listi
 	if h.BlackList[user.Password] {
 		log.Println("Lozinka je na black listi:", user.Password)
@@ -58,6 +64,44 @@ func (h *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Registration successful. Check your email for confirmation link."})
+}
+
+func ValidPassword(password string) bool {
+	if len(password) < 8 {
+		return false
+	}
+
+	hasUppercase := false
+	for _, char := range password {
+		if char >= 'A' && char <= 'Z' {
+			hasUppercase = true
+			break
+		}
+	}
+	if !hasUppercase {
+		return false
+	}
+
+	hasDigit := false
+	for _, char := range password {
+		if char >= '0' && char <= '9' {
+			hasDigit = true
+			break
+		}
+	}
+	if !hasDigit {
+		return false
+	}
+
+	specialChars := "!@#$%^&*.,"
+	hasSpecial := false
+	for _, char := range password {
+		if strings.ContainsRune(specialChars, char) {
+			hasSpecial = true
+			break
+		}
+	}
+	return hasSpecial
 }
 
 // ConfirmEmail kreira korisnika u bazi i redirektuje na login stranicu
