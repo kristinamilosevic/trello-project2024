@@ -91,7 +91,7 @@ func main() {
 	taskCollection := clientTasks.Database("mongo-tasks").Collection("tasks")
 
 	jwtService := services.NewJWTService(secretKey)
-	userService := services.NewUserService(userCollection, projectCollection, taskCollection, jwtService)
+	userService := services.NewUserService(userCollection, projectCollection, taskCollection, jwtService, blackList)
 
 	userHandler := handlers.UserHandler{UserService: userService, JWTService: jwtService, BlackList: blackList}
 	loginHandler := handlers.LoginHandler{UserService: userService}

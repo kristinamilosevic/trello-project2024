@@ -18,7 +18,10 @@ export class ChangePasswordComponent {
   constructor(private fb: FormBuilder, private userService: UserService, private router: Router) {
     this.changePasswordForm = this.fb.group({
       oldPassword: ['', [Validators.required]],
-      newPassword: ['', [Validators.required, Validators.minLength(6)]],
+      newPassword: ['', [
+          Validators.required,
+          Validators.minLength(8),
+          Validators.pattern('^(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*.,])[A-Za-z\\d!@#$%^&*.,]{8,}$')]],
       confirmPassword: ['', [Validators.required]]
     });
   }
@@ -36,31 +39,39 @@ export class ChangePasswordComponent {
       this.userService.changePassword(oldPassword, newPassword, confirmPassword).subscribe({
         next: () => {
           alert('Password changed successfully!');
-          // Nakon uspešne promene lozinke, preusmeravamo korisnika na njegov profil
           this.router.navigate(['/users-profile']);
         },
         error: (error) => {
           console.error('Error:', error);
   
-          // Hendlovanje specifičnih poruka grešaka
           if (error.status === 400 && error.error) {
             // Proveri da li poruka sadrži specifične ključne reči
-            if (error.error.includes('old password is incorrect')) {
+            const errorMessage = typeof error.error === 'string' ? error.error : error.error.message;
+
+          if (errorMessage) {
+            if (errorMessage.includes('old password is incorrect')) {
               alert('The old password is incorrect. Please try again.');
-            } else if (error.error.includes('new password and confirmation do not match')) {
+            } else if (errorMessage.includes('new password and confirmation do not match')) {
               alert('The new password and confirmation password do not match!');
+            } else if (errorMessage.includes('Password does not meet the required criteria')) {
+              alert('The new password does not meet the required criteria. Please try a stronger password!');
+            } else if (errorMessage.includes('Password is too common')) {
+              alert('The new password is too common. Please choose a more unique password!');
             } else {
-              alert('Error changing password: ' + error.error);
+              alert('Error changing password: ' + errorMessage);
             }
           } else {
             alert('An unexpected error occurred. Please try again later.');
           }
-        },
-      });
-    } else {
-      alert('Please fill out all fields correctly!');
-    }
+        } else {
+          alert('An unexpected error occurred. Please try again later.');
+        }
+      },
+    });
+  } else {
+    alert('Please fill out all fields correctly!');
   }
+}
   
   
 }
