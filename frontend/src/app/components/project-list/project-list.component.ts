@@ -14,6 +14,7 @@ import { CommonModule, DatePipe } from '@angular/common';
 })
 export class ProjectListComponent implements OnInit {
   projects: Project[] = [];
+  errorMessage: string = '';
 
   constructor(private projectService: ProjectService, private router: Router) {}
 
@@ -25,12 +26,13 @@ export class ProjectListComponent implements OnInit {
           ...project,
           expectedEndDate: new Date(project.expectedEndDate as string)
         })) : [];
+        this.errorMessage = ''; // Reset greške ako je sve prošlo kako treba
       },
       (error) => {
         console.error('Error fetching projects:', error);
+        this.errorMessage = error.message; // Postavi poruku o grešci
       }
     );
-    
   }
 
   // Navigacija na stranicu sa detaljima projekta

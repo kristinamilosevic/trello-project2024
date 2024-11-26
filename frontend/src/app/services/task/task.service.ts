@@ -33,13 +33,16 @@ export class TaskService {
   
   
   updateTaskStatus(taskId: string, status: string): Observable<any> {
-    const url = `${this.apiUrl}/status`;
-    const body = { taskId, status };
-    console.log('Sending request to update status:', body);
-    return this.http.post(url, body, {
-      headers: new HttpHeaders({ 'Content-Type': 'application/json' })
+    const token = localStorage.getItem('token');
+    const headers = new HttpHeaders({
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
     });
+  
+    const body = { taskId, status };
+    return this.http.post(`${this.apiUrl}/status`, body, { headers });
   }
+  
   // Dohvati dostupne članove za dodavanje na task
   getAvailableMembers(projectId: string, taskId: string): Observable<any[]> {
     const apiUrl = `http://localhost:8002/api/tasks/${taskId}/project/${projectId}/available-members`;

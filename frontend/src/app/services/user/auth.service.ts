@@ -76,6 +76,11 @@ export class AuthService {
   private hasToken(): boolean {
     return !!localStorage.getItem('token');
   }
+  hasRole(role: string): boolean {
+    const userRole = this.getUserRole();
+    return userRole === role;
+  }
+  
 
   getUserProfile(): Observable<any> {
     const token = this.getToken();
