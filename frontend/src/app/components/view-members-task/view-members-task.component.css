@@ -29,4 +29,19 @@
     color: #999;
     font-style: italic;
   }
+  .delete-button {
+    background-color: #85586F;
+    color: #F8ECD1;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s ease;
+  }
   
+  .delete-button:hover {
+    background-color: #DEB6AB;
+    color: #85586F;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  }

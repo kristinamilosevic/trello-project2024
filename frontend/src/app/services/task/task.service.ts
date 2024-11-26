@@ -44,7 +44,6 @@ export class TaskService {
     });
   }
 
-
   getAvailableMembers(projectId: string, taskId: string): Observable<any[]> {
     const apiUrl = `http://localhost:8002/api/tasks/${taskId}/project/${projectId}/available-members`;
     return this.http.get<any[]>(apiUrl);

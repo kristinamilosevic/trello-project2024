@@ -1,10 +1,12 @@
 import { Component, OnInit } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
 import { ProjectService } from '../../services/project/project.service';
 import { Project } from '../../models/project/project';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TaskService } from '../../services/task/task.service';
+import { AuthService } from '../../services/user/auth.service';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-project-details',
@@ -18,27 +20,51 @@ export class ProjectDetailsComponent implements OnInit {
   project: Project | null = null;
   tasks: any[] = [];
   isLoading = false;
+  isManager: boolean = false;
+  isMember: boolean = false;
+  isAuthenticated: boolean = false;
+  private subscription: Subscription = new Subscription();
+
 
   constructor(
     private route: ActivatedRoute,
     private projectService: ProjectService,
     private datePipe: DatePipe,
     private router: Router,
-    private taskService: TaskService
+    private taskService: TaskService,
+    private authService: AuthService
   ) {}
 
   ngOnInit(): void {
-    const projectId = this.route.snapshot.paramMap.get('id');
+    this.checkUserRole(); // Initial role check
+    this.listenToRouterEvents(); // Update roles on route change
 
+    const projectId = this.route.snapshot.paramMap.get('id');
     if (projectId) {
-      console.log('Project ID fetched:', projectId);
       this.loadProjectAndTasks(projectId);
     } else {
-      console.error('Project ID is undefined or null');
       alert('Invalid Project ID. Redirecting to the projects list.');
-      this.router.navigate(['/projects']);
+      //this.router.navigate(['/projects']);
+      this.router.navigate(['/projects-list']);
     }
   }
+  checkUserRole(): void {
+    const role = this.authService.getUserRole();
+    this.isAuthenticated = !!role;
+    this.isManager = role === 'manager';
+    this.isMember = role === 'member';
+  }
+
+  listenToRouterEvents(): void {
+    this.subscription.add(
+      this.router.events.subscribe((event) => {
+        if (event instanceof NavigationEnd) {
+          this.checkUserRole();
+        }
+      })
+    );
+  }
+  
 
   loadProjectAndTasks(projectId: string): void {
     this.isLoading = true;
@@ -171,5 +197,8 @@ export class ProjectDetailsComponent implements OnInit {
     if (projectId) {
       this.router.navigate([`/project/${projectId}/add-members`]);
     }
+  }
+  ngOnDestroy(): void {
+    this.subscription.unsubscribe(); // Clean up subscriptions
   }
 }

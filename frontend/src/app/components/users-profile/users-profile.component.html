@@ -12,7 +12,7 @@
         <p><strong>Role:</strong> <span>{{ userProfile.role }}</span></p>
         <p><strong>Account Status:</strong> <span>{{ userProfile.isActive ? 'Active' : 'Inactive' }}</span></p>
         <div class="action-buttons">
-            <a (click)="deleteAccount()" class="action-button">Delete account</a>
+          <a *ngIf="isManager || isMember" (click)="deleteAccount()" class="action-button delete">Delete account</a>
             <a (click)="changePassword()" class="action-button">Change password</a>
         </div>
       </div>

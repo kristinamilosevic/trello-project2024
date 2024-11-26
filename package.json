@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "cassandra-driver": "^4.7.2",
     "jwt-decode": "^4.0.0"
   }
 }
