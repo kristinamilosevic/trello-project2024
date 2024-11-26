@@ -44,12 +44,20 @@
     transition: color 0.3s;
     padding: 0.5rem 1rem;
     border: none;
-    background-color: #85586F; 
     border-radius: 5px;
     cursor: pointer;
 }
 
 .nav-links li a:hover {
+    color: #F8ECD1;
+}
+
+.nav-links li a:not(:has(img)) {
+    color: #F8ECD1;
+    background-color: #85586F;
+}
+
+.nav-links li a:not(:has(img)):hover {
     background-color: #AC7D88;
     color: #F8ECD1;
 }
