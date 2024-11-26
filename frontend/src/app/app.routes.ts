@@ -20,6 +20,7 @@ import { ChangePasswordComponent } from './components/change-password/change-pas
 import { AuthGuard } from './guards/auth.guard';
 import { RoleGuard } from './guards/role.guard';
 
+import { NotificationsUserComponent } from './components/notifications-user/notifications-user.component';
 
 
 
@@ -88,10 +89,32 @@ export const routes: Routes = [
  { path: 'remove-members', component: RemoveMembersComponent, canActivate: [RoleGuard], data: { roles: ['manager'] } },
  { path: 'remove-members/:id', component: RemoveMembersComponent, canActivate: [RoleGuard], data: { roles: ['manager'] } },
  { path: 'change-password', component: ChangePasswordComponent, canActivate: [RoleGuard], data: { roles: ['manager', 'member'] } },
-
-
+ { path: 'notifications-user', component: NotificationsUserComponent },
  // Fallback ruta za neprijavljene korisnike
  { path: '**', redirectTo: '/login' },
+
+  // // Rute za korisnike
+  // { path: 'register', component: RegisterComponent },
+  // { path: 'login', component: LoginComponent },
+  // { path: 'magic-login', component: LoginComponent },
+  // { path: 'users-profile', component: UsersProfileComponent },
+  // { path: 'users-projects', component: UsersProjectsComponent },
+  // { path: 'delete-account', component: DeleteAccountComponent },
+  // { path: 'notifications-user', component: NotificationsUserComponent },
+
+  // // Rute za dodavanje i uklanjanje članova
+  // { path: 'add-tasks', component: AddTasksComponent },
+  // { path: 'add-projects', component: AddProjectsComponent },
+  // { path: 'remove-members', component: RemoveMembersComponent },
+  // { path: 'remove-members/:id', component: RemoveMembersComponent },
+
+  // // Ostale rute
+  // { path: 'verify', component: VerifyCodeComponent },
+  // { path: 'magic-login', component: LoginComponent },
+  // { path: 'users-profile', component: UsersProfileComponent },
+  // { path: 'change-password',component:ChangePasswordComponent },
+  // { path: '**', redirectTo: '/projects-list' },
+
 ];
 
 @NgModule({

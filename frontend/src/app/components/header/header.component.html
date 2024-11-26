@@ -13,8 +13,8 @@
   
         <!-- Profil korisnika, vidljivo samo ako je korisnik ulogovan (član ili menadžer) -->
         <li *ngIf="isAuthenticated">
-          <a routerLink="/users-profile">
-            <img src="assets/profile.png" alt="User Profile Picture" class="profile-image">
+          <a routerLink="/notifications-user"><img src="assets/notification.png" alt="User Profile Picture" class="profile-image"></a>
+          <a routerLink="/users-profile"><img src="assets/profile.png" alt="User Profile Picture" class="profile-image">
           </a>
         </li>
   
