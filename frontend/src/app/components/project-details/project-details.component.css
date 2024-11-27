@@ -135,3 +135,43 @@
 .view-members-btn:hover {
   background-color: #DEB6AB;
 }
+/* Kontejner za status */
+.status-container {
+  margin-top: 10px;
+  text-align: left; /* Poravnanje teksta na levo za labelu */
+}
+
+/* Stil za labelu statusa */
+.status-label {
+  font-size: 14px;
+  font-weight: bold;
+  color: #2c3e50;
+  display: block;
+  margin-bottom: 6px;
+}
+
+/* Dropdown stil */
+.status-dropdown {
+  width: 100%;
+  background-color: #F8ECD1; 
+  color: #2c3e50;
+  border: 1px solid #85586F; 
+  border-radius: 6px; 
+  padding: 10px; 
+  font-size: 14px; 
+  cursor: pointer; 
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); 
+  transition: all 0.3s ease; 
+}
+
+/* Hover efekat */
+.status-dropdown:hover {
+  background-color: #DEB6AB; 
+  border-color: #4d4d4d;
+}
+
+/* Fokus efekat */
+.status-dropdown:focus {
+  outline: none;
+  box-shadow: 0 0 8px rgba(133, 88, 111, 0.6); 
+}

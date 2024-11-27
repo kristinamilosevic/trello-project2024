@@ -1,7 +1,10 @@
 import { Component, OnInit } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { TaskService } from '../../services/task/task.service';
+import { AuthService } from '../../services/user/auth.service';
+import { Subscription } from 'rxjs';
+
 
 @Component({
   selector: 'app-view-members-task',
@@ -15,13 +18,21 @@ export class ViewMembersTaskComponent implements OnInit {
   projectId: string | null = null;
   members: any[] = [];
   errorMessage: string | null = null;
+  isManager: boolean = false;
+  private subscription: Subscription = new Subscription();
 
   constructor(
     private route: ActivatedRoute,
-    private taskService: TaskService
+    private taskService: TaskService,
+    private authService: AuthService,
+    private router: Router
   ) {}
 
   ngOnInit(): void {
+    this.checkUserRole(); 
+    this.listenToRouterEvents(); 
+
+
     this.projectId = this.route.snapshot.paramMap.get('projectId');
     this.taskId = this.route.snapshot.paramMap.get('taskId');
     
@@ -35,7 +46,20 @@ export class ViewMembersTaskComponent implements OnInit {
       console.error(this.errorMessage);
     }
   }
-  
+  checkUserRole(): void {
+    const role = this.authService.getUserRole();
+    this.isManager = role === 'manager';
+  }
+
+  listenToRouterEvents(): void {
+    this.subscription.add(
+      this.router.events.subscribe((event) => {
+        if (event instanceof NavigationEnd) {
+          this.checkUserRole(); // Update role on route change
+        }
+      })
+    );
+  }
 
   loadTaskMembers(): void {
     if (this.taskId) {
@@ -73,6 +97,9 @@ export class ViewMembersTaskComponent implements OnInit {
   }
   
   
+  ngOnDestroy(): void {
+    this.subscription.unsubscribe();
+  }
 }
 
 

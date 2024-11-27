@@ -17,6 +17,7 @@ import (
 type UserHandler struct {
 	UserService *services.UserService
 	JWTService  *services.JWTService
+	BlackList   map[string]bool
 }
 
 // Register šalje email sa verifikacionim linkom, bez čuvanja korisnika u bazi
@@ -24,6 +25,17 @@ func (h *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var user models.User
 	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
 		http.Error(w, "Invalid request data", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.UserService.ValidatePassword(user.Password); err != nil {
+		log.Println("Password validation failed:", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"message": "Password is too common. Please choose a stronger one.",
+		})
+
 		return
 	}
 
@@ -284,6 +296,18 @@ func (h *UserHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	claims, err := h.JWTService.ValidateToken(tokenString)
 	if err != nil {
 		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	// Provera whitelist i blacklist pravila za novu lozinku
+	if err := h.UserService.ValidatePassword(requestData.NewPassword); err != nil {
+		log.Println("Password validation failed:", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"message": "Password is too common. Please choose a stronger one.",
+		})
+
 		return
 	}
 
