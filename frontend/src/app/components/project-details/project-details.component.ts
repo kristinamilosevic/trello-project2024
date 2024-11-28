@@ -44,6 +44,7 @@ export class ProjectDetailsComponent implements OnInit {
       this.loadProjectAndTasks(projectId);
     } else {
       alert('Invalid Project ID. Redirecting to the projects list.');
+      //this.router.navigate(['/projects']);
       this.router.navigate(['/projects-list']);
     }
   }
@@ -144,6 +145,14 @@ export class ProjectDetailsComponent implements OnInit {
         return;
       }
     }
+
+    const payload = {
+      taskId: task.id,
+      status: task.status,
+      username: localStorage.getItem('username') 
+    };
+  
+    console.log('Payload za ažuriranje statusa taska:', payload);
 
     console.log(
       `Attempting to update status for task "${task.title}" to "${task.status}"`

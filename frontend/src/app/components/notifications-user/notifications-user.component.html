@@ -9,7 +9,7 @@
       <li *ngFor="let notification of notifications" [class.read]="notification.is_read">
         <p>{{ notification.message }}</p>
         <small>{{ notification.created_at | date: 'short' }}</small>
-        <button *ngIf="!notification.is_read" (click)="markAsRead(notification.id)">Mark as Read</button>
+        
       </li>
     </ul>
   

@@ -20,7 +20,7 @@ export class RegisterComponent {
       name: ['', Validators.required],
       lastName: ['', Validators.required],
       username: ['', [Validators.required, Validators.minLength(3)]],
-      password: ['', [Validators.required, Validators.minLength(6)]],
+      password: ['', [Validators.required, Validators.minLength(8), Validators.pattern('^(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*.,])[A-Za-z\\d!@#$%^&*.,]{8,}$')]],
       email: ['', [Validators.required, Validators.email]],
       role: ['', Validators.required]
     });
@@ -38,8 +38,10 @@ export class RegisterComponent {
         },
         error: (error) => {
           console.error('Error during registration:', error);
-          if (error.status === 409) {
-            // Ako je status kod 409, znači da korisničko ime već postoji
+          // Proveri da li postoji poruka u odgovoru
+          if (error.error && error.error.message) {
+            alert(error.error.message); // Prikaz poruke greške sa backend-a
+          } else if (error.status === 409) {
             alert('Username already exists. Please choose a different one.');
           } else {
             alert('Registration failed. Please try again.');
