@@ -64,6 +64,12 @@
           Please select a role.
         </div>
       </div>
+
+      <re-captcha
+      (resolved)="onCaptchaResolved($event)"
+      siteKey="6LcJ2YwqAAAAAKDFfflxV4Mo7k1H_lszQ64GN6a3">
+  </re-captcha>
+  
   
       <button type="submit">Register</button>
       <a class="forgot-link" (click)="openLogin()">Already have an account? Login here.</a>
