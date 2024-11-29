@@ -2,6 +2,7 @@
     "/api":{
     "target": "https://api-gateway:443",
     "secure": false,
-    "changeOrigin": true
+    "changeOrigin": true,
+    "logLevel": "debug"
   }
 }
