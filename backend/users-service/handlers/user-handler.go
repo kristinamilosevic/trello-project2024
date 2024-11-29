@@ -151,7 +151,7 @@ func (h *UserHandler) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
 	delete(h.UserService.TokenCache, email)
 
 	// Redirektovanje korisnika na login stranicu
-	w.Header().Set("Location", "http://localhost:4200/login")
+	w.Header().Set("Location", "https://localhost:4200/login")
 	w.WriteHeader(http.StatusFound)
 }
 

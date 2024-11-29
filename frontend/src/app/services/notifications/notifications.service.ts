@@ -6,13 +6,14 @@ import { Observable } from 'rxjs';
   providedIn: 'root'
 })
 export class NotificationService {
-  private apiUrl = 'http://localhost:8004/api/notifications';
+  private apiUrl = 'http://localhost:8000/api/notifications';
+  private getUrl = 'http://localhost:8000/api/notifications/all';
 
   constructor(private http: HttpClient) {}
 
   // Dohvati notifikacije korisnika
   getNotifications(username: string): Observable<any[]> {
-    return this.http.get<any[]>(`${this.apiUrl}?username=${username}`);
+    return this.http.get<any[]>(`${this.getUrl}?username=${username}`);
   }
 
   // Označi notifikaciju kao pročitanu
