@@ -225,7 +225,6 @@ func (s *ProjectService) GetProjectByID(projectID string) (*models.Project, erro
 		}
 		return nil, fmt.Errorf("error fetching project: %v", err)
 	}
-
 	return &project, nil
 }
 
@@ -261,8 +260,6 @@ func (s *ProjectService) GetTasksForProject(projectID primitive.ObjectID) ([]*mo
 
 func (s *ProjectService) GetProjectsByUsername(username string) ([]models.Project, error) {
 	var projects []models.Project
-
-	// Filtriraj projekte gde "members.username" sadrži dati username
 	filter := bson.M{"members.username": username}
 
 	log.Printf("Executing MongoDB query with filter: %v", filter)
