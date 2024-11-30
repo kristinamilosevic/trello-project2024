@@ -33,7 +33,8 @@ export class RegisterComponent {
           console.log('Response from server:', response);
           alert('Registration successful. Check your email for the verification code.');
           // Preusmeri korisnika na verifikacionu stranicu i pošalji username kao parametar
-          this.router.navigate(['/verify'], { queryParams: { username: this.registerForm.value.username } });
+          this.router.navigate(['/verify']);
+          localStorage.setItem('username', this.registerForm.value.username);
           this.registerForm.reset();
         },
         error: (error) => {

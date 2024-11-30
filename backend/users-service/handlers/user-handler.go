@@ -138,6 +138,7 @@ func (h *UserHandler) VerifyCode(w http.ResponseWriter, r *http.Request) {
 		Code     string `json:"code"`
 	}
 
+	// Dekodiranje podataka iz tela zahteva
 	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
 		http.Error(w, "Invalid request data", http.StatusBadRequest)
 		log.Println("Greška pri dekodiranju zahteva:", err)
