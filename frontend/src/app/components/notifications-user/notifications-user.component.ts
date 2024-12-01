@@ -27,7 +27,7 @@ export class NotificationsUserComponent implements OnInit {
         this.notifications = data;
       },
       error: (err) => {
-        this.errorMessage = 'Failed to load notifications.';
+        this.errorMessage = 'You do not have any notifications.';
         console.error(err);
       }
     });
