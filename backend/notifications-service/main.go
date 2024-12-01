@@ -49,7 +49,7 @@ func main() {
 	// Postavljanje ruter-a sa prefiksom /api/notifications
 	router := mux.NewRouter()
 	router.HandleFunc("/api/notifications/add", handler.CreateNotification).Methods("POST")
-	router.HandleFunc("/api/notifications/all", handler.GetNotificationsByUsername).Methods("GET")
+	router.HandleFunc("/api/notifications/{username}", handler.GetNotificationsByUsername).Methods("GET")
 	router.HandleFunc("/api/notifications/read", handler.MarkNotificationAsRead).Methods("PUT")
 	router.HandleFunc("/api/notifications/delete", handler.DeleteNotification).Methods("DELETE")
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
