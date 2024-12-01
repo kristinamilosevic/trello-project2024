@@ -9,8 +9,10 @@ import (
 	"time"
 	"trello-project/microservices/projects-service/models"
 	"trello-project/microservices/projects-service/services"
+	"trello-project/microservices/projects-service/utils"
 
 	"github.com/gorilla/mux"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -18,35 +20,46 @@ type ProjectHandler struct {
 	Service *services.ProjectService
 }
 
-// NewProjectHandler creates a new ProjectHandler
 func NewProjectHandler(service *services.ProjectService) *ProjectHandler {
 	return &ProjectHandler{Service: service}
 }
 
-// CreateProject handles the creation of a new project
 func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
+	tokenString := r.Header.Get("Authorization")
+	if tokenString == "" {
+		http.Error(w, "Authorization token required", http.StatusUnauthorized)
+		return
+	}
+
+	// Ekstrakcija username-a iz tokena
+	username, err := utils.ExtractManagerUsernameFromToken(strings.TrimPrefix(tokenString, "Bearer "))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	// Pronađi ID menadžera u kolekciji korisnika koristeći username
+	var manager struct {
+		ID primitive.ObjectID `bson:"_id"`
+	}
+
+	err = h.Service.UsersCollection.FindOne(r.Context(), bson.M{"username": username}).Decode(&manager)
+	if err != nil {
+		http.Error(w, "Manager not found", http.StatusUnauthorized)
+		return
+	}
+
+	managerID := manager.ID
+
+	// Postavi ID menadžera u projekat
 	var project models.Project
 	if err := json.NewDecoder(r.Body).Decode(&project); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
-	// Set the manager as the current user based on the "Manager-ID" header
-	managerID := r.Header.Get("Manager-ID")
-	if managerID == "" {
-		http.Error(w, "Manager ID not provided", http.StatusUnauthorized)
-		return
-	}
+	project.ManagerID = managerID
 
-	// Convert Manager-ID to ObjectID
-	managerObjectID, err := primitive.ObjectIDFromHex(managerID)
-	if err != nil {
-		http.Error(w, "Invalid Manager ID", http.StatusBadRequest)
-		return
-	}
-	project.ManagerID = managerObjectID
-
-	// Validate project attributes
 	if project.Name == "" {
 		http.Error(w, "Project name is required", http.StatusBadRequest)
 		return
@@ -60,7 +73,6 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create project using the service
 	createdProject, err := h.Service.CreateProject(
 		project.Name,
 		project.Description,
@@ -77,12 +89,11 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to create project", http.StatusInternalServerError)
 		return
 	}
-	// Return success response with created project
+
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(createdProject)
 }
 
-// AddMemberToProjectHandler adds multiple members to a project
 func (h *ProjectHandler) AddMemberToProjectHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	projectID, err := primitive.ObjectIDFromHex(vars["id"])
