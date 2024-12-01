@@ -45,6 +45,11 @@ func main() {
 		log.Fatal("JWT_SECRET is not set in the environment variables")
 	}
 
+	recaptchaSecret := os.Getenv("SECRET_KEY")
+	if recaptchaSecret == "" {
+		log.Fatal("SECRET_KEY is not set in the environment variables")
+	}
+
 	fmt.Println("Successfully loaded variables from .env file")
 
 	// Učitaj black listu
