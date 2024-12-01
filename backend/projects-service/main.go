@@ -61,13 +61,6 @@ func main() {
 		log.Fatal("MongoDB connection error for mongo-users:", err)
 	}
 
-	// // Databases and collections
-	// projectsDB := client.Database("projects_db")
-	// projectsCollection := projectsDB.Collection("projects")
-
-	// tasksDB := client.Database("tasks_db")
-	// usersDB := client.Database("users_db")
-
 	projectsDB := projectsClient.Database("mongo-projects")
 	tasksDB := tasksClient.Database("mongo-tasks")
 	usersDB := usersClient.Database("mongo-users")
@@ -77,6 +70,7 @@ func main() {
 		TasksCollection:    tasksDB.Collection("tasks"),
 		UsersCollection:    usersDB.Collection("users"),
 	}
+
 	// Kreiranje jedinstvenog indeksa
 	if err := createProjectNameIndex(projectsDB.Collection("projects")); err != nil {
 		log.Fatal(err)
@@ -91,10 +85,9 @@ func main() {
 	r.HandleFunc("/api/projects/{id}/members", projectHandler.AddMemberToProjectHandler).Methods("POST")
 	r.HandleFunc("/api/projects/users", projectHandler.GetAllUsersHandler).Methods("GET")
 	r.HandleFunc("/api/projects/all", projectHandler.ListProjectsHandler).Methods("GET")
+	r.HandleFunc("/api/projects/username/{username}", handlers.GetProjectsByUsername(projectService)).Methods("GET", "OPTIONS")
 	r.HandleFunc("/api/projects/{id}", projectHandler.GetProjectByIDHandler).Methods("GET")
 	r.HandleFunc("/api/projects/{id}/tasks", projectHandler.DisplayTasksForProjectHandler).Methods("GET")
-	r.HandleFunc("/api/projects/{username}", handlers.GetProjectsByUsername(projectService)).Methods("GET", "OPTIONS")
-
 	corsRouter := enableCORS(r)
 
 	fmt.Println("Projects service server running on http://localhost:8003")
@@ -103,7 +96,7 @@ func main() {
 
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:4200")
+		w.Header().Set("Access-Control-Allow-Origin", "https://localhost:4200")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Manager-ID")
 

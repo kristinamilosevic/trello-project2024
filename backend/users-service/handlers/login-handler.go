@@ -186,7 +186,7 @@ func (h *LoginHandler) MagicLink(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Generated token: %s", token) // Logovanje generisanog tokena
 
 	// Kreiraj magic link koji se šalje korisniku
-	magicLink := fmt.Sprintf("http://localhost:4200/magic-login?token=%s", token)
+	magicLink := fmt.Sprintf("https://localhost:4200/magic-login?token=%s", token)
 	log.Printf("Generated magic link: %s", magicLink) // Logovanje magic linka
 
 	// Slanje email-a sa magic link-om

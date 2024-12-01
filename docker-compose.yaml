@@ -18,10 +18,9 @@ services:
       context: ./backend/notifications-service
       dockerfile: Dockerfile
     hostname: notifications-service
-    depends_on:
-      - cassandra
+
     ports:
-      - "8004:8080"
+      - "8004:8004"
     environment:
       - CASS_DB=cassandra
       - CASSANDRA_CONTACT_POINTS=cassandra

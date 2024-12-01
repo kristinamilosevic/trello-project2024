@@ -13,7 +13,7 @@ import (
 
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:4200") // Dozvoljava zahteve sa frontend-a
+		w.Header().Set("Access-Control-Allow-Origin", "https://localhost:4200") // Dozvoljava zahteve sa frontend-a
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
@@ -48,8 +48,8 @@ func main() {
 
 	// Postavljanje ruter-a sa prefiksom /api/notifications
 	router := mux.NewRouter()
-	router.HandleFunc("/api/notifications", handler.CreateNotification).Methods("POST")
-	router.HandleFunc("/api/notifications", handler.GetNotificationsByUsername).Methods("GET")
+	router.HandleFunc("/api/notifications/add", handler.CreateNotification).Methods("POST")
+	router.HandleFunc("/api/notifications/all", handler.GetNotificationsByUsername).Methods("GET")
 	router.HandleFunc("/api/notifications/read", handler.MarkNotificationAsRead).Methods("PUT")
 	router.HandleFunc("/api/notifications/delete", handler.DeleteNotification).Methods("DELETE")
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -60,6 +60,6 @@ func main() {
 	corsRouter := enableCORS(router)
 
 	// Pokretanje servera
-	logger.Println("Server is running on port 8080")
-	log.Fatal(http.ListenAndServe(":8080", corsRouter))
+	logger.Println("Server is running on port 8004")
+	log.Fatal(http.ListenAndServe(":8004", corsRouter))
 }

@@ -6,19 +6,16 @@
         </a>
       </div>        
       <ul class="nav-links">
-        <!-- Dugme za dodavanje projekta vidljivo samo menadžeru -->
         <li *ngIf="isManager">
           <a routerLink="/add-projects" class="button">Add project</a>
         </li>
   
-        <!-- Profil korisnika, vidljivo samo ako je korisnik ulogovan (član ili menadžer) -->
         <li *ngIf="isAuthenticated">
           <a routerLink="/notifications-user"><img src="assets/notification.png" alt="User Profile Picture" class="profile-image"></a>
           <a routerLink="/users-profile"><img src="assets/profile.png" alt="User Profile Picture" class="profile-image">
           </a>
         </li>
   
-        <!-- Dugme za odjavu, vidljivo samo za ulogovane korisnike -->
         <li *ngIf="isAuthenticated">
           <a (click)="logout()" class="button">Logout</a>
         </li>

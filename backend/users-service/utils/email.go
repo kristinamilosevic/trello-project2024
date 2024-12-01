@@ -43,7 +43,7 @@ func SendEmail(to, subject, body string) error {
 // SendRegistrationEmail šalje email za potvrdu registracije
 func SendRegistrationEmail(to, token string) error {
 	subject := "Confirm your registration"
-	confirmationLink := fmt.Sprintf("http://localhost:4200/confirm-email?token=%s", token)
+	confirmationLink := fmt.Sprintf("https://localhost:4200/confirm-email?token=%s", token)
 	body := fmt.Sprintf(`
 		<h3>Welcome!</h3>
 		<p>Please confirm your registration by clicking the link below:</p>
@@ -56,7 +56,7 @@ func SendRegistrationEmail(to, token string) error {
 // SendPasswordResetEmail šalje email sa linkom za resetovanje lozinke
 func SendPasswordResetEmail(to, token string) error {
 	subject := "Reset your password"
-	resetLink := fmt.Sprintf("http://localhost:4200/reset-password?token=%s", token)
+	resetLink := fmt.Sprintf("https://localhost:4200/reset-password?token=%s", token)
 	body := fmt.Sprintf(`
 		<h3>Password Reset Request</h3>
 		<p>Click the link below to reset your password:</p>
