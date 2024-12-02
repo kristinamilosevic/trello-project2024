@@ -10,21 +10,24 @@ export class UserService {
 
   constructor(private http: HttpClient) { }
 
-  changePassword(oldPassword: string, newPassword: string, confirmPassword: string): Observable<any> {
-    const token = localStorage.getItem('token'); // Pretpostavljamo da je JWT token sačuvan u localStorage
-
-    if (!token) {
-      throw new Error('Token is missing!');
+  // Funkcija za dobijanje zaglavlja sa tokenom i rodom
+  private getAuthHeaders(): HttpHeaders {
+    const token = localStorage.getItem('token'); // JWT token iz localStorage
+    const role = localStorage.getItem('role'); // Uloga korisnika iz localStorage
+    if (!token || !role) {
+      throw new Error('Token or Role is missing!');
     }
 
-    const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
+    // Vraća zaglavlje sa tokenom i rodom
+    return new HttpHeaders()
+      .set('Authorization', `Bearer ${token}`)
+      .set('Role', role); // Dodaje role u zaglavlje
+  }
 
-    const body = {
-      oldPassword,
-      newPassword,
-      confirmPassword
-    };
-
+  // Funkcija za promenu lozinke
+  changePassword(oldPassword: string, newPassword: string, confirmPassword: string): Observable<any> {
+    const headers = this.getAuthHeaders(); // Koristi token i role za autorizaciju
+    const body = { oldPassword, newPassword, confirmPassword };
     return this.http.post(this.apiUrl, body, { headers });
   }
 }

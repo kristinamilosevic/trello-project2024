@@ -35,6 +35,10 @@ type ForgotPasswordRequest struct {
 }
 
 func (h *LoginHandler) CheckUsername(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"manager", "member"}); err != nil {
+		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
+		return
+	}
 	username := r.URL.Query().Get("username")
 	if username == "" {
 		http.Error(w, "Username is required", http.StatusBadRequest)

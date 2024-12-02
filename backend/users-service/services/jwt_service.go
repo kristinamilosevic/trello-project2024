@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -61,22 +62,52 @@ func (s *JWTService) GenerateAuthToken(username, role string) (string, error) {
 		Username: username,
 		Role:     role,
 		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: time.Now().Add(24 * time.Hour).Unix(),
+			ExpiresAt: time.Now().Add(24 * time.Hour).Unix(), // Token važi 24 sata
+			IssuedAt:  time.Now().Unix(),                     // Vreme izdavanja tokena
 		},
 	}
+
+	// Generisanje tokena sa tajnim ključem iz environment promenljive
+	secretKey := os.Getenv("JWT_SECRET")
+	if secretKey == "" {
+		return "", fmt.Errorf("missing JWT_SECRET environment variable")
+	}
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+	signedToken, err := token.SignedString([]byte(secretKey))
+	if err != nil {
+		return "", fmt.Errorf("error signing token: %v", err)
+	}
+
+	log.Printf("Generated token for username=%s, role=%s", username, role)
+	return signedToken, nil
 }
 
-// ValidateToken proverava validnost JWT tokena
 func (s *JWTService) ValidateToken(tokenStr string) (*Claims, error) {
-	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte(os.Getenv("JWT_SECRET")), nil
-	})
-	if err != nil || !token.Valid {
-		return nil, err
+	secretKey := os.Getenv("JWT_SECRET")
+	if secretKey == "" {
+		return nil, fmt.Errorf("missing JWT_SECRET environment variable")
 	}
-	return token.Claims.(*Claims), nil
+
+	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method")
+		}
+		return []byte(secretKey), nil
+	})
+
+	if err != nil {
+		log.Printf("Error parsing token: %v", err)
+		return nil, fmt.Errorf("error parsing token: %v", err)
+	}
+
+	claims, ok := token.Claims.(*Claims)
+	if !ok || !token.Valid {
+		return nil, fmt.Errorf("invalid token or claims")
+	}
+
+	log.Printf("Validated token for username=%s, role=%s", claims.Username, claims.Role)
+	return claims, nil
 }
 
 // GenerateMagicLinkToken kreira JWT token za magic link prijavu

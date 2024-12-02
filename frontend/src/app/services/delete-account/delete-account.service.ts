@@ -10,16 +10,23 @@ export class AccountService {
 
   constructor(private http: HttpClient) {}
 
-  deleteAccount(): Observable<any> {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      throw new Error('No token found');
+  // Funkcija za kreiranje zaglavlja sa tokenom i rodom
+  private getAuthHeaders(): HttpHeaders {
+    const token = localStorage.getItem('token'); // Uzimanje tokena iz localStorage
+    const role = localStorage.getItem('role'); // Uzimanje uloge iz localStorage
+    if (!token || !role) {
+      throw new Error('Token or Role is missing'); // Bacanje greške ako token ili role ne postoji
     }
 
-    const headers = new HttpHeaders({
-      'Authorization': `Bearer ${token}`
+    return new HttpHeaders({
+      Authorization: `Bearer ${token}`, // Postavljanje Authorization header-a
+      Role: role, // Dodavanje Role header-a
     });
+  }
 
-    return this.http.delete(this.apiUrl, { headers });
+  // Metoda za brisanje korisničkog naloga
+  deleteAccount(): Observable<any> {
+    const headers = this.getAuthHeaders(); // Kreiranje zaglavlja
+    return this.http.delete(this.apiUrl, { headers }); // Slanje DELETE zahteva sa zaglavljem
   }
 }

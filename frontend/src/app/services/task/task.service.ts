@@ -5,69 +5,87 @@ import { Observable } from 'rxjs';
 @Injectable({
   providedIn: 'root'
 })
-
 export class TaskService {
   private apiUrl = 'http://localhost:8000/api/tasks';
   private projectUrl = 'http://localhost:8000/api/projects';
 
-
   constructor(private http: HttpClient) {}
 
-  createTask(taskData: { projectId: string; title: string; description: string; }): Observable<any> {
-    const headers = new HttpHeaders({ 'Content-Type': 'application/json' });
-    return this.http.post((`${this.apiUrl}/create`), taskData, { headers });
-  }
-
-  getAllTasks(): Observable<any[]> {
-    return this.http.get<any[]>(`${this.apiUrl}/all`);
-    
-  }
-  
-  getTasksByProject(projectId: string): Observable<any[]> {
-    return this.http.get<any[]>(`${this.apiUrl}/project/${projectId}`);
-  }
-
-  getTasksForProject(projectId: string): Observable<any[]> {
-    return this.http.get<any[]>(`${this.projectUrl}/${projectId}/tasks`);
-  }
-  
-  
-  updateTaskStatus(taskId: string, status: string): Observable<any> {
-    const url = `${this.apiUrl}/status`; 
-    const username = localStorage.getItem('username'); 
-    const body = { taskId, status, username }; 
-  
-    console.log('Sending request to update status:', body);
-  
-    return this.http.post(url, body, {
-      headers: new HttpHeaders({ 'Content-Type': 'application/json' }) 
+  // Funkcija za dobijanje zaglavlja sa tokenom i rodom
+  private getAuthHeaders(): HttpHeaders {
+    const token = localStorage.getItem('token'); // Uzima token iz localStorage
+    const role = localStorage.getItem('role'); // Uzima ulogu iz localStorage
+    if (!token || !role) {
+      throw new Error('Token or Role is missing'); // Bacanje greške ako token ili role ne postoji
+    }
+    return new HttpHeaders({
+      'Authorization': `Bearer ${token}`,
+      'Role': role, // Dodavanje Role header-a
+      'Content-Type': 'application/json'
     });
   }
 
+  // Kreiranje nove zadatke
+  createTask(taskData: { projectId: string; title: string; description: string }): Observable<any> {
+    const headers = this.getAuthHeaders();
+    return this.http.post(`${this.apiUrl}/create`, taskData, { headers });
+  }
+
+  // Dohvatanje svih zadataka
+  getAllTasks(): Observable<any[]> {
+    const headers = this.getAuthHeaders();
+    return this.http.get<any[]>(`${this.apiUrl}/all`, { headers });
+  }
+
+  // Dohvatanje zadataka za projekat
+  getTasksByProject(projectId: string): Observable<any[]> {
+    const headers = this.getAuthHeaders();
+    return this.http.get<any[]>(`${this.apiUrl}/project/${projectId}`, { headers });
+  }
+
+  // Dohvatanje zadataka za projekat sa posebne rute
+  getTasksForProject(projectId: string): Observable<any[]> {
+    const headers = this.getAuthHeaders();
+    return this.http.get<any[]>(`${this.projectUrl}/${projectId}/tasks`, { headers });
+  }
+
+  // Ažuriranje statusa zadatka
+  updateTaskStatus(taskId: string, status: string): Observable<any> {
+    const headers = this.getAuthHeaders();
+    const url = `${this.apiUrl}/status`;
+    const username = localStorage.getItem('username');
+    const body = { taskId, status, username };
+
+    console.log('Sending request to update status:', body);
+
+    return this.http.post(url, body, { headers });
+  }
+
+  // Dohvatanje dostupnih članova za zadatak
   getAvailableMembers(projectId: string, taskId: string): Observable<any[]> {
+    const headers = this.getAuthHeaders();
     const apiUrl = `http://localhost:8002/api/tasks/${taskId}/project/${projectId}/available-members`;
-    return this.http.get<any[]>(apiUrl);
+    return this.http.get<any[]>(apiUrl, { headers });
   }
-  
 
+  // Dodavanje članova u zadatak
   addMembersToTask(taskId: string, members: any[]): Observable<any> {
+    const headers = this.getAuthHeaders();
     const apiUrl = `http://localhost:8002/api/tasks/${taskId}/add-members`;
-    return this.http.post(apiUrl, members);
+    return this.http.post(apiUrl, members, { headers });
   }
-  
+
+  // Dohvatanje članova zadatka
   getTaskMembers(taskId: string): Observable<any> {
+    const headers = this.getAuthHeaders();
     const apiUrl = `http://localhost:8002/api/tasks/${taskId}/members`;
-    return this.http.get(apiUrl);
+    return this.http.get(apiUrl, { headers });
   }
 
+  // Uklanjanje člana iz zadatka
   removeMemberFromTask(taskId: string, memberId: string): Observable<any> {
-    const apiUrl = `http://localhost:8002/api/tasks/${taskId}/members/${memberId}`;  
-    const token = localStorage.getItem('token');  
-
-    const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`).set('Content-Type', 'application/json');  
-
+    const headers = this.getAuthHeaders();
+    const apiUrl = `http://localhost:8002/api/tasks/${taskId}/members/${memberId}`;
     return this.http.delete(apiUrl, { headers });
-}
-
-  
+  }
 }

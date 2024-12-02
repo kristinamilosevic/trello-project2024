@@ -2,12 +2,28 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"notifications-service/services"
 )
 
 type NotificationHandler struct {
 	service *services.NotificationService
+}
+
+func checkRole(r *http.Request, allowedRoles []string) error {
+	userRole := r.Header.Get("Role")
+	if userRole == "" {
+		return fmt.Errorf("role is missing in request header")
+	}
+
+	// Proveri da li je uloga dozvoljena
+	for _, role := range allowedRoles {
+		if role == userRole {
+			return nil
+		}
+	}
+	return fmt.Errorf("access forbidden: user does not have the required role")
 }
 
 // Konstruktor za NotificationHandler
@@ -19,6 +35,11 @@ func NewNotificationHandler(service *services.NotificationService) *Notification
 
 // HTTP handler za kreiranje notifikacije
 func (nh *NotificationHandler) CreateNotification(w http.ResponseWriter, r *http.Request) {
+
+	if err := checkRole(r, []string{"manager"}); err != nil {
+		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
+		return
+	}
 	var req struct {
 		UserID   string `json:"userId"`
 		Username string `json:"username"`
@@ -44,6 +65,10 @@ func (nh *NotificationHandler) CreateNotification(w http.ResponseWriter, r *http
 
 // HTTP handler za dobijanje notifikacija korisnika
 func (nh *NotificationHandler) GetNotificationsByUsername(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"member"}); err != nil {
+		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
+		return
+	}
 	username := r.URL.Query().Get("username")
 	if username == "" {
 		http.Error(w, "Missing username parameter", http.StatusBadRequest)
@@ -66,6 +91,10 @@ func (nh *NotificationHandler) GetNotificationsByUsername(w http.ResponseWriter,
 
 // HTTP handler za označavanje notifikacije kao pročitane
 func (nh *NotificationHandler) MarkNotificationAsRead(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"member"}); err != nil {
+		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
+		return
+	}
 	var req struct {
 		NotificationID string `json:"notificationId"`
 		Username       string `json:"username"`
@@ -91,6 +120,10 @@ func (nh *NotificationHandler) MarkNotificationAsRead(w http.ResponseWriter, r *
 
 // HTTP handler za brisanje notifikacije
 func (nh *NotificationHandler) DeleteNotification(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"member"}); err != nil {
+		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
+		return
+	}
 	var req struct {
 		NotificationID string `json:"notificationId"`
 		Username       string `json:"username"`

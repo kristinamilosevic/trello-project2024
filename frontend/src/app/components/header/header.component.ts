@@ -9,7 +9,7 @@ import { Subscription } from 'rxjs';
   standalone: true,
   imports: [RouterModule, CommonModule],
   templateUrl: './header.component.html',
-  styleUrls: ['./header.component.css'], // Pazite na "styleUrls", sada je ispravno!
+  styleUrls: ['./header.component.css'], 
 })
 export class HeaderComponent implements OnInit {
   isManager: boolean = false;
@@ -32,7 +32,7 @@ export class HeaderComponent implements OnInit {
 
   checkUserStatus(): void {
     const role = this.authService.getUserRole();
-    this.isAuthenticated = !!role; // Proverava da li postoji neka uloga
+    this.isAuthenticated = !!role; 
     this.isManager = role === 'manager';
     this.isMember = role === 'member';
   }
