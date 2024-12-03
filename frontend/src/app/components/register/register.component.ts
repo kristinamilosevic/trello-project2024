@@ -63,7 +63,8 @@ export class RegisterComponent {
 
               localStorage.removeItem('_grecaptcha');
               
-              this.router.navigate(['/verify'], { queryParams: { username: this.registerForm.value.username } });
+              this.router.navigate(['/verify']);
+              localStorage.setItem('username', this.registerForm.value.username);
               this.registerForm.reset();
           },
         error: (error) => {
