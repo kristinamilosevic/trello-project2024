@@ -28,6 +28,8 @@ services:
       - CASSANDRA_CLUSTER_NAME=${CASSANDRA_CLUSTER_NAME}
     networks:
       - app-network
+    depends_on:
+      - cassandra
     restart: always
   
   cassandra:
