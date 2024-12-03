@@ -1,4 +1,4 @@
-FROM nginx:latest
+FROM openresty/openresty:alpine
 
 COPY ./server.crt /etc/nginx/ssl/server.crt
 COPY ./server.key /etc/nginx/ssl/server.key
