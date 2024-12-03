@@ -92,8 +92,8 @@ func main() {
 	projectHandler := handlers.NewProjectHandler(projectService)
 
 	r := mux.NewRouter()
-	r.HandleFunc("/api/projects/{projectId}/members", projectHandler.GetProjectMembersHandler).Methods("GET")
-	r.HandleFunc("/api/projects/{projectId}/members/{memberId}/remove", projectHandler.RemoveMemberFromProjectHandler).Methods("DELETE")
+	r.HandleFunc("/api/projects/{projectId}/members/all", projectHandler.GetProjectMembersHandler).Methods("GET")
+	r.HandleFunc("/api/projects/remove/{projectId}/members/{memberId}/remove", projectHandler.RemoveMemberFromProjectHandler).Methods("DELETE")
 	r.HandleFunc("/api/projects/add", projectHandler.CreateProject).Methods("POST")
 	r.HandleFunc("/api/projects/{id}/members", projectHandler.AddMemberToProjectHandler).Methods("POST")
 	r.HandleFunc("/api/projects/users", projectHandler.GetAllUsersHandler).Methods("GET")

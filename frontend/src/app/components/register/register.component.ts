@@ -53,7 +53,7 @@ export class RegisterComponent {
     // Provera validnosti forme pre slanja
     if (this.registerForm.valid) {
       this.http.post(
-          'http://localhost:8001/api/users/register',
+          'http://localhost:8000/api/users/register',
           payload, 
           { headers: { 'Content-Type': 'application/json' } } 
       ).subscribe({

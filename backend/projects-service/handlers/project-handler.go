@@ -147,20 +147,18 @@ func (h *ProjectHandler) GetProjectMembersHandler(w http.ResponseWriter, r *http
 
 // RemoveMemberFromProjectHandler removes a member from a project if they have no in-progress tasks
 func (h *ProjectHandler) RemoveMemberFromProjectHandler(w http.ResponseWriter, r *http.Request) {
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) != 6 || pathParts[3] != "members" || pathParts[5] != "remove" {
-		http.NotFound(w, r)
-		return
-	}
+	fmt.Println("Request received:", r.URL.Path)
 
-	projectID := pathParts[2]
-	memberID := pathParts[4]
+	vars := mux.Vars(r)
+	projectID := vars["projectId"]
+	memberID := vars["memberId"]
 
-	fmt.Println("Attempting to remove member:", memberID, "from project:", projectID)
+	fmt.Println("Extracted projectID:", projectID)
+	fmt.Println("Extracted memberID:", memberID)
 
 	err := h.Service.RemoveMemberFromProject(r.Context(), projectID, memberID)
 	if err != nil {
-		fmt.Println("Error removing member:", err)
+		fmt.Println("Error during member removal:", err)
 		if err.Error() == "cannot remove member assigned to an in-progress task" {
 			http.Error(w, err.Error(), http.StatusForbidden)
 		} else if err.Error() == "project not found" {
