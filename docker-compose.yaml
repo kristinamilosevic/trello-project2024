@@ -20,7 +20,7 @@ services:
     hostname: notifications-service
 
     ports:
-      - "8004:8080"
+      - "8004:8004"
     environment:
       - CASS_DB=cassandra
       - CASSANDRA_CONTACT_POINTS=cassandra

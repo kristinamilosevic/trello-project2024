@@ -12,12 +12,12 @@ export class ProjectService {
     throw new Error('Method not implemented.');
   }
 
-  private apiUrl = 'http://localhost:8003/api/projects';
+  private apiUrl = 'http://localhost:8000/api/projects';
 
 
-  private mainUrl = 'http://localhost:8003/api';
+  private mainUrl = 'http://localhost:8000/api';
 
-  private addUrl = 'http://localhost:8003/api/projects/add';
+  private addUrl = 'http://localhost:8000/api/projects/add';
 
 
   constructor(private http: HttpClient) {}
@@ -45,7 +45,7 @@ export class ProjectService {
   }
 
   getProjectsByUsername(username: string): Observable<Project[]> {
-    return this.http.get<Project[]>(`${this.apiUrl}?username=${username}`);
+    return this.http.get<Project[]>(`${this.apiUrl}/username/${username}`);
   }
 
   
