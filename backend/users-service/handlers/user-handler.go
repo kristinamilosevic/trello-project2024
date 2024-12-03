@@ -10,6 +10,7 @@ import (
 	"time"
 	"trello-project/microservices/users-service/models"
 	"trello-project/microservices/users-service/services"
+	"trello-project/microservices/users-service/utils"
 
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -17,19 +18,53 @@ import (
 type UserHandler struct {
 	UserService *services.UserService
 	JWTService  *services.JWTService
+	BlackList   map[string]bool
 }
 
-// Register šalje email sa verifikacionim linkom, bez čuvanja korisnika u bazi
 func (h *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
-	var user models.User
-	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+	var requestData struct {
+		User         models.User `json:"user"`
+		CaptchaToken string      `json:"captchaToken"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
 		http.Error(w, "Invalid request data", http.StatusBadRequest)
+		return
+	}
+
+	captchaToken := requestData.CaptchaToken
+	if captchaToken == "" {
+		http.Error(w, "Missing CAPTCHA token", http.StatusBadRequest)
+		return
+	}
+
+	// Validacija CAPTCHA tokena
+	isValid, err := utils.VerifyCaptcha(captchaToken)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("CAPTCHA validation failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if !isValid {
+		http.Error(w, "CAPTCHA verification failed", http.StatusForbidden)
+		return
+	}
+
+	user := requestData.User
+
+	if err := h.UserService.ValidatePassword(user.Password); err != nil {
+		log.Println("Password validation failed:", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"message": "Password is too common. Please choose a stronger one.",
+		})
+
 		return
 	}
 
 	// Proveri da li korisničko ime već postoji
 	var existingUser models.User
-	err := h.UserService.UserCollection.FindOne(context.Background(), bson.M{"username": user.Username}).Decode(&existingUser)
+	err = h.UserService.UserCollection.FindOne(context.Background(), bson.M{"username": user.Username}).Decode(&existingUser)
 	if err == nil {
 		// Ako korisnik sa datim korisničkim imenom postoji, vraćamo grešku
 		http.Error(w, "Username already exists", http.StatusConflict)
@@ -116,7 +151,7 @@ func (h *UserHandler) ConfirmEmail(w http.ResponseWriter, r *http.Request) {
 	delete(h.UserService.TokenCache, email)
 
 	// Redirektovanje korisnika na login stranicu
-	w.Header().Set("Location", "http://localhost:4200/login")
+	w.Header().Set("Location", "https://localhost:4200/login")
 	w.WriteHeader(http.StatusFound)
 }
 
@@ -284,6 +319,18 @@ func (h *UserHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	claims, err := h.JWTService.ValidateToken(tokenString)
 	if err != nil {
 		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	// Provera whitelist i blacklist pravila za novu lozinku
+	if err := h.UserService.ValidatePassword(requestData.NewPassword); err != nil {
+		log.Println("Password validation failed:", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"message": "Password is too common. Please choose a stronger one.",
+		})
+
 		return
 	}
 

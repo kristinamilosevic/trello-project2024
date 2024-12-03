@@ -6,7 +6,7 @@
     <p><strong>Max Members:</strong> {{ project.maxMembers }}</p>
     <button (click)="goBack()" class="action-button">Back</button>
 
-    <div *ngIf="tasks.length > 0" class="task-list">
+    <div *ngIf="tasks && tasks.length > 0" class="task-list">
       <h3>Tasks for this Project:</h3>
       <ul>
         <li *ngFor="let task of tasks">
@@ -14,32 +14,33 @@
             <strong>{{ task.title }}</strong>
             <p>{{ task.description }}</p>
             <p>Status: {{ task.status }}</p>
-            <button (click)="openAddMembersToTask(task.id)" class="action-button add-member-btn">Add Member</button>
 
-            <button (click)="viewMembersToTask(task.id)" class="action-button view-members-btn">View Members</button>
+            <button *ngIf="isManager" (click)="openAddMembersToTask(task.id)" class="action-button add-member-btn">
+              Add Member to Task
+            </button>
+
+            <button *ngIf="isAuthenticated" (click)="viewMembersToTask(task.id)" class="action-button view-members-btn">
+              View Members
+            </button>
+
+            <!-- Dropdown za promenu statusa -->
+            <div class="status-container" *ngIf="isMember">
+              <label for="statusDropdown" class="status-label">Change Status:</label>
+              <select id="statusDropdown" [(ngModel)]="task.status" (change)="updateTaskStatus(task)" class="status-dropdown">
+                <option value="Pending">Pending</option>
+                <option value="In progress">In progress</option>
+                <option value="Completed">Completed</option>
+              </select>
+            </div>
           </div>
-          
-         
-
-          <div *ngIf="getTaskDependencyTitle(task)">
-            <p>Depends on: <em>{{ getTaskDependencyTitle(task) }}</em></p>
-          </div>
-
-          <label for="statusDropdown">Status:</label>
-          <select [(ngModel)]="task.status" (change)="updateTaskStatus(task)">
-            <option value="Pending">Pending</option>
-            <option value="In progress">In progress</option>
-            <option value="Completed">Completed</option>
-          </select>
         </li>
       </ul>
     </div>
 
-    
     <div class="action-buttons">
-      <button (click)="addTask()" class="action-button">Add Task</button>
-      <button (click)="viewMembers()" class="action-button">Members</button>
-      <button (click)="addMember()" class="action-button">Add Member</button>
+      <button *ngIf="isManager" (click)="addTask()" class="action-button">Add Task</button>
+      <button *ngIf="isManager" (click)="viewMembers()" class="action-button">View Members</button>
+      <button *ngIf="isManager" (click)="addMember()" class="action-button">Add Member</button>
     </div>
   </div>
 </div>

@@ -1,5 +1,7 @@
 {
   "dependencies": {
-    "jwt-decode": "^4.0.0"
+    "cassandra-driver": "^4.7.2",
+    "jwt-decode": "^4.0.0",
+    "ng-recaptcha": "^13.2.1"
   }
 }

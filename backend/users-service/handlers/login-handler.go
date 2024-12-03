@@ -14,8 +14,9 @@ import (
 )
 
 type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username     string `json:"username"`
+	Password     string `json:"password"`
+	CaptchaToken string `json:"captchaToken"`
 }
 
 type LoginResponse struct {
@@ -62,7 +63,7 @@ func (h *LoginHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Proveri da li postoji korisnik sa zadatim username-om
+	// da li postoji korisnik sa zadatim username-om
 	var user models.User
 	err := h.UserService.UserCollection.FindOne(context.Background(), bson.M{"username": req.Username}).Decode(&user)
 	if err != nil {
@@ -70,13 +71,11 @@ func (h *LoginHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Proveri da li email odgovara korisniku
 	if user.Email != req.Email {
 		http.Error(w, "Email does not match", http.StatusBadRequest)
 		return
 	}
 
-	// Generiši novu lozinku i pošalji na email
 	newPassword := utils.GenerateRandomPassword()
 	_, err = h.UserService.UserCollection.UpdateOne(context.Background(), bson.M{"username": req.Username}, bson.M{"$set": bson.M{"password": newPassword}})
 	if err != nil {
@@ -92,7 +91,6 @@ func (h *LoginHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Password reset successfully"))
 }
 
-// Validacija unosa korisničkih podataka
 func validateCredentials(username, password string) bool {
 	if len(username) < 3 || len(username) > 20 {
 		return false
@@ -103,7 +101,6 @@ func validateCredentials(username, password string) bool {
 	return true
 }
 
-// Funkcija za prijavu korisnika
 func (h *LoginHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -116,7 +113,18 @@ func (h *LoginHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validacija unosa
+	// Validacija CAPTCHA tokena
+	if req.CaptchaToken == "" {
+		http.Error(w, "Missing CAPTCHA token", http.StatusBadRequest)
+		return
+	}
+
+	isValid, err := utils.VerifyCaptcha(req.CaptchaToken)
+	if err != nil || !isValid {
+		http.Error(w, "Invalid CAPTCHA token", http.StatusForbidden)
+		return
+	}
+
 	if !validateCredentials(req.Username, req.Password) {
 		http.Error(w, "Invalid credentials format", http.StatusBadRequest)
 		return
@@ -129,7 +137,6 @@ func (h *LoginHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Priprema odgovora
 	response := LoginResponse{
 		Token:    token,
 		Username: user.Username,
@@ -148,30 +155,28 @@ type MagicLinkRequest struct {
 	Email    string `json:"email"`
 }
 
-// Funkcija za slanje magic link-a
 func (h *LoginHandler) MagicLink(w http.ResponseWriter, r *http.Request) {
 	// Dekodiraj telo zahteva u MagicLinkRequest strukturu
 	var req MagicLinkRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Error decoding request body: %v", err) // Logovanje greške pri dekodiranju
+		log.Printf("Error decoding request body: %v", err)
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
-	log.Printf("Received magic link request: %+v", req) // Logovanje podataka zahteva
+	log.Printf("Received magic link request: %+v", req)
 
 	// Pronađi korisnika u bazi podataka
 	var user models.User
 	err := h.UserService.UserCollection.FindOne(context.Background(), bson.M{"username": req.Username}).Decode(&user)
 	if err != nil {
-		log.Printf("User not found for username: %s, error: %v", req.Username, err) // Logovanje greške pri traženju korisnika
+		log.Printf("User not found for username: %s, error: %v", req.Username, err)
 		http.Error(w, "User not found", http.StatusNotFound)
 		return
 	}
-	log.Printf("User found: %+v", user) // Logovanje podataka o korisniku
+	log.Printf("User found: %+v", user)
 
-	// Proveri da li email odgovara korisniku
 	if user.Email != req.Email {
-		log.Printf("Email mismatch: expected %s, got %s", user.Email, req.Email) // Logovanje greške ako email ne odgovara
+		log.Printf("Email mismatch: expected %s, got %s", user.Email, req.Email)
 		http.Error(w, "Email does not match", http.StatusBadRequest)
 		return
 	}
@@ -179,30 +184,28 @@ func (h *LoginHandler) MagicLink(w http.ResponseWriter, r *http.Request) {
 	// Generiši JWT token sa username i role
 	token, err := h.JWTService.GenerateMagicLinkToken(req.Username, user.Role)
 	if err != nil {
-		log.Printf("Error generating token: %v", err) // Logovanje greške pri generisanju tokena
+		log.Printf("Error generating token: %v", err)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
-	log.Printf("Generated token: %s", token) // Logovanje generisanog tokena
+	log.Printf("Generated token: %s", token)
 
 	// Kreiraj magic link koji se šalje korisniku
-	magicLink := fmt.Sprintf("http://localhost:4200/magic-login?token=%s", token)
-	log.Printf("Generated magic link: %s", magicLink) // Logovanje magic linka
+	magicLink := fmt.Sprintf("https://localhost:4200/magic-login?token=%s", token)
+	log.Printf("Generated magic link: %s", magicLink)
 
-	// Slanje email-a sa magic link-om
 	subject := "Your Magic Login Link"
 	body := fmt.Sprintf("Click here to log in: %s", magicLink)
 	if err := utils.SendEmail(req.Email, subject, body); err != nil {
-		log.Printf("Failed to send email to %s: %v", req.Email, err) // Logovanje greške pri slanju emaila
+		log.Printf("Failed to send email to %s: %v", req.Email, err)
 		http.Error(w, "Failed to send email", http.StatusInternalServerError)
 		return
 	}
-	log.Printf("Magic link successfully sent to: %s", req.Email) // Logovanje uspešnog slanja emaila
+	log.Printf("Magic link successfully sent to: %s", req.Email)
 
-	// Odgovori korisniku sa uspehom
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Magic link sent successfully"))
-	log.Println("Magic link request processed successfully") // Logovanje uspeha obrade zahteva
+	log.Println("Magic link request processed successfully")
 }
 
 // Funkcija za prijavu putem magic link-a
@@ -213,28 +216,25 @@ func (h *LoginHandler) MagicLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validacija tokena
 	claims, err := h.JWTService.ValidateToken(token)
 	if err != nil {
 		http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
 		return
 	}
 
-	// Generiši novi token za sesiju
+	//novi token za sesiju
 	authToken, err := h.JWTService.GenerateAuthToken(claims.Username, claims.Role)
 	if err != nil {
 		http.Error(w, "Failed to generate auth token", http.StatusInternalServerError)
 		return
 	}
 
-	// Vraćamo odgovor sa username i role
 	response := map[string]string{
 		"token":    authToken,
 		"username": claims.Username,
 		"role":     claims.Role,
 	}
 
-	// Dodaj log ovde da proveriš šta backend šalje
 	fmt.Println("Backend response:", response)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -249,21 +249,19 @@ func (h *LoginHandler) VerifyMagicLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validiraj token
 	claims, err := h.JWTService.ValidateToken(token)
 	if err != nil {
 		http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
 		return
 	}
 
-	// Generiši novi token za sesiju
+	//novi token za sesiju
 	authToken, err := h.JWTService.GenerateAuthToken(claims.Username, claims.Role)
 	if err != nil {
 		http.Error(w, "Failed to generate auth token", http.StatusInternalServerError)
 		return
 	}
 
-	// Priprema odgovora
 	response := map[string]string{
 		"token":    authToken,
 		"username": claims.Username,

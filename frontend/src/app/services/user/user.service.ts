@@ -6,12 +6,12 @@ import { Observable } from 'rxjs';
   providedIn: 'root'
 })
 export class UserService {
-  private apiUrl = 'http://localhost:8001/api/users/change-password'; // Endpoint za promenu lozinke
+  private apiUrl = 'http://localhost:8000/api/users/change-password'; 
 
   constructor(private http: HttpClient) { }
 
   changePassword(oldPassword: string, newPassword: string, confirmPassword: string): Observable<any> {
-    const token = localStorage.getItem('token'); // Pretpostavljamo da je JWT token sačuvan u localStorage
+    const token = localStorage.getItem('token'); 
 
     if (!token) {
       throw new Error('Token is missing!');

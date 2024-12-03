@@ -36,5 +36,10 @@
       <p *ngIf="magicLinkMessage" class="notification success">{{ magicLinkMessage }}</p>
       <a class="back-link" (click)="showMagicLink = false">Back to Login</a>
     </div>
+
+    <re-captcha
+    (resolved)="onCaptchaResolved($event)"
+    siteKey="6LcJ2YwqAAAAAKDFfflxV4Mo7k1H_lszQ64GN6a3">
+  </re-captcha>
   </div>
 </div>

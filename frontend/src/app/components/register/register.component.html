@@ -28,10 +28,22 @@
       <div class="form-group">
         <label for="password">Password</label>
         <input type="password" id="password" formControlName="password" placeholder="Enter a password">
+        
+        <!-- Prikaz poruka o greškama -->
         <div *ngIf="registerForm.get('password')?.invalid && registerForm.get('password')?.touched" class="error">
-          Password must be at least 6 characters.
+          <div *ngIf="registerForm.get('password')?.errors?.['required']">
+            Password is required.
+          </div>
+          <div *ngIf="registerForm.get('password')?.errors?.['minlength']">
+            Password must be at least 8 characters long.
+          </div>
+          <div *ngIf="registerForm.get('password')?.errors?.['pattern']">
+            Password must include at least one uppercase letter, one number, and one special character.
+          </div>
         </div>
       </div>
+      
+      
   
       <div class="form-group">
         <label for="email">Email</label>
@@ -52,6 +64,12 @@
           Please select a role.
         </div>
       </div>
+
+      <re-captcha
+      (resolved)="onCaptchaResolved($event)"
+      siteKey="6LcJ2YwqAAAAAKDFfflxV4Mo7k1H_lszQ64GN6a3">
+  </re-captcha>
+  
   
       <button type="submit">Register</button>
       <a class="forgot-link" (click)="openLogin()">Already have an account? Login here.</a>

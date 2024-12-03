@@ -45,7 +45,18 @@ func main() {
 		log.Fatal("JWT_SECRET is not set in the environment variables")
 	}
 
+	recaptchaSecret := os.Getenv("SECRET_KEY")
+	if recaptchaSecret == "" {
+		log.Fatal("SECRET_KEY is not set in the environment variables")
+	}
+
 	fmt.Println("Successfully loaded variables from .env file")
+
+	// Učitaj black listu
+	blackList, err := services.LoadBlackList("/app/blacklist.txt")
+	if err != nil {
+		log.Fatalf("Failed to load black list: %v", err)
+	}
 
 	clientOptionsUsers := options.Client().ApplyURI("mongodb://mongo-users:27017")
 	clientUsers, err := mongo.Connect(context.TODO(), clientOptionsUsers)
@@ -85,9 +96,9 @@ func main() {
 	taskCollection := clientTasks.Database("mongo-tasks").Collection("tasks")
 
 	jwtService := services.NewJWTService(secretKey)
-	userService := services.NewUserService(userCollection, projectCollection, taskCollection, jwtService)
+	userService := services.NewUserService(userCollection, projectCollection, taskCollection, jwtService, blackList)
 
-	userHandler := handlers.UserHandler{UserService: userService, JWTService: jwtService}
+	userHandler := handlers.UserHandler{UserService: userService, JWTService: jwtService, BlackList: blackList}
 	loginHandler := handlers.LoginHandler{UserService: userService}
 
 	mux := http.NewServeMux()

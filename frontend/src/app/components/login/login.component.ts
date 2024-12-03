@@ -3,10 +3,11 @@ import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../services/user/auth.service';
+import { RecaptchaModule } from 'ng-recaptcha';
 
 @Component({
   standalone: true,
-  imports: [FormsModule, CommonModule],
+  imports: [FormsModule, CommonModule, RecaptchaModule],
   selector: 'app-login',
   templateUrl: './login.component.html',
   styleUrls: ['./login.component.scss']
@@ -22,8 +23,11 @@ export class LoginComponent {
   showMagicLink: boolean = false;
   magicEmail: string = ''; 
   magicLinkMessage: string = ''; 
+  captchaToken: string | null = null;
 
   constructor(private authService: AuthService, private router: Router, private route: ActivatedRoute) {}
+
+  
 
   // Funkcija za prijavu korisnika
   onSubmit(): void {
@@ -37,13 +41,20 @@ export class LoginComponent {
       return;
     }
     
+    if (!this.captchaToken) {
+      this.errorMessage = 'Please complete the CAPTCHA';
+      return;
+    }
   
-    this.authService.login({ username: this.username, password: this.password }).subscribe({
+    this.authService.login({ username: this.username, password: this.password, captchaToken: this.captchaToken }).subscribe({
       next: (response: any) => {
         // Sačuvaj informacije u localStorage
         localStorage.setItem('username', response.username);
         localStorage.setItem('role', response.role);
         localStorage.setItem('token', response.token);
+
+        localStorage.removeItem('_grecaptcha');
+        
   
         this.successMessage = 'Login successful!';
         setTimeout(() => {
@@ -58,7 +69,6 @@ export class LoginComponent {
   
   
 
-  // Funkcija za otvaranje "Forgot Password" sekcije
   openForgotPassword(): void {
     if (!this.username) {
       this.errorMessage = 'Please enter your username';
@@ -68,14 +78,13 @@ export class LoginComponent {
     this.showForgotPassword = true;
   }
 
-  // Funkcija za zatvaranje "Forgot Password" sekcije
   closeForgotPassword(): void {
     this.showForgotPassword = false;
     this.forgotEmail = '';
     this.resetMessage = '';
   }
 
-  // Funkcija za slanje linka za reset lozinke
+  
   sendResetLink(): void {
     if (!this.forgotEmail) {
       this.resetMessage = 'Please enter a valid email';
@@ -94,7 +103,6 @@ export class LoginComponent {
 
 
   ngOnInit(): void {
-    // Proveri da li postoji token u URL-u (magic link)
     this.route.queryParams.subscribe((params) => {
       const token = params['token'];
      
@@ -104,7 +112,7 @@ export class LoginComponent {
         this.authService.verifyMagicLink(token).subscribe({
           next: (response: any) => {
             console.log('Backend response:', response);
-            // Sačuvaj podatke u localStorage
+          
             localStorage.setItem('token', response.token);
             localStorage.setItem('username', response.username);
             localStorage.setItem('role', response.role);
@@ -124,7 +132,6 @@ export class LoginComponent {
 
   
 
-  // Otvaranje forme za Magic Link
   openMagicLink(): void {
     if (!this.username) {
       this.errorMessage = 'Please enter your username';
@@ -134,7 +141,6 @@ export class LoginComponent {
     this.showMagicLink = true;
   }
 
-  // Slanje Magic Link-a
   sendMagicLink(): void {
     if (!this.magicEmail) {
       this.magicLinkMessage = 'Please enter a valid email';
@@ -153,6 +159,12 @@ export class LoginComponent {
         this.magicLinkMessage = 'Magic link sent to your email!';
       }
     });
+  }
+
+   // Čuvanje CAPTCHA tokena
+   onCaptchaResolved(token: string | null): void {
+    console.log('CAPTCHA resolved with token:', token);
+    this.captchaToken = token; 
   }
 
   openRegister() {

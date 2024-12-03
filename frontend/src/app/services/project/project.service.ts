@@ -23,12 +23,14 @@ export class ProjectService {
   constructor(private http: HttpClient) {}
 
   createProject(projectData: { name: string; expectedEndDate: string; minMembers: number; maxMembers: number }): Observable<any> {
+    const token = localStorage.getItem('token'); 
     const headers = new HttpHeaders({
       'Content-Type': 'application/json',
-      'Manager-ID': '507f191e810c19729de860ea'
+      'Authorization': `Bearer ${token}`, 
     });
     return this.http.post(this.addUrl, projectData, { headers });
   }
+  
 
   getProjects(): Observable<Project[]> {
     return this.http.get<Project[]>(`${this.apiUrl}/all`);
@@ -43,7 +45,7 @@ export class ProjectService {
   }
 
   getProjectsByUsername(username: string): Observable<Project[]> {
-    return this.http.get<Project[]>(`${this.apiUrl}?username=${username}`);
+    return this.http.get<Project[]>(`${this.apiUrl}/username/${username}`);
   }
 
   

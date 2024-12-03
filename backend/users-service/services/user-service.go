@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 
 	"time"
 
@@ -24,9 +25,10 @@ type UserService struct {
 	JWTService        *JWTService
 	ProjectCollection *mongo.Collection
 	TaskCollection    *mongo.Collection
+	BlackList         map[string]bool
 }
 
-func NewUserService(userCollection, projectCollection, taskCollection *mongo.Collection, jwtService *JWTService) *UserService {
+func NewUserService(userCollection, projectCollection, taskCollection *mongo.Collection, jwtService *JWTService, blackList map[string]bool) *UserService {
 	return &UserService{
 
 		UserCollection:    userCollection,
@@ -34,6 +36,7 @@ func NewUserService(userCollection, projectCollection, taskCollection *mongo.Col
 		JWTService:        &JWTService{},
 		ProjectCollection: projectCollection,
 		TaskCollection:    taskCollection,
+		BlackList:         blackList,
 	}
 }
 
@@ -42,13 +45,13 @@ func (s *UserService) RegisterUser(user models.User) error {
 	// Provera da li korisnik već postoji
 	var existingUser models.User
 	if err := s.UserCollection.FindOne(context.Background(), bson.M{"username": user.Username}).Decode(&existingUser); err == nil {
-		return fmt.Errorf("User with username already exists")
+		return fmt.Errorf("user with username already exists")
 	}
 
 	// Hashiranje lozinke pre nego što se sačuva
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
-		return fmt.Errorf("Failed to hash password: %v", err)
+		return fmt.Errorf("failed to hash password: %v", err)
 	}
 	user.Password = string(hashedPassword)
 
@@ -63,17 +66,71 @@ func (s *UserService) RegisterUser(user models.User) error {
 
 	// Čuvanje korisnika u bazi sa statusom `inactive`
 	if _, err := s.UserCollection.InsertOne(context.Background(), user); err != nil {
-		return fmt.Errorf("Failed to save user: %v", err)
+		return fmt.Errorf("failed to save user: %v", err)
 	}
 
 	// Slanje verifikacionog email-a sa kodom
 	subject := "Your Verification Code"
 	body := fmt.Sprintf("Your verification code is %s. Please enter it within 1 minute.", verificationCode)
 	if err := utils.SendEmail(user.Email, subject, body); err != nil {
-		return fmt.Errorf("Failed to send email: %v", err)
+		return fmt.Errorf("failed to send email: %v", err)
 	}
 
 	log.Println("Verifikacioni kod poslat korisniku:", user.Email)
+	return nil
+}
+
+func (s *UserService) ValidatePassword(password string) error {
+	log.Println("Počela validacija lozinke:", password)
+
+	if len(password) < 8 {
+		log.Println("Lozinka nije dovoljno dugačka.")
+		return fmt.Errorf("password must be at least 8 characters long")
+	}
+
+	hasUppercase := false
+	for _, char := range password {
+		if char >= 'A' && char <= 'Z' {
+			hasUppercase = true
+			break
+		}
+	}
+	if !hasUppercase {
+		log.Println("Lozinka ne sadrži veliko slovo.")
+		return fmt.Errorf("password must contain at least one uppercase letter")
+	}
+
+	hasDigit := false
+	for _, char := range password {
+		if char >= '0' && char <= '9' {
+			hasDigit = true
+			break
+		}
+	}
+	if !hasDigit {
+		log.Println("Lozinka ne sadrži broj.")
+		return fmt.Errorf("password must contain at least one number")
+	}
+
+	specialChars := "!@#$%^&*.,"
+	hasSpecial := false
+	for _, char := range password {
+		if strings.ContainsRune(specialChars, char) {
+			hasSpecial = true
+			break
+		}
+	}
+	if !hasSpecial {
+		log.Println("Lozinka ne sadrži specijalni karakter.")
+		return fmt.Errorf("password must contain at least one special character")
+	}
+
+	if s.BlackList[password] {
+		log.Println("Lozinka je na black listi.")
+		return fmt.Errorf("password is too common. Please choose a stronger one")
+	}
+
+	log.Println("Lozinka je prošla validaciju.")
 	return nil
 }
 
@@ -82,7 +139,7 @@ func (s *UserService) GetUnverifiedUserByEmail(email string) (models.User, error
 	var user models.User
 	err := s.UserCollection.FindOne(context.Background(), bson.M{"email": email}).Decode(&user)
 	if err != nil {
-		return models.User{}, fmt.Errorf("User not found")
+		return models.User{}, fmt.Errorf("user not found")
 	}
 	return user, nil
 }
@@ -95,7 +152,7 @@ func (s *UserService) ConfirmAndSaveUser(user models.User) error {
 
 	_, err := s.UserCollection.UpdateOne(context.Background(), filter, update)
 	if err != nil {
-		return fmt.Errorf("Failed to activate user: %v", err)
+		return fmt.Errorf("failed to activate user: %v", err)
 	}
 
 	return nil

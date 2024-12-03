@@ -39,13 +39,10 @@ export class AddProjectsComponent {
       this.projectService.createProject(projectData).subscribe(
         response => {
           this.successMessage = 'Project successfully created!';
-          this.errorMessage = null;
-          setTimeout(() => {
-            this.successMessage = null;
-            this.router.navigate(['/projects-list']);
-          }, 3000);
-          this.projectForm.reset();
-        },
+        this.errorMessage = null;
+        this.projectForm.reset();
+        this.router.navigate(['/projects-list']); 
+      },
         error => {
           if (error.status === 400) {
             if (error.error.includes("Expected end date must be in the future")) {
@@ -58,9 +55,8 @@ export class AddProjectsComponent {
               this.errorMessage = "Invalid request. Please check your input.";
             }
           } else if (error.status === 401) {
-            this.errorMessage = "Unauthorized: Manager ID is required.";
+            this.errorMessage = "Unauthorized: Please log in to create a project.";    
           }else if (error.status === 409) {
-            // Obrada greške za duplirano ime projekta
             this.errorMessage = "A project with this name already exists. Please choose a different name.";
           } else {
             this.errorMessage = "Failed to create project.";

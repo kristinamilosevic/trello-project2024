@@ -17,6 +17,10 @@ import { ViewMembersTaskComponent } from './components/view-members-task/view-me
 import { UsersProjectsComponent } from './components/users-projects/users-projects.component';
 import { UsersProfileComponent } from './components/users-profile/users-profile.component';
 import { ChangePasswordComponent } from './components/change-password/change-password.component';
+import { AuthGuard } from './guards/auth.guard';
+import { RoleGuard } from './guards/role.guard';
+
+import { NotificationsUserComponent } from './components/notifications-user/notifications-user.component';
 
 
 
@@ -63,41 +67,55 @@ import { ChangePasswordComponent } from './components/change-password/change-pas
 // ];
 
 export const routes: Routes = [
-  // Početna stranica
-  { path: '', redirectTo: '/projects-list', pathMatch: 'full' },
+ // Stranice dostupne bez autentifikacije
+ { path: '', redirectTo: '/login', pathMatch: 'full' },
+ { path: 'login', component: LoginComponent },
+ { path: 'register', component: RegisterComponent },
+ { path: 'verify', component: VerifyCodeComponent },
+ { path: 'magic-login', component: LoginComponent },
 
-  // Rute za projekte
-  { path: 'projects-list', component: ProjectListComponent },
-  { path: 'project/:id', component: ProjectDetailsComponent },
-  { path: 'project/:id/add-members', component: AddMembersComponent },
+ // Stranice zaštićene autentifikacijom
+ { path: 'projects-list', component: ProjectListComponent, canActivate: [AuthGuard] },
+ { path: 'project/:id', component: ProjectDetailsComponent, canActivate: [AuthGuard] },
+ { path: 'project/:id/add-members', component: AddMembersComponent, canActivate: [RoleGuard], data: { roles: ['manager'] } },
+ { path: 'project/:projectId/task/:taskId/add-members', component: AddMembersToTaskComponent, canActivate: [RoleGuard], data: { roles: ['manager'] } },
+ { path: 'project/:projectId/task/:taskId/members', component: ViewMembersTaskComponent, canActivate: [AuthGuard] },
+ { path: 'task-list', component: TaskListComponent, canActivate: [AuthGuard] },
+ { path: 'users-profile', component: UsersProfileComponent, canActivate: [AuthGuard] },
+ { path: 'users-projects', component: UsersProjectsComponent, canActivate: [AuthGuard] },
+ { path: 'delete-account', component: DeleteAccountComponent, canActivate: [RoleGuard], data: { roles: ['manager', 'member'] } },
+ { path: 'add-tasks', component: AddTasksComponent, canActivate: [RoleGuard], data: { roles: ['manager'] } },
+ { path: 'add-projects', component: AddProjectsComponent, canActivate: [RoleGuard], data: { roles: ['manager'] } },
+ { path: 'remove-members', component: RemoveMembersComponent, canActivate: [RoleGuard], data: { roles: ['manager'] } },
+ { path: 'remove-members/:id', component: RemoveMembersComponent, canActivate: [RoleGuard], data: { roles: ['manager'] } },
+ { path: 'change-password', component: ChangePasswordComponent, canActivate: [RoleGuard], data: { roles: ['manager', 'member'] } },
+ { path: 'notifications-user', component: NotificationsUserComponent },
+ // Fallback ruta za neprijavljene korisnike
+ { path: '**', redirectTo: '/login' },
 
-  // Rute za taskove
-  { path: 'project/:projectId/task/:taskId/add-members', component: AddMembersToTaskComponent },
-  { path: 'project/:projectId/task/:taskId/members', component: ViewMembersTaskComponent },
-  { path: 'task-list', component: TaskListComponent },
+  // // Rute za korisnike
+  // { path: 'register', component: RegisterComponent },
+  // { path: 'login', component: LoginComponent },
+  // { path: 'magic-login', component: LoginComponent },
+  // { path: 'users-profile', component: UsersProfileComponent },
+  // { path: 'users-projects', component: UsersProjectsComponent },
+  // { path: 'delete-account', component: DeleteAccountComponent },
+  // { path: 'notifications-user', component: NotificationsUserComponent },
 
-  // Rute za korisnike
-  { path: 'register', component: RegisterComponent },
-  { path: 'login', component: LoginComponent },
-  { path: 'magic-login', component: LoginComponent },
-  { path: 'users-profile', component: UsersProfileComponent },
-  { path: 'users-projects', component: UsersProjectsComponent },
-  { path: 'delete-account', component: DeleteAccountComponent },
+  // // Rute za dodavanje i uklanjanje članova
+  // { path: 'add-tasks', component: AddTasksComponent },
+  // { path: 'add-projects', component: AddProjectsComponent },
+  // { path: 'remove-members', component: RemoveMembersComponent },
+  // { path: 'remove-members/:id', component: RemoveMembersComponent },
 
-  // Rute za dodavanje i uklanjanje članova
-  { path: 'add-tasks', component: AddTasksComponent },
-  { path: 'add-projects', component: AddProjectsComponent },
-  { path: 'remove-members', component: RemoveMembersComponent },
-  { path: 'remove-members/:id', component: RemoveMembersComponent },
+  // // Ostale rute
+  // { path: 'verify', component: VerifyCodeComponent },
+  // { path: 'magic-login', component: LoginComponent },
+  // { path: 'users-profile', component: UsersProfileComponent },
+  // { path: 'change-password',component:ChangePasswordComponent },
+  // { path: '**', redirectTo: '/projects-list' },
 
-  // Ostale rute
-  { path: 'verify', component: VerifyCodeComponent },
-  { path: 'magic-login', component: LoginComponent },
-  { path: 'users-profile', component: UsersProfileComponent },
-  { path: 'change-password',component:ChangePasswordComponent },
-  { path: '**', redirectTo: '/projects-list' },
 ];
-
 
 @NgModule({
   imports: [RouterModule.forRoot(routes)],

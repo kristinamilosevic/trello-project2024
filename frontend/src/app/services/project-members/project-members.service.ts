@@ -14,7 +14,7 @@ export class ProjectMembersService {
   constructor(private http: HttpClient) {}
 
   getProjectMembers(projectId: string): Observable<Member[]> {
-    return this.http.get<Member[]>(`${this.apiUrl}/projects/${projectId}/members`).pipe(
+    return this.http.get<Member[]>(`${this.apiUrl}/projects/${projectId}/members/all`).pipe(
       catchError((error) => {
         console.error('Error in getProjectMembers:', error);
         return throwError(error);
@@ -41,7 +41,7 @@ export class ProjectMembersService {
   }
 
   removeMember(projectId: string, memberId: string): Observable<any> {
-    return this.http.delete(`${this.apiUrl}/projects/${projectId}/members/${memberId}/remove`).pipe(
+    return this.http.delete(`${this.apiUrl}/projects/remove/${projectId}/members/${memberId}/remove`).pipe(
       catchError((error) => {
         console.error('Error in removeMember:', error);
         return throwError(error);

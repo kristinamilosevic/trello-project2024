@@ -13,6 +13,41 @@ services:
     #     - users-service
     #   networks:
     #     - app-network
+  notifications-service:
+    build:
+      context: ./backend/notifications-service
+      dockerfile: Dockerfile
+    hostname: notifications-service
+    ports:
+      - "${NOTIFICATIONS_SERVICE_PORT}:${NOTIFICATIONS_SERVICE_INTERNAL_PORT}"
+    environment:
+      - CASS_DB=${CASS_DB}
+      - CASSANDRA_CONTACT_POINTS=${CASSANDRA_CONTACT_POINTS}
+      - CASSANDRA_PORT=${CASSANDRA_PORT}
+      - CASSANDRA_KEYSPACE=${CASSANDRA_KEYSPACE}
+      - CASSANDRA_CLUSTER_NAME=${CASSANDRA_CLUSTER_NAME}
+    networks:
+      - app-network
+    depends_on:
+      - cassandra
+    restart: always
+  
+  cassandra:
+    image: cassandra:4.1
+    container_name: cassandra
+    hostname: cassandra
+    ports:
+      - "${CASSANDRA_PORT}:${CASSANDRA_PORT}"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=TrelloCluster
+      - CASSANDRA_NUM_TOKENS=256
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "SELECT now() FROM system.local;"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     
   tasks-service:
     build:
@@ -53,6 +88,8 @@ services:
       - MONGO_USERS_URI=${MONGO_USERS_URI}
     depends_on:
       - mongo-users
+    volumes:
+      - ./backend/blacklist.txt:/app/blacklist.txt
     networks:
       - app-network
 

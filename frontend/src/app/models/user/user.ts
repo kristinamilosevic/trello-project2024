@@ -12,6 +12,7 @@ export interface User {
   export interface LoginRequest {
     username: string;
     password: string;
+    captchaToken: string | null;
   }
   
   export interface LoginResponse {

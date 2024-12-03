@@ -170,7 +170,7 @@ func (h TaskHandler) ChangeTaskStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updatedTask, err := h.service.ChangeTaskStatus(taskObjectID, request.Status)
+	updatedTask, err := h.service.ChangeTaskStatus(taskObjectID, request.Status, request.Username)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
