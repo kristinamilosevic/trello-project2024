@@ -18,14 +18,14 @@ services:
       context: ./backend/notifications-service
       dockerfile: Dockerfile
     hostname: notifications-service
-
     ports:
-      - "8004:8004"
+      - "${NOTIFICATIONS_SERVICE_PORT}:${NOTIFICATIONS_SERVICE_INTERNAL_PORT}"
     environment:
-      - CASS_DB=cassandra
-      - CASSANDRA_CONTACT_POINTS=cassandra
-      - CASSANDRA_KEYSPACE=notifications
-      - CASSANDRA_PORT=9042
+      - CASS_DB=${CASS_DB}
+      - CASSANDRA_CONTACT_POINTS=${CASSANDRA_CONTACT_POINTS}
+      - CASSANDRA_PORT=${CASSANDRA_PORT}
+      - CASSANDRA_KEYSPACE=${CASSANDRA_KEYSPACE}
+      - CASSANDRA_CLUSTER_NAME=${CASSANDRA_CLUSTER_NAME}
     networks:
       - app-network
     restart: always
@@ -41,6 +41,11 @@ services:
       - CASSANDRA_NUM_TOKENS=256
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "SELECT now() FROM system.local;"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     
   tasks-service:
     build:

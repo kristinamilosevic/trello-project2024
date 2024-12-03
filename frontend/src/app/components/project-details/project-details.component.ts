@@ -84,7 +84,7 @@ export class ProjectDetailsComponent implements OnInit {
   getTasks(projectId: string): void {
     this.projectService.getTasksForProject(projectId).subscribe(
       (tasks) => {
-        this.tasks = tasks; 
+        this.tasks = tasks || [];
       },
       (error) => {
         console.error('Error fetching tasks:', error);

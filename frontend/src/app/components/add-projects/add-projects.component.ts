@@ -55,7 +55,7 @@ export class AddProjectsComponent {
               this.errorMessage = "Invalid request. Please check your input.";
             }
           } else if (error.status === 401) {
-            this.errorMessage = "Unauthorized: Manager ID is required.";
+            this.errorMessage = "Unauthorized: Please log in to create a project.";    
           }else if (error.status === 409) {
             this.errorMessage = "A project with this name already exists. Please choose a different name.";
           } else {
