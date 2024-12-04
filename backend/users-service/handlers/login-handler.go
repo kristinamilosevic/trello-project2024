@@ -11,6 +11,7 @@ import (
 	"trello-project/microservices/users-service/utils"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type LoginRequest struct {
@@ -63,7 +64,6 @@ func (h *LoginHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// da li postoji korisnik sa zadatim username-om
 	var user models.User
 	err := h.UserService.UserCollection.FindOne(context.Background(), bson.M{"username": req.Username}).Decode(&user)
 	if err != nil {
@@ -77,7 +77,20 @@ func (h *LoginHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newPassword := utils.GenerateRandomPassword()
-	_, err = h.UserService.UserCollection.UpdateOne(context.Background(), bson.M{"username": req.Username}, bson.M{"$set": bson.M{"password": newPassword}})
+	fmt.Printf("Generated new plaintext password: %s\n", newPassword)
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
+		return
+	}
+	fmt.Printf("Generated hashed password: %s\n", string(hashedPassword))
+
+	_, err = h.UserService.UserCollection.UpdateOne(
+		context.Background(),
+		bson.M{"username": req.Username},
+		bson.M{"$set": bson.M{"password": string(hashedPassword)}},
+	)
 	if err != nil {
 		http.Error(w, "Failed to update password", http.StatusInternalServerError)
 		return
@@ -85,7 +98,10 @@ func (h *LoginHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 
 	subject := "Your new password"
 	body := fmt.Sprintf("Your new password is: %s", newPassword)
-	utils.SendEmail(req.Email, subject, body)
+	if err := utils.SendEmail(req.Email, subject, body); err != nil {
+		http.Error(w, "Failed to send email", http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Password reset successfully"))

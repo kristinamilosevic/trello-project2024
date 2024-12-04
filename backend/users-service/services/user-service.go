@@ -253,6 +253,8 @@ func (s *UserService) DeleteAccount(username string) error {
 
 // ResetPasswordByUsername resetuje lozinku korisnika i šalje novu lozinku na email
 func (s *UserService) ResetPasswordByUsername(username string) error {
+	fmt.Printf("ResetPasswordByUsername called for username: %s\n", username)
+
 	var user models.User
 	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
 	if err != nil {
@@ -265,12 +267,26 @@ func (s *UserService) ResetPasswordByUsername(username string) error {
 
 	// Generiši novu lozinku
 	newPassword := utils.GenerateRandomPassword()
+	fmt.Printf("Generated new plaintext password: %s\n", newPassword)
 
-	// Ažuriraj lozinku u bazi
-	_, err = s.UserCollection.UpdateOne(context.Background(), bson.M{"username": username}, bson.M{"$set": bson.M{"password": newPassword}})
+	// Heširaj novu lozinku
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
+		return fmt.Errorf("failed to hash password: %v", err)
+	}
+	fmt.Printf("Generated hashed password: %s\n", string(hashedPassword))
+
+	// Sačuvaj heširanu lozinku u bazi
+	result, err := s.UserCollection.UpdateOne(
+		context.Background(),
+		bson.M{"username": username},
+		bson.M{"$set": bson.M{"password": string(hashedPassword)}},
+	)
+	if err != nil {
+		fmt.Printf("Failed to update password for user %s: %v\n", username, err)
 		return fmt.Errorf("failed to update password: %v", err)
 	}
+	fmt.Printf("Matched %d documents, updated %d documents\n", result.MatchedCount, result.ModifiedCount)
 
 	// Pošalji novu lozinku korisniku na email
 	subject := "Your new password"
@@ -279,7 +295,7 @@ func (s *UserService) ResetPasswordByUsername(username string) error {
 		return fmt.Errorf("failed to send email: %v", err)
 	}
 
-	log.Println("New password sent to:", user.Email)
+	fmt.Println("New password sent to:", user.Email)
 	return nil
 }
 

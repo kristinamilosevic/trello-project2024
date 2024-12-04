@@ -122,7 +122,7 @@ export class LoginComponent {
             this.successMessage = 'Login successful via Magic Link!';
             setTimeout(() => {
               if (response.role === 'manager') {
-                this.router.navigate(['/add-projects']); 
+                this.router.navigate(['/users-projects']); 
               } else if (response.role === 'member') {
                 this.router.navigate(['/users-projects']); 
               } else {
