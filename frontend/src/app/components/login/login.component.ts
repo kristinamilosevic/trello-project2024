@@ -139,6 +139,7 @@ export class LoginComponent {
       } 
     });
   }
+
   openMagicLink(): void {
     if (!this.username) {
       this.errorMessage = 'Please enter your username';
