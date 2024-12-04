@@ -23,8 +23,26 @@ type ProjectHandler struct {
 func NewProjectHandler(service *services.ProjectService) *ProjectHandler {
 	return &ProjectHandler{Service: service}
 }
+func checkRole(r *http.Request, allowedRoles []string) error {
+	userRole := r.Header.Get("Role")
+	if userRole == "" {
+		return fmt.Errorf("role is missing in request header")
+	}
+
+	// Proveri da li je uloga dozvoljena
+	for _, role := range allowedRoles {
+		if role == userRole {
+			return nil
+		}
+	}
+	return fmt.Errorf("access forbidden: user does not have the required role")
+}
 
 func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"manager"}); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
 	tokenString := r.Header.Get("Authorization")
 	if tokenString == "" {
 		http.Error(w, "Authorization token required", http.StatusUnauthorized)
@@ -95,6 +113,10 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProjectHandler) AddMemberToProjectHandler(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"manager"}); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
 	vars := mux.Vars(r)
 	projectID, err := primitive.ObjectIDFromHex(vars["id"])
 	if err != nil {
@@ -129,6 +151,10 @@ func (h *ProjectHandler) AddMemberToProjectHandler(w http.ResponseWriter, r *htt
 
 // GetProjectMembersHandler retrieves the members of a specified project
 func (h *ProjectHandler) GetProjectMembersHandler(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"manager", "member"}); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
 	vars := mux.Vars(r)
 	projectID := vars["projectId"]
 
@@ -147,6 +173,10 @@ func (h *ProjectHandler) GetProjectMembersHandler(w http.ResponseWriter, r *http
 
 // RemoveMemberFromProjectHandler removes a member from a project if they have no in-progress tasks
 func (h *ProjectHandler) RemoveMemberFromProjectHandler(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"manager"}); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
 	fmt.Println("Request received:", r.URL.Path)
 
 	vars := mux.Vars(r)
@@ -181,13 +211,17 @@ func (h *ProjectHandler) GetAllUsersHandler(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "Failed to retrieve users", http.StatusInternalServerError)
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(users)
 }
 
 // ListProjectsHandler - dobavlja sve projekte
 func (h *ProjectHandler) ListProjectsHandler(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"manager", "member"}); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
 	fmt.Println("Fetching all projects...") // Log za praćenje
 
 	projects, err := h.Service.GetAllProjects()
@@ -205,6 +239,10 @@ func (h *ProjectHandler) ListProjectsHandler(w http.ResponseWriter, r *http.Requ
 
 // GetProjectByIDHandler - Dohvata projekat po ID-ju
 func (h *ProjectHandler) GetProjectByIDHandler(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"manager", "member"}); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
 	vars := mux.Vars(r)
 	projectID := vars["id"]
 
@@ -223,6 +261,10 @@ func (h *ProjectHandler) GetProjectByIDHandler(w http.ResponseWriter, r *http.Re
 }
 
 func (h *ProjectHandler) DisplayTasksForProjectHandler(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"manager", "member"}); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
 	vars := mux.Vars(r)
 	projectID, err := primitive.ObjectIDFromHex(vars["id"])
 	if err != nil {
@@ -246,6 +288,10 @@ func (h *ProjectHandler) DisplayTasksForProjectHandler(w http.ResponseWriter, r 
 
 func GetProjectsByUsername(s *services.ProjectService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if err := checkRole(r, []string{"manager", "member"}); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
 		vars := mux.Vars(r)
 		username := vars["username"]
 		if username == "" {

@@ -105,33 +105,40 @@ export class LoginComponent {
   ngOnInit(): void {
     this.route.queryParams.subscribe((params) => {
       const token = params['token'];
-     
+
 
       if (token) {
         // Proveri token koristeći AuthService
         this.authService.verifyMagicLink(token).subscribe({
           next: (response: any) => {
             console.log('Backend response:', response);
-          
+
             localStorage.setItem('token', response.token);
             localStorage.setItem('username', response.username);
             localStorage.setItem('role', response.role);
+            localStorage.removeItem('_grecaptcha');
+
 
             this.successMessage = 'Login successful via Magic Link!';
             setTimeout(() => {
-              this.router.navigate(['/add-projects']);
+              if (response.role === 'manager') {
+                this.router.navigate(['/users-projects']); 
+              } else if (response.role === 'member') {
+                this.router.navigate(['/users-projects']); 
+              } else {
+                this.errorMessage = 'Unknown role. Please contact support.';
+                this.router.navigate(['/login']);
+              }
             }, 2000);
           },
           error: () => {
             this.errorMessage = 'Invalid or expired magic link';
+            localStorage.removeItem('_grecaptcha');
           }
         });
       } 
     });
   }
-
-  
-
   openMagicLink(): void {
     if (!this.username) {
       this.errorMessage = 'Please enter your username';

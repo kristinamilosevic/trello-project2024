@@ -9,22 +9,22 @@ export class UserService {
   private apiUrl = 'http://localhost:8000/api/users/change-password'; 
 
   constructor(private http: HttpClient) { }
-
-  changePassword(oldPassword: string, newPassword: string, confirmPassword: string): Observable<any> {
-    const token = localStorage.getItem('token'); 
-
-    if (!token) {
-      throw new Error('Token is missing!');
+  private getAuthHeaders(): HttpHeaders {
+    const token = localStorage.getItem('token'); // JWT token iz localStorage
+    const role = localStorage.getItem('role'); // Uloga korisnika iz localStorage
+    if (!token || !role) {
+      throw new Error('Token or Role is missing!');
     }
 
-    const headers = new HttpHeaders().set('Authorization', `Bearer ${token}`);
+    // Vraća zaglavlje sa tokenom i rodom
+    return new HttpHeaders()
+      .set('Authorization', `Bearer ${token}`)
+      .set('Role', role); // Dodaje role u zaglavlje
+  }
 
-    const body = {
-      oldPassword,
-      newPassword,
-      confirmPassword
-    };
-
+  changePassword(oldPassword: string, newPassword: string, confirmPassword: string): Observable<any> {
+    const headers = this.getAuthHeaders(); // Koristi token i role za autorizaciju
+    const body = { oldPassword, newPassword, confirmPassword };
     return this.http.post(this.apiUrl, body, { headers });
   }
 }

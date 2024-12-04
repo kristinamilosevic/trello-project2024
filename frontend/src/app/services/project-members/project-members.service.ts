@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { Member } from '../../models/member/member.model';
@@ -13,8 +13,24 @@ export class ProjectMembersService {
 
   constructor(private http: HttpClient) {}
 
+  private getHeadersWithRole(): HttpHeaders {
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    
+    if (!token || !role) {
+      console.error('Token or Role missing');
+      return new HttpHeaders();
+    }
+
+    return new HttpHeaders({
+      'Authorization': `Bearer ${token}`,
+      'Role': role 
+    });
+  }
+
   getProjectMembers(projectId: string): Observable<Member[]> {
-    return this.http.get<Member[]>(`${this.apiUrl}/projects/${projectId}/members/all`).pipe(
+    const headers = this.getHeadersWithRole(); 
+    return this.http.get<Member[]>(`${this.apiUrl}/projects/${projectId}/members/all`, { headers }).pipe(
       catchError((error) => {
         console.error('Error in getProjectMembers:', error);
         return throwError(error);
@@ -22,8 +38,10 @@ export class ProjectMembersService {
     );
   }
 
+
   getAllUsers(): Observable<Member[]> {
-    return this.http.get<Member[]>(`${this.apiUrl}/projects/users`).pipe(
+    const headers = this.getHeadersWithRole(); 
+    return this.http.get<Member[]>(`${this.apiUrl}/projects/users`, { headers }).pipe(
       catchError((error) => {
         console.error('Error in getAllUsers:', error);
         return throwError(error);
@@ -32,7 +50,9 @@ export class ProjectMembersService {
   }
 
   addMembers(projectId: string, memberIds: string[]): Observable<any> {
-    return this.http.post(`${this.apiUrl}/projects/${projectId}/members`, memberIds).pipe(
+    const headers = this.getHeadersWithRole();
+    headers.append('Content-Type', 'application/json');
+    return this.http.post(`${this.apiUrl}/projects/${projectId}/members`, memberIds, { headers }).pipe(
       catchError((error) => {
         console.error('Error in addMembers:', error);
         return throwError(error);
@@ -41,7 +61,8 @@ export class ProjectMembersService {
   }
 
   removeMember(projectId: string, memberId: string): Observable<any> {
-    return this.http.delete(`${this.apiUrl}/projects/remove/${projectId}/members/${memberId}/remove`).pipe(
+    const headers = this.getHeadersWithRole();
+    return this.http.delete(`${this.apiUrl}/projects/remove/${projectId}/members/${memberId}/remove`, { headers }).pipe(
       catchError((error) => {
         console.error('Error in removeMember:', error);
         return throwError(error);
@@ -49,13 +70,12 @@ export class ProjectMembersService {
     );
   }
   getProjectDetails(projectId: string): Observable<Project> {
-    return this.http.get<Project>(`${this.apiUrl}/projects/${projectId}`).pipe(
+    const headers = this.getHeadersWithRole(); 
+    return this.http.get<Project>(`${this.apiUrl}/projects/${projectId}`, { headers }).pipe(
       catchError((error) => {
         console.error('Error in getProjectDetails:', error);
         return throwError(error);
       })
     );
   }
-  
-
 }

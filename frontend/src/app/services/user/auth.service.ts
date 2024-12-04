@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable, BehaviorSubject } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { LoginRequest, LoginResponse } from '../../models/user/user';
@@ -13,6 +13,17 @@ export class AuthService {
   private loggedIn = new BehaviorSubject<boolean>(this.hasToken());
 
   constructor(private http: HttpClient) {}
+  private getAuthHeaders(): HttpHeaders {
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    
+    if (!token || !role) {
+      throw new Error('Token or Role is missing!');
+    }
+
+    // Vraća zaglavlje sa tokenom i rodom
+    return new HttpHeaders().set('Authorization', `Bearer ${token}`).set('Role', role);
+  }
 
   // Funkcija za prijavljivanje korisnika
   login(credentials: LoginRequest): Observable<LoginResponse> {
@@ -26,7 +37,6 @@ export class AuthService {
       })
     );
   }
-  // Funkcija za slanje linka za reset lozinke
   sendPasswordResetLink(username: string, email: string): Observable<any> {
     return this.http.post(`${this.apiUrl}/forgot-password`, { username, email });
   }
@@ -41,15 +51,14 @@ export class AuthService {
   
   
   checkUsername(username: string): Observable<any> {
-    return this.http.get(`${this.apiUrl}/check-username/${username}`);
+    const headers = this.getAuthHeaders();
+    return this.http.get(`${this.apiUrl}/check-username/${username}`, { headers });
   }
-  
-  // Provera da li je korisnik prijavljen
+
   isLoggedIn(): Observable<boolean> {
     return this.loggedIn.asObservable();
   }
 
-  // Funkcija za odjavljivanje korisnika
   logout(): void {
     localStorage.removeItem('token');
     localStorage.removeItem('username');
@@ -83,17 +92,7 @@ export class AuthService {
   
 
   getUserProfile(): Observable<any> {
-    const token = this.getToken();
-    if (!token) {
-      return new Observable<any>((observer) => {
-        observer.error('No token found');
-      });
-    }
-
-    return this.http.get<any>(`${this.apiUrl}/users-profile`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
+    const headers = this.getAuthHeaders();
+    return this.http.get<any>(`${this.apiUrl}/users-profile`, { headers });
   }
 }

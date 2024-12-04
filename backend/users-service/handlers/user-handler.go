@@ -21,6 +21,23 @@ type UserHandler struct {
 	BlackList   map[string]bool
 }
 
+func checkRole(r *http.Request, allowedRoles []string) error {
+	userRole := r.Header.Get("Role")
+	fmt.Println("User Role in Request Header:", userRole)
+
+	if userRole == "" {
+		return fmt.Errorf("role is missing in request header")
+	}
+
+	// Provera da li je uloga dozvoljena
+	for _, role := range allowedRoles {
+		if role == userRole {
+			return nil
+		}
+	}
+	return fmt.Errorf("access forbidden: user does not have the required role")
+}
+
 func (h *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var requestData struct {
 		User         models.User `json:"user"`
@@ -215,6 +232,10 @@ func (h *UserHandler) VerifyCode(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UserHandler) DeleteAccountHandler(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"manager", "member"}); err != nil {
+		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
+		return
+	}
 	tokenString := r.Header.Get("Authorization")
 	if tokenString == "" {
 		http.Error(w, "Missing Authorization header", http.StatusUnauthorized)
@@ -253,6 +274,10 @@ func (h *UserHandler) DeleteAccountHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *UserHandler) GetUserForCurrentSession(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"manager", "member"}); err != nil {
+		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
+		return
+	}
 	tokenString := r.Header.Get("Authorization")
 	if tokenString == "" {
 		http.Error(w, "Missing Authorization header", http.StatusUnauthorized)
@@ -291,6 +316,10 @@ func (h *UserHandler) GetUserForCurrentSession(w http.ResponseWriter, r *http.Re
 
 // ChangePassword menja lozinku korisniku
 func (h *UserHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"manager", "member"}); err != nil {
+		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
+		return
+	}
 	var requestData struct {
 		OldPassword     string `json:"oldPassword"`
 		NewPassword     string `json:"newPassword"`

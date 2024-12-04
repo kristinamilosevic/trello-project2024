@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -19,8 +20,26 @@ type TaskHandler struct {
 func NewTaskHandler(service *services.TaskService) *TaskHandler {
 	return &TaskHandler{service: service}
 }
+func checkRole(r *http.Request, allowedRoles []string) error {
+	userRole := r.Header.Get("Role")
+	if userRole == "" {
+		return fmt.Errorf("role is missing in request header")
+	}
+
+	// Proveri da li je uloga dozvoljena
+	for _, role := range allowedRoles {
+		if role == userRole {
+			return nil
+		}
+	}
+	return fmt.Errorf("access forbidden: user does not have the required role")
+}
 
 func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"manager"}); err != nil {
+		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
+		return
+	}
 	var task models.Task
 	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -44,6 +63,10 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaskHandler) GetAllTasks(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"manager", "member"}); err != nil {
+		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
+		return
+	}
 	tasks, err := h.service.GetAllTasks()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -54,6 +77,10 @@ func (h *TaskHandler) GetAllTasks(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(tasks)
 }
 func (h *TaskHandler) GetAvailableMembersForTask(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"manager"}); err != nil {
+		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
+		return
+	}
 	vars := mux.Vars(r)
 	taskID := vars["taskID"]
 	projectID := vars["projectID"]
@@ -79,6 +106,10 @@ func (h *TaskHandler) GetAvailableMembersForTask(w http.ResponseWriter, r *http.
 }
 
 func (h TaskHandler) GetTasksByProjectID(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"manager", "member"}); err != nil {
+		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
+		return
+	}
 	log.Println("Requested URL:", r.URL.Path)
 	projectID := strings.TrimPrefix(r.URL.Path, "/tasks/project/")
 	log.Println("Extracted Project ID:", projectID)
@@ -99,6 +130,10 @@ func (h TaskHandler) GetTasksByProjectID(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(tasks)
 }
 func (h *TaskHandler) AddMembersToTask(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"manager"}); err != nil {
+		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
+		return
+	}
 	vars := mux.Vars(r)
 	taskID := vars["taskID"]
 
@@ -127,6 +162,10 @@ func (h *TaskHandler) AddMembersToTask(w http.ResponseWriter, r *http.Request) {
 
 // GetMembersForTaskHandler dohvaća članove dodeljene određenom tasku
 func (h *TaskHandler) GetMembersForTaskHandler(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"manager", "member"}); err != nil {
+		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
+		return
+	}
 	vars := mux.Vars(r)
 	taskID := vars["taskID"]
 
@@ -153,6 +192,10 @@ func (h *TaskHandler) GetMembersForTaskHandler(w http.ResponseWriter, r *http.Re
 
 // promena statusa
 func (h TaskHandler) ChangeTaskStatus(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"member"}); err != nil {
+		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
+		return
+	}
 	var request struct {
 		TaskID   string            `json:"taskId"`
 		Status   models.TaskStatus `json:"status"`
@@ -182,6 +225,10 @@ func (h TaskHandler) ChangeTaskStatus(w http.ResponseWriter, r *http.Request) {
 
 // RemoveMemberFromTaskHandler uklanja člana sa zadatka
 func (h *TaskHandler) RemoveMemberFromTaskHandler(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"manager"}); err != nil {
+		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
+		return
+	}
 	vars := mux.Vars(r)
 	taskID := vars["taskID"]
 	memberIDStr := vars["memberID"]

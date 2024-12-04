@@ -16,19 +16,11 @@ import (
 
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		w.Header().Set("Access-Control-Allow-Origin", "*")                                // Možeš da postaviš i specifičnu domenu ako je potrebno
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS") // Omogućavamo DELETE metodu
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")     // Uključeni relevantni headeri
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-
-		// Ako je OPTIONS request, odgovori odmah
-		//if r.Method == "OPTIONS" {
-
-		//w.Header().Set("Access-Control-Allow-Origin", "http://localhost:4200")
+		w.Header().Set("Access-Control-Allow-Origin", "https://localhost:4200")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Role, Manager-ID")
 
 		if r.Method == http.MethodOptions {
-
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -36,7 +28,6 @@ func enableCORS(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-
 func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

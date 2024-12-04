@@ -10,16 +10,20 @@ export class AccountService {
 
   constructor(private http: HttpClient) {}
 
-  deleteAccount(): Observable<any> {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      throw new Error('No token found');
+  private getAuthHeaders(): HttpHeaders {
+    const token = localStorage.getItem('token'); 
+    const role = localStorage.getItem('role'); 
+    if (!token || !role) {
+      throw new Error('Token or Role is missing');
     }
 
-    const headers = new HttpHeaders({
-      'Authorization': `Bearer ${token}`
+    return new HttpHeaders({
+      Authorization: `Bearer ${token}`, 
+      Role: role, 
     });
-
+  }
+  deleteAccount(): Observable<any> {
+    const headers = this.getAuthHeaders(); 
     return this.http.delete(this.apiUrl, { headers });
   }
 }
