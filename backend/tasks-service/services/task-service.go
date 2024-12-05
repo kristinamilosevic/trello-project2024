@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"html"
 	"log"
 	"trello-project/microservices/tasks-service/models"
 
@@ -165,11 +166,15 @@ func (s *TaskService) CreateTask(projectID string, title, description string, de
 		status = models.StatusPending
 	}
 
+	// Sanitizacija inputa
+	sanitizedTitle := html.EscapeString(title)
+	sanitizedDescription := html.EscapeString(description)
+
 	task := &models.Task{
 		ID:          primitive.NewObjectID(),
 		ProjectID:   projectID,
-		Title:       title,
-		Description: description,
+		Title:       sanitizedTitle,
+		Description: sanitizedDescription,
 
 		Status:    status,
 		DependsOn: dependsOn,

@@ -9,10 +9,10 @@ export class AuthGuard implements CanActivate {
   constructor(private authService: AuthService, private router: Router) {}
 
   canActivate(): boolean {
-    if (this.authService.isLoggedIn()) { // Proverite da li korisnik ima validnu prijavu
+    if (this.authService.isLoggedIn()) { 
       return true;
     } else {
-      this.router.navigate(['/login']); // Ako nije prijavljen, preusmerite na login stranicu
+      this.router.navigate(['/login']); 
       return false;
     }
   }

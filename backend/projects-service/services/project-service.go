@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"log"
 	"time"
 	"trello-project/microservices/projects-service/models"
@@ -46,12 +47,15 @@ func (s *ProjectService) CreateProject(name string, description string, expected
 	if expectedEndDate.Before(time.Now()) {
 		return nil, fmt.Errorf("expected end date must be in the future")
 	}
+	// Sanitizacija inputa
+	sanitizedName := html.EscapeString(name)
+	sanitizedDescription := html.EscapeString(description)
 
 	// Create the project
 	project := &models.Project{
 		ID:              primitive.NewObjectID(),
-		Name:            name,
-		Description:     description,
+		Name:            sanitizedName,
+		Description:     sanitizedDescription,
 		ExpectedEndDate: expectedEndDate,
 		MinMembers:      minMembers,
 		MaxMembers:      maxMembers,
