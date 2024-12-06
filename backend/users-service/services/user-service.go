@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"log"
 	"strings"
 
@@ -47,6 +48,11 @@ func (s *UserService) RegisterUser(user models.User) error {
 	if err := s.UserCollection.FindOne(context.Background(), bson.M{"username": user.Username}).Decode(&existingUser); err == nil {
 		return fmt.Errorf("user with username already exists")
 	}
+	// Sanitizacija unosa
+	user.Username = html.EscapeString(user.Username)
+	user.Name = html.EscapeString(user.Name)
+	user.LastName = html.EscapeString(user.LastName)
+	user.Email = html.EscapeString(user.Email)
 
 	// Hashiranje lozinke pre nego što se sačuva
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
