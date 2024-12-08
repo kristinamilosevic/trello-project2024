@@ -117,6 +117,7 @@ func (h *ProjectHandler) AddMemberToProjectHandler(w http.ResponseWriter, r *htt
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
+
 	vars := mux.Vars(r)
 	projectID, err := primitive.ObjectIDFromHex(vars["id"])
 	if err != nil {
@@ -133,15 +134,16 @@ func (h *ProjectHandler) AddMemberToProjectHandler(w http.ResponseWriter, r *htt
 	// Pozivamo servis za dodavanje članova i proveravamo greške
 	err = h.Service.AddMembersToProject(projectID, memberIDs)
 	if err != nil {
-		if err.Error() == "maximum number of members reached for the project" {
+		switch err.Error() {
+		case "all provided members are already part of the project":
+			http.Error(w, "One or more members are already on the project", http.StatusBadRequest)
+		case "maximum number of members reached for the project":
 			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if err.Error() == "the number of members cannot be less than the minimum required for the project" {
+		case "you need to add at least the minimum required members to the project":
 			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
+		default:
+			http.Error(w, "Failed to add members to project", http.StatusInternalServerError)
 		}
-		http.Error(w, "Failed to add members to project", http.StatusInternalServerError)
 		return
 	}
 

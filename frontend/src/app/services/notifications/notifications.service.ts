@@ -26,7 +26,7 @@ export class NotificationService {
   // Dohvati notifikacije korisnika
   getNotifications(username: string): Observable<any[]> {
     const headers = this.getAuthHeaders();
-    return this.http.get<any[]>(`${this.apiUrl}?username=${username}`, { headers });
+    return this.http.get<any[]>(`${this.getUrl}?username=${username}`, { headers });
   }
 
 

@@ -1,11 +1,15 @@
 package services
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
 	"log"
+	"net/http"
+	"os"
 	"time"
 	"trello-project/microservices/projects-service/models"
 
@@ -80,35 +84,115 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, membe
 	var project models.Project
 	err := s.ProjectsCollection.FindOne(context.Background(), bson.M{"_id": projectID}).Decode(&project)
 	if err != nil {
+		fmt.Printf("Error finding project: %v\n", err)
 		return fmt.Errorf("project not found: %v", err)
 	}
 
-	// Provera da li dodavanje članova premašuje maksimalno dozvoljeni broj
+	// Provera maksimalnog broja članova
 	if len(project.Members)+len(memberIDs) > project.MaxMembers {
+		fmt.Println("Maximum number of members reached for the project")
 		return fmt.Errorf("maximum number of members reached for the project")
 	}
 
-	// Provera da li bi ukupni broj članova bio manji od minimalnog samo u slučaju kada već nema članova
-	if len(project.Members) == 0 && len(memberIDs) < project.MinMembers {
-		return fmt.Errorf("you need to add at least the minimum required members to the project")
+	// Filtriranje članova koji su već na projektu
+	existingMemberIDs := make(map[primitive.ObjectID]bool)
+	for _, member := range project.Members {
+		existingMemberIDs[member.ID] = true
+	}
+
+	var newMemberIDs []primitive.ObjectID
+	for _, memberID := range memberIDs {
+		if !existingMemberIDs[memberID] {
+			newMemberIDs = append(newMemberIDs, memberID)
+		} else {
+			fmt.Printf("Member %s is already in the project, skipping.\n", memberID.Hex())
+		}
+	}
+
+	if len(newMemberIDs) == 0 {
+		fmt.Println("No new members to add.")
+		return fmt.Errorf("all provided members are already part of the project")
 	}
 
 	// Dohvatanje korisničkih podataka i priprema za ažuriranje
 	var members []models.Member
-	for _, memberID := range memberIDs {
+	for _, memberID := range newMemberIDs {
 		var user models.Member
 		err := s.UsersCollection.FindOne(context.Background(), bson.M{"_id": memberID}).Decode(&user)
 		if err != nil {
+			fmt.Printf("Error finding member: %v\n", err)
 			return err // Greška ako član nije pronađen
 		}
 		members = append(members, user)
 	}
 
-	// Ažuriranje projekta sa novim članovima
+	// Ažuriranje baze sa novim članovima
 	filter := bson.M{"_id": projectID}
 	update := bson.M{"$push": bson.M{"members": bson.M{"$each": members}}}
 	_, err = s.ProjectsCollection.UpdateOne(context.Background(), filter, update)
-	return err
+	if err != nil {
+		fmt.Printf("Error updating project members: %v\n", err)
+		return err
+	}
+
+	// Slanje notifikacija za svakog novog člana
+	for _, member := range members {
+		message := fmt.Sprintf("You have been added to the project: %s!", project.Name)
+		err = s.sendNotification(member, message)
+		if err != nil {
+			fmt.Printf("Failed to send notification to member %s: %v\n", member.Username, err)
+			// Loguj grešku i nastavi sa ostalim članovima
+		}
+	}
+
+	fmt.Println("Members successfully added and notifications sent.")
+	return nil
+}
+
+func (s *ProjectService) sendNotification(member models.Member, message string) error {
+	notification := map[string]string{
+		"userId":   member.ID.Hex(),
+		"username": member.Username,
+		"message":  message, // Dinamična poruka
+	}
+
+	notificationData, err := json.Marshal(notification)
+	if err != nil {
+		fmt.Printf("Error marshaling notification data: %v\n", err)
+		return nil
+	}
+
+	// Učitaj URL iz .env fajla
+	notificationURL := os.Getenv("NOTIFICATIONS_SERVICE_URL")
+	if notificationURL == "" {
+		fmt.Println("Notification service URL is not set in .env")
+		return fmt.Errorf("notification service URL is not configured")
+	}
+
+	req, err := http.NewRequest("POST", notificationURL, bytes.NewBuffer(notificationData))
+	if err != nil {
+		fmt.Printf("Error creating new request: %v\n", err)
+		return nil
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Role", "manager")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Printf("Error sending HTTP request: %v\n", err)
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		fmt.Printf("Failed to create notification, status code: %d\n", resp.StatusCode)
+		return nil
+	}
+
+	fmt.Printf("Notification successfully sent for member: %s\n", member.Username)
+	return nil
 }
 
 // GetProjectMembers retrieves members of a specific project.
@@ -152,7 +236,6 @@ func (s *ProjectService) GetAllUsers() ([]models.Member, error) {
 }
 
 // RemoveMemberFromProject removes a member from a project if they are not assigned to an in-progress task.
-
 func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID, memberID string) error {
 	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
 	if err != nil {
@@ -182,7 +265,21 @@ func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID,
 		return errors.New("cannot remove member assigned to an in-progress task")
 	}
 
-	// Uklonite člana ako nema aktivnih zadataka
+	// Dohvati projekat za ime projekta
+	var project models.Project
+	err = s.ProjectsCollection.FindOne(ctx, bson.M{"_id": projectObjectID}).Decode(&project)
+	if err != nil {
+		return errors.New("project not found")
+	}
+
+	// Dohvati podatke o članu za notifikaciju
+	var member models.Member
+	err = s.UsersCollection.FindOne(ctx, bson.M{"_id": memberObjectID}).Decode(&member)
+	if err != nil {
+		return errors.New("member not found")
+	}
+
+	// Uklonite člana iz projekta
 	projectFilter := bson.M{"_id": projectObjectID}
 	update := bson.M{"$pull": bson.M{"members": bson.M{"_id": memberObjectID}}}
 
@@ -193,6 +290,14 @@ func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID,
 
 	if result.ModifiedCount == 0 {
 		return errors.New("member not found in project or already removed")
+	}
+
+	// Slanje notifikacije nakon uspešnog uklanjanja
+	message := fmt.Sprintf("You have been removed from the project: %s!", project.Name)
+	err = s.sendNotification(member, message)
+	if err != nil {
+		log.Printf("Failed to send notification to member %s: %v\n", member.Username, err)
+		// Log greške, ali ne prekidaj proces
 	}
 
 	return nil
