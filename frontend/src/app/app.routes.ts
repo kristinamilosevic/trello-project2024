@@ -21,6 +21,7 @@ import { AuthGuard } from './guards/auth.guard';
 import { RoleGuard } from './guards/role.guard';
 
 import { NotificationsUserComponent } from './components/notifications-user/notifications-user.component';
+import { ResetPasswordComponent } from './reset-password/reset-password.component';
 
 
 
@@ -73,6 +74,8 @@ export const routes: Routes = [
  { path: 'register', component: RegisterComponent },
  { path: 'verify', component: VerifyCodeComponent },
  { path: 'magic-login', component: LoginComponent },
+ { path: 'reset-password', component: ResetPasswordComponent },
+
 
  // Stranice zaštićene autentifikacijom
  { path: 'projects-list', component: ProjectListComponent, canActivate: [AuthGuard] },

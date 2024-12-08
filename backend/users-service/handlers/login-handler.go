@@ -68,47 +68,14 @@ func (h *LoginHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var user models.User
-	err := h.UserService.UserCollection.FindOne(context.Background(), bson.M{"username": req.Username}).Decode(&user)
+	err := h.UserService.SendPasswordResetLink(req.Username, req.Email)
 	if err != nil {
-		http.Error(w, "User not found", http.StatusNotFound)
-		return
-	}
-
-	if user.Email != req.Email {
-		http.Error(w, "Email does not match", http.StatusBadRequest)
-		return
-	}
-
-	newPassword := utils.GenerateRandomPassword()
-	fmt.Printf("Generated new plaintext password: %s\n", newPassword)
-
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-	if err != nil {
-		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
-		return
-	}
-	fmt.Printf("Generated hashed password: %s\n", string(hashedPassword))
-
-	_, err = h.UserService.UserCollection.UpdateOne(
-		context.Background(),
-		bson.M{"username": req.Username},
-		bson.M{"$set": bson.M{"password": string(hashedPassword)}},
-	)
-	if err != nil {
-		http.Error(w, "Failed to update password", http.StatusInternalServerError)
-		return
-	}
-
-	subject := "Your new password"
-	body := fmt.Sprintf("Your new password is: %s", newPassword)
-	if err := utils.SendEmail(req.Email, subject, body); err != nil {
-		http.Error(w, "Failed to send email", http.StatusInternalServerError)
+		http.Error(w, "Failed to send reset link: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Password reset successfully"))
+	w.Write([]byte("Password reset link sent successfully"))
 }
 
 func validateCredentials(username, password string) bool {
@@ -290,4 +257,55 @@ func (h *LoginHandler) VerifyMagicLink(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+func (h *LoginHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Token       string `json:"token"`
+		NewPassword string `json:"newPassword"`
+	}
+
+	// Decode JSON zahteva
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	// Proveri validnost tokena
+	claims, err := h.JWTService.ValidateToken(req.Token)
+	if err != nil {
+		http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+		return
+	}
+
+	// Validacija nove lozinke
+	if err := h.UserService.ValidatePassword(req.NewPassword); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Hashuj novu lozinku
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		http.Error(w, "Failed to hash password", http.StatusInternalServerError)
+		return
+	}
+
+	// Ažuriraj lozinku korisnika
+	_, err = h.UserService.UserCollection.UpdateOne(
+		context.Background(),
+		bson.M{"username": claims.Username},
+		bson.M{"$set": bson.M{"password": string(hashedPassword)}},
+	)
+	if err != nil {
+		http.Error(w, "Failed to update password", http.StatusInternalServerError)
+		return
+	}
+
+	// Vraćanje JSON odgovora
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Password reset successfully",
+	})
 }
