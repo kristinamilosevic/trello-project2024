@@ -251,3 +251,26 @@ func (h *TaskHandler) RemoveMemberFromTaskHandler(w http.ResponseWriter, r *http
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"message": "Member removed from task successfully"}`))
 }
+func (h *TaskHandler) DeleteTasksByProjectHandler(w http.ResponseWriter, r *http.Request) {
+	// Provera uloge korisnika
+	if err := checkRole(r, []string{"manager"}); err != nil {
+		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
+		return
+	}
+
+	// Ekstrakcija projectId iz URL-a
+	vars := mux.Vars(r)
+	projectID := vars["projectId"]
+
+	// Pozivanje servisa za brisanje zadataka
+	err := h.service.DeleteTasksByProject(projectID)
+	if err != nil {
+		log.Printf("Failed to delete tasks for project ID %s: %v", projectID, err)
+		http.Error(w, "Failed to delete tasks", http.StatusInternalServerError)
+		return
+	}
+
+	// Uspešan odgovor
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Tasks deleted successfully"})
+}

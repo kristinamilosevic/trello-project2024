@@ -360,3 +360,17 @@ func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.
 	return &task, nil
 
 }
+func (s *TaskService) DeleteTasksByProject(projectID string) error {
+	// Filter za pronalaženje zadataka sa projectId
+	filter := bson.M{"projectId": projectID}
+
+	// Brisanje svih zadataka vezanih za projekat
+	result, err := s.tasksCollection.DeleteMany(context.Background(), filter)
+	if err != nil {
+		log.Printf("Failed to delete tasks for project ID %s: %v", projectID, err)
+		return fmt.Errorf("failed to delete tasks: %v", err)
+	}
+
+	log.Printf("Successfully deleted %d tasks for project ID %s", result.DeletedCount, projectID)
+	return nil
+}
