@@ -90,6 +90,7 @@ export const routes: Routes = [
  { path: 'remove-members/:id', component: RemoveMembersComponent, canActivate: [RoleGuard], data: { roles: ['manager'] } },
  { path: 'change-password', component: ChangePasswordComponent, canActivate: [RoleGuard], data: { roles: ['manager', 'member'] } },
  { path: 'notifications-user', component: NotificationsUserComponent },
+ { path: 'delete-project/:id', component: ProjectDetailsComponent, canActivate: [RoleGuard], data: { roles: ['manager'] } },
  // Fallback ruta za neprijavljene korisnike
  { path: '**', redirectTo: '/login' },
 

@@ -96,4 +96,15 @@ export class ProjectService {
         })
       );
   }
-} 
+  deleteProject(projectId: string): Observable<any> {
+    const headers = this.getHeadersWithRole(); // Koristi header sa tokenom i ulogom
+    return this.http
+      .delete(`${this.apiUrl}/${projectId}`, { headers })
+      .pipe(
+        catchError((error) => {
+          console.error('Error deleting project:', error);
+          return throwError('Failed to delete project');
+        })
+      );
+  }
+}  

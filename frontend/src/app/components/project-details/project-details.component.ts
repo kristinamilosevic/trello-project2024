@@ -23,6 +23,7 @@ export class ProjectDetailsComponent implements OnInit {
   isManager: boolean = false;
   isMember: boolean = false;
   isAuthenticated: boolean = false;
+  showDeleteConfirmation: boolean = false; 
   private subscription: Subscription = new Subscription();
 
 
@@ -201,4 +202,34 @@ export class ProjectDetailsComponent implements OnInit {
   ngOnDestroy(): void {
     this.subscription.unsubscribe(); // Clean up subscriptions
   }
+
+  confirmDelete(): void {
+    this.showDeleteConfirmation = true; // Prikaži modal
+  }
+
+  cancelDelete(): void {
+    this.showDeleteConfirmation = false; // Sakrij modal
+  }
+
+  deleteProject(): void {
+    if (!this.project) {
+      console.error('No project to delete');
+      return;
+    }
+
+    this.projectService.deleteProject(this.project.id).subscribe({
+      next: () => {
+        alert('Project deleted successfully!');
+        this.router.navigate(['/projects-list']); // Preusmeri na listu projekata
+      },
+      error: (err) => {
+        console.error('Failed to delete project:', err);
+        alert('Failed to delete project. Please try again later.');
+      },
+    });
+
+    this.showDeleteConfirmation = false; // Sakrij modal nakon brisanja
+  }
 }
+
+

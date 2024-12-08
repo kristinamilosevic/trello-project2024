@@ -1,3 +1,12 @@
+<div *ngIf="showDeleteConfirmation" class="modal-overlay">
+  <div class="modal">
+    <p>Are you sure you want to delete the project?</p>
+    <div class="modal-actions">
+      <button (click)="deleteProject()" class="action-button confirm-delete-btn">Delete</button>
+      <button (click)="cancelDelete()" class="action-button cancel-delete-btn">Cancel</button>
+    </div>
+  </div>
+</div>
 <div *ngIf="project" class="project-details-container">
   <div class="project-details">
     <h2>{{ project.name }}</h2>
@@ -5,6 +14,7 @@
     <p><strong>Min Members:</strong> {{ project.minMembers }}</p>
     <p><strong>Max Members:</strong> {{ project.maxMembers }}</p>
     <button (click)="goBack()" class="action-button">Back</button>
+    <button *ngIf="isManager" (click)="confirmDelete()" class="action-button delete-button">Delete Project</button>
 
     <div *ngIf="tasks && tasks.length > 0" class="task-list">
       <h3>Tasks for this Project:</h3>
