@@ -18,6 +18,8 @@ export class RegisterComponent {
   registerForm: FormGroup;
   captchaToken: string | null = null;
   captchaResolved: boolean = false;
+  successMessage: string | null = null;
+  errorMessage: string | null = null;
 
   constructor(private fb: FormBuilder, private http: HttpClient, private router: Router) {
     this.registerForm = this.fb.group({
@@ -39,8 +41,9 @@ export class RegisterComponent {
     console.log('CAPTCHA token:', this.captchaToken); 
 
     if (!this.captchaToken) {
-        alert('Please solve the CAPTCHA first!');
-        return;
+      this.errorMessage = 'Please solve the CAPTCHA first!';
+      setTimeout(() => (this.errorMessage = null), 2000);
+      return;
     }
 
     const payload = {
@@ -50,8 +53,8 @@ export class RegisterComponent {
 
     console.log('Payload being sent to the backend:', payload); 
 
-    // Provera validnosti forme pre slanja
-    if (this.registerForm.valid) {
+     // Provera validnosti forme pre slanja
+     if (this.registerForm.valid) {
       this.http.post(
           'http://localhost:8000/api/users/register',
           payload, 
@@ -59,7 +62,8 @@ export class RegisterComponent {
       ).subscribe({
           next: (response) => {
               console.log('Response from server:', response);
-              alert('Registration successful. Check your email for the verification code.');
+              this.successMessage = 'Registration successful. Check your email for the verification code.';
+              this.errorMessage = null;
 
               localStorage.removeItem('_grecaptcha');
               
@@ -67,22 +71,28 @@ export class RegisterComponent {
               localStorage.setItem('username', this.registerForm.value.username);
               this.registerForm.reset();
           },
-        error: (error) => {
-          console.error('Error during registration:', error);
-          
-          if (error.error && error.error.message) {
-            alert(error.error.message); 
-          } else if (error.status === 409) {
-            alert('Username already exists. Please choose a different one.');
-          } else {
-            alert('Registration failed. Please try again.');
-          }
-        },
-      });
-    } else {
-      alert('Please fill out the form correctly.');
+          error: (error) => {
+            console.error('Error during registration:', error);
+            this.successMessage = null; // Očisti prethodne uspešne poruke
+  
+            if (error.error && error.error.message) {
+              this.errorMessage = error.error.message;
+            } else if (error.status === 409) {
+              this.errorMessage = 'Username already exists. Please choose a different one.';
+            } else {
+              this.errorMessage = 'Registration failed. Please try again.';
+            }
+  
+            setTimeout(() => (this.errorMessage = null), 2000);
+          },
+        });
+      } else {
+        this.errorMessage = 'Please fill out the form correctly.';
+        setTimeout(() => (this.errorMessage = null), 2000);
+      }
     }
-  }
+  
+  
   
   openLogin() {
     this.router.navigate(['/login']);

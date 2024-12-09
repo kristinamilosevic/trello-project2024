@@ -16,6 +16,8 @@ import {  Router } from '@angular/router';
 export class VerifyCodeComponent implements OnInit {
   verifyCodeForm: FormGroup;
   username: string = '';
+  successMessage: string | null = null;
+  errorMessage: string | null = null;
 
   constructor(private fb: FormBuilder, private http: HttpClient, private router: Router) {
     this.verifyCodeForm = this.fb.group({
@@ -38,26 +40,37 @@ export class VerifyCodeComponent implements OnInit {
       this.http.post(`http://localhost:8000/api/users/verify-code`, data, { responseType: 'text' }).subscribe({
         next: (response) => {
           console.log('Response from server:', response);
-          alert('Verification successful. You can now log in.');
+          this.successMessage = 'Verification successful. You can now log in.';
+          this.errorMessage = null; 
           localStorage.removeItem('username');
           this.verifyCodeForm.reset();
-          this.router.navigate(['/login']);
+          setTimeout(() => {
+            this.successMessage = null; 
+            this.router.navigate(['/login']);
+          }, 2000);
         },
         error: (error) => {
           console.error('Error during verification:', error);
+          this.successMessage = null; 
           if (error.status === 400) {
-            alert('Bad request. Please make sure all data is correct.');
+            this.errorMessage = 'Bad request. Please make sure all data is correct.';
           } else if (error.status === 401) {
-            alert('Username mismatch or invalid code. Please try again.');
+            this.errorMessage = 'Username mismatch or invalid code. Please try again.';
           } else if (error.status === 404) {
-            alert('User not found. Please check the username.');
+            this.errorMessage = 'User not found. Please check the username.';
           } else {
-            alert('Verification failed. Please try again.');
+            this.errorMessage = 'Verification failed. Please try again.';
           }
+          setTimeout(() => {
+            this.errorMessage = null; 
+          }, 2000);
         },
       });
     } else {
-      alert('Please fill out the form correctly.');
+      this.errorMessage = 'Please fill out the form correctly.';
+      setTimeout(() => {
+        this.errorMessage = null; 
+      }, 2000);
     }
   }
 }

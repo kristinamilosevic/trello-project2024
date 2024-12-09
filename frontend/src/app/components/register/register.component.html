@@ -1,5 +1,14 @@
 <div class="register-card">
     <h2>Register</h2>
+
+    <div *ngIf="successMessage" class="success-message">
+      {{ successMessage }}
+    </div>
+
+    <div *ngIf="errorMessage" class="error-message">
+      {{ errorMessage }}
+    </div>
+
     <form [formGroup]="registerForm" (ngSubmit)="onSubmit()">
       <div class="form-group">
         <label for="name">Name</label>
