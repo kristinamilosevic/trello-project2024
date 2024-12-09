@@ -188,121 +188,105 @@ func (s *UserService) DeleteAccount(username string) error {
 	}
 	userID := user.ID
 
-	// Provera zadataka za sve projekte korisnika
-	projectFilter := bson.M{"$or": []bson.M{
-		{"manager_id": userID},  // Ako je korisnik menadžer projekta
-		{"members._id": userID}, // Ako je korisnik član projekta
-	}}
-
-	cursor, err := s.ProjectCollection.Find(context.Background(), projectFilter)
-	if err != nil {
-		return fmt.Errorf("failed to fetch projects for user: %v", err)
-	}
-	defer cursor.Close(context.Background())
-
-	for cursor.Next(context.Background()) {
-		var project models.Project
-		if err := cursor.Decode(&project); err != nil {
-			return fmt.Errorf("failed to decode project: %v", err)
-		}
-
-		// Provera zadataka na projektu
-		taskFilter := bson.M{
-			"projectId": project.ID.Hex(),
-			"status":    bson.M{"$ne": "Completed"}, // Pronalaženje nezavršenih zadataka
-		}
-
-		count, err := s.TaskCollection.CountDocuments(context.Background(), taskFilter)
+	// Provera uloge korisnika
+	if user.Role == "manager" {
+		// Pronađi projekte koje je menadžer kreirao
+		projectFilter := bson.M{"manager_id": userID}
+		cursor, err := s.ProjectCollection.Find(context.Background(), projectFilter)
 		if err != nil {
-			return fmt.Errorf("failed to check tasks for project '%s': %v", project.ID.Hex(), err)
+			return fmt.Errorf("failed to fetch projects for manager: %v", err)
+		}
+		defer cursor.Close(context.Background())
+
+		// Proveri da li projekti imaju nezavršene zadatke
+		for cursor.Next(context.Background()) {
+			var project models.Project
+			if err := cursor.Decode(&project); err != nil {
+				return fmt.Errorf("failed to decode project: %v", err)
+			}
+
+			taskFilter := bson.M{
+				"projectId": project.ID.Hex(),
+				"status":    bson.M{"$ne": "Completed"},
+			}
+			count, err := s.TaskCollection.CountDocuments(context.Background(), taskFilter)
+			if err != nil {
+				return fmt.Errorf("failed to check tasks for project '%s': %v", project.ID.Hex(), err)
+			}
+
+			if count > 0 {
+				return fmt.Errorf("cannot delete account: project '%s' has unfinished tasks", project.ID.Hex())
+			}
 		}
 
-		if count > 0 {
-			return fmt.Errorf("cannot delete account: project '%s' has unfinished tasks", project.ID.Hex())
+		// Ukloni menadžera iz projekata, ali ostavi projekte
+		update := bson.M{"$unset": bson.M{"manager_id": ""}}
+		_, err = s.ProjectCollection.UpdateMany(context.Background(), projectFilter, update)
+		if err != nil {
+			return fmt.Errorf("failed to remove manager from projects: %v", err)
 		}
 	}
 
-	if err := cursor.Err(); err != nil {
-		return fmt.Errorf("error iterating through projects: %v", err)
+	// Član: proveri da li je deo projekata sa nezavršenim zadacima
+	if user.Role == "member" {
+		projectFilter := bson.M{"members._id": userID}
+		cursor, err := s.ProjectCollection.Find(context.Background(), projectFilter)
+		if err != nil {
+			return fmt.Errorf("failed to fetch projects for member: %v", err)
+		}
+		defer cursor.Close(context.Background())
+
+		for cursor.Next(context.Background()) {
+			var project models.Project
+			if err := cursor.Decode(&project); err != nil {
+				return fmt.Errorf("failed to decode project: %v", err)
+			}
+
+			taskFilter := bson.M{
+				"projectId": project.ID.Hex(),
+				"status":    bson.M{"$ne": "Completed"},
+			}
+			count, err := s.TaskCollection.CountDocuments(context.Background(), taskFilter)
+			if err != nil {
+				return fmt.Errorf("failed to check tasks for project '%s': %v", project.ID.Hex(), err)
+			}
+
+			if count > 0 {
+				return fmt.Errorf("cannot delete account: project '%s' has unfinished tasks", project.ID.Hex())
+			}
+		}
+
+		// Ukloni člana iz projekata
+		projectUpdateFilter := bson.M{"members._id": userID}
+		projectUpdate := bson.M{"$pull": bson.M{"members": bson.M{"_id": userID}}}
+		_, err = s.ProjectCollection.UpdateMany(context.Background(), projectUpdateFilter, projectUpdate)
+		if err != nil {
+			return fmt.Errorf("failed to remove user from projects: %v", err)
+		}
+
+		// Ukloni člana iz zadataka - `assignees` polje
+		taskAssigneesUpdateFilter := bson.M{"assignees": userID}
+		taskAssigneesUpdate := bson.M{"$pull": bson.M{"assignees": userID}}
+		_, err = s.TaskCollection.UpdateMany(context.Background(), taskAssigneesUpdateFilter, taskAssigneesUpdate)
+		if err != nil {
+			return fmt.Errorf("failed to remove user from task assignees: %v", err)
+		}
+
+		// Ukloni člana iz zadataka - `members` polje
+		taskMembersUpdateFilter := bson.M{"members._id": userID}
+		taskMembersUpdate := bson.M{"$pull": bson.M{"members": bson.M{"_id": userID}}}
+		_, err = s.TaskCollection.UpdateMany(context.Background(), taskMembersUpdateFilter, taskMembersUpdate)
+		if err != nil {
+			return fmt.Errorf("failed to remove user from task members: %v", err)
+		}
 	}
 
-	// Ako nema nezavršenih zadataka, obriši nalog
+	// Brisanje korisnika iz baze
 	_, err = s.UserCollection.DeleteOne(context.Background(), bson.M{"username": username})
 	if err != nil {
 		return fmt.Errorf("failed to delete user: %v", err)
 	}
 
-	// Ukloni korisnika iz članova i menadžera
-	projectUpdateFilter := bson.M{"members._id": userID}
-	projectUpdate := bson.M{"$pull": bson.M{"members": bson.M{"_id": userID}}}
-	_, err = s.ProjectCollection.UpdateMany(context.Background(), projectUpdateFilter, projectUpdate)
-	if err != nil {
-		return fmt.Errorf("failed to remove user from projects: %v", err)
-	}
-
-	managerUpdateFilter := bson.M{"manager_id": userID}
-	managerUpdate := bson.M{"$unset": bson.M{"manager_id": ""}}
-	_, err = s.ProjectCollection.UpdateMany(context.Background(), managerUpdateFilter, managerUpdate)
-	if err != nil {
-		return fmt.Errorf("failed to remove user as manager: %v", err)
-	}
-
-	// Ukloni korisnika iz zadataka
-	taskUpdateFilter := bson.M{"assignees": userID}
-	taskUpdate := bson.M{"$pull": bson.M{"assignees": userID}}
-	_, err = s.TaskCollection.UpdateMany(context.Background(), taskUpdateFilter, taskUpdate)
-	if err != nil {
-		return fmt.Errorf("failed to remove user from tasks: %v", err)
-	}
-
-	return nil
-}
-
-// ResetPasswordByUsername resetuje lozinku korisnika i šalje novu lozinku na email
-func (s *UserService) ResetPasswordByUsername(username string) error {
-	fmt.Printf("ResetPasswordByUsername called for username: %s\n", username)
-
-	var user models.User
-	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
-	if err != nil {
-		return fmt.Errorf("user not found")
-	}
-
-	if !user.IsActive {
-		return errors.New("user is not active")
-	}
-
-	// Generiši novu lozinku
-	newPassword := utils.GenerateRandomPassword()
-	fmt.Printf("Generated new plaintext password: %s\n", newPassword)
-
-	// Heširaj novu lozinku
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return fmt.Errorf("failed to hash password: %v", err)
-	}
-	fmt.Printf("Generated hashed password: %s\n", string(hashedPassword))
-
-	// Sačuvaj heširanu lozinku u bazi
-	result, err := s.UserCollection.UpdateOne(
-		context.Background(),
-		bson.M{"username": username},
-		bson.M{"$set": bson.M{"password": string(hashedPassword)}},
-	)
-	if err != nil {
-		fmt.Printf("Failed to update password for user %s: %v\n", username, err)
-		return fmt.Errorf("failed to update password: %v", err)
-	}
-	fmt.Printf("Matched %d documents, updated %d documents\n", result.MatchedCount, result.ModifiedCount)
-
-	// Pošalji novu lozinku korisniku na email
-	subject := "Your new password"
-	body := fmt.Sprintf("Your new password is: %s", newPassword)
-	if err := utils.SendEmail(user.Email, subject, body); err != nil {
-		return fmt.Errorf("failed to send email: %v", err)
-	}
-
-	fmt.Println("New password sent to:", user.Email)
 	return nil
 }
 
@@ -394,6 +378,32 @@ func (s *UserService) ChangePassword(username, oldPassword, newPassword, confirm
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update password: %v", err)
+	}
+
+	return nil
+}
+
+func (s *UserService) SendPasswordResetLink(username, email string) error {
+	// Pronađi korisnika u bazi
+	var user models.User
+	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+	if err != nil {
+		return fmt.Errorf("user not found")
+	}
+
+	if user.Email != email {
+		return fmt.Errorf("email does not match")
+	}
+
+	// Generiši token za resetovanje lozinke
+	token, err := s.JWTService.GenerateEmailVerificationToken(username)
+	if err != nil {
+		return fmt.Errorf("failed to generate reset token: %v", err)
+	}
+
+	// Pošalji email sa linkom za resetovanje
+	if err := utils.SendPasswordResetEmail(email, token); err != nil {
+		return fmt.Errorf("failed to send password reset email: %v", err)
 	}
 
 	return nil

@@ -25,9 +25,10 @@
       <h3>Reset your password</h3>
       <input type="email" [(ngModel)]="forgotEmail" placeholder="Enter your email" required />
       <button (click)="sendResetLink()">Send Reset Link</button>
-      <p *ngIf="resetMessage" class="reset-message">{{ resetMessage }}</p>
+      <p *ngIf="resetMessage" class="notification success">{{ resetMessage }}</p>
       <a class="back-link" (click)="closeForgotPassword()">Back to Login</a>
     </div>
+    
   
     <div *ngIf="showMagicLink">
       <h3>Magic Link</h3>
