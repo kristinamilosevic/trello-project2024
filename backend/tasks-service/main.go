@@ -10,6 +10,7 @@ import (
 	"trello-project/microservices/tasks-service/services"
 
 	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -29,6 +30,11 @@ func enableCORS(next http.Handler) http.Handler {
 	})
 }
 func main() {
+	// Učitavanje .env fajla
+	err := godotenv.Load(".env")
+	if err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -85,7 +91,6 @@ func main() {
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		}
 	})
-	//corsRouter := enableCORS(r)
 	// Pokretanje servera
 	log.Println("Server running on http://localhost:8002")
 	if err := http.ListenAndServe(":8002", enableCORS(r)); err != nil {

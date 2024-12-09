@@ -196,6 +196,7 @@ func (h TaskHandler) ChangeTaskStatus(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
 		return
 	}
+
 	var request struct {
 		TaskID   string            `json:"taskId"`
 		Status   models.TaskStatus `json:"status"`
@@ -247,9 +248,9 @@ func (h *TaskHandler) RemoveMemberFromTaskHandler(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Uspešno uklanjanje
+	log.Printf("Member %s removed successfully from task %s", memberIDStr, taskID)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"message": "Member removed from task successfully"}`))
+	w.Write([]byte(`{"message": "Member removed from task successfully and notification sent"}`))
 }
 func (h *TaskHandler) DeleteTasksByProjectHandler(w http.ResponseWriter, r *http.Request) {
 	// Provera uloge korisnika

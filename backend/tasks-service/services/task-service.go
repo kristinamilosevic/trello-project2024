@@ -1,10 +1,14 @@
 package services
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"html"
 	"log"
+	"net/http"
+	"os"
 	"trello-project/microservices/tasks-service/models"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -122,13 +126,69 @@ func (s *TaskService) AddMembersToTask(taskID string, membersToAdd []models.Memb
 	}
 
 	if len(newMembers) > 0 {
+		// Ažuriraj zadatak sa novim članovima
 		update := bson.M{"$addToSet": bson.M{"members": bson.M{"$each": newMembers}}}
 		_, err = s.tasksCollection.UpdateOne(context.Background(), bson.M{"_id": taskObjectID}, update)
 		if err != nil {
 			return fmt.Errorf("failed to add members to task: %v", err)
 		}
+
+		// Slanje notifikacija za nove članove
+		for _, member := range newMembers {
+			message := fmt.Sprintf("You have been added to the task: %s!", task.Title)
+			err = s.sendNotification(member, message)
+			if err != nil {
+				log.Printf("Failed to send notification to member %s: %v", member.Username, err)
+				// Log greške, ali ne prekidaj proces
+			}
+		}
 	}
 
+	return nil
+}
+func (s *TaskService) sendNotification(member models.Member, message string) error {
+	notification := map[string]string{
+		"userId":   member.ID.Hex(),
+		"username": member.Username,
+		"message":  message, // Dinamična poruka
+	}
+
+	notificationData, err := json.Marshal(notification)
+	if err != nil {
+		fmt.Printf("Error marshaling notification data: %v\n", err)
+		return nil
+	}
+
+	// Učitaj URL iz .env fajla
+	notificationURL := os.Getenv("NOTIFICATIONS_SERVICE_URL")
+	if notificationURL == "" {
+		fmt.Println("Notification service URL is not set in .env")
+		return fmt.Errorf("notification service URL is not configured")
+	}
+
+	req, err := http.NewRequest("POST", notificationURL, bytes.NewBuffer(notificationData))
+	if err != nil {
+		fmt.Printf("Error creating new request: %v\n", err)
+		return nil
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Role", "manager")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Printf("Error sending HTTP request: %v\n", err)
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		fmt.Printf("Failed to create notification, status code: %d\n", resp.StatusCode)
+		return nil
+	}
+
+	fmt.Printf("Notification successfully sent for member: %s\n", member.Username)
 	return nil
 }
 
@@ -238,16 +298,12 @@ func (s *TaskService) RemoveMemberFromTask(taskID string, memberID primitive.Obj
 		return fmt.Errorf("task not found: %v", err)
 	}
 
-	// Provera da li je zadatak završeni (Completed)
-	if task.Status != "Completed" {
-		return fmt.Errorf("only members of completed tasks can be removed")
-	}
-
-	// Uklanjanje člana sa zadatka
+	// Provera da li je član deo zadatka
 	memberFound := false
+	var removedMember models.Member
 	for i, member := range task.Members {
 		if member.ID == memberID {
-			// Uklanjanje člana sa zadatka
+			removedMember = member
 			task.Members = append(task.Members[:i], task.Members[i+1:]...)
 			memberFound = true
 			break
@@ -268,8 +324,16 @@ func (s *TaskService) RemoveMemberFromTask(taskID string, memberID primitive.Obj
 		return fmt.Errorf("failed to update task: %v", err)
 	}
 
+	// Slanje notifikacije uklonjenom članu
+	message := fmt.Sprintf("You have been removed from the task: %s", task.Title)
+	err = s.sendNotification(removedMember, message)
+	if err != nil {
+		log.Printf("Failed to send notification to member %s: %v", removedMember.Username, err)
+	}
+
 	return nil
 }
+
 func (s *TaskService) GetTaskByID(taskID primitive.ObjectID) (*models.Task, error) {
 	var task models.Task
 	err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskID}).Decode(&task)
@@ -305,6 +369,7 @@ func (s *TaskService) GetTasksByProject(projectID string) ([]*models.Task, error
 }
 
 func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.TaskStatus, username string) (*models.Task, error) {
+	// Pronađi zadatak u bazi
 	var task models.Task
 	if err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskID}).Decode(&task); err != nil {
 		return nil, fmt.Errorf("task not found: %v", err)
@@ -313,9 +378,9 @@ func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.
 	fmt.Printf("Task '%s' current status: %s\n", task.Title, task.Status)
 	fmt.Printf("Attempting to change status to: %s\n", status)
 
+	// Proveri da li je korisnik zadužen za zadatak
 	var isAuthorized bool
 	for _, member := range task.Members {
-		fmt.Printf("Checking member: %s\n", member.Username)
 		if member.Username == username {
 			isAuthorized = true
 			break
@@ -326,39 +391,42 @@ func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.
 		return nil, fmt.Errorf("user '%s' is not authorized to change the status of this task because they are not assigned to it", username)
 	}
 
-	//d
+	// Ako postoji zavisni zadatak, proveri njegov status
 	if task.DependsOn != nil {
-		fmt.Printf("Checking dependent task with ID: %v\n", task.DependsOn)
-
-		// Pronadji zavisni task u bazi
 		var dependentTask models.Task
 		if err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": task.DependsOn}).Decode(&dependentTask); err != nil {
 			return nil, fmt.Errorf("dependent task not found: %v", err)
 		}
 
-		fmt.Printf("Dependent task '%s' status: '%s'\n", dependentTask.Title, dependentTask.Status)
-
-		//promenu statusa samo ako je zavisni task u statusu In progress ili Completed
 		if dependentTask.Status != models.StatusInProgress && dependentTask.Status != models.StatusCompleted && status != models.StatusPending {
 			return nil, fmt.Errorf("cannot change status because dependent task '%s' is not in progress or completed", dependentTask.Title)
 		}
 	}
 
-	// update status trenutnog taska
+	// Ažuriraj status trenutnog zadatka
 	update := bson.M{"$set": bson.M{"status": status}}
 	_, err := s.tasksCollection.UpdateOne(context.Background(), bson.M{"_id": taskID}, update)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update task status: %v", err)
 	}
 
-	fmt.Printf("Status of task '%s' successfully updated to: %s\n", task.Title, status)
-
+	// Osveži podatke zadatka nakon promene statusa
 	if err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskID}).Decode(&task); err != nil {
 		return nil, fmt.Errorf("failed to retrieve updated task: %v", err)
 	}
 
-	return &task, nil
+	fmt.Printf("Status of task '%s' successfully updated to: %s\n", task.Title, status)
 
+	// Pošalji notifikacije svim članovima zadatka
+	message := fmt.Sprintf("The status of the task '%s' has been changed to: %s", task.Title, status)
+	for _, member := range task.Members {
+		err := s.sendNotification(member, message)
+		if err != nil {
+			log.Printf("Failed to send notification to member %s: %v", member.Username, err)
+		}
+	}
+
+	return &task, nil
 }
 func (s *TaskService) DeleteTasksByProject(projectID string) error {
 	// Filter za pronalaženje zadataka sa projectId
