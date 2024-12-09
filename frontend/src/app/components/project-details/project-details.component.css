@@ -232,4 +232,26 @@
 .action-button.delete-button:hover {
   background-color: #DEB6AB; 
 }
+.notification {
+  margin: 10px auto;
+  font-weight: bold;
+  font-size: 16px;
+  text-align: center;
+  animation: fadeInOut 3s ease-in-out;
+}
+
+.success {
+  color: #4caf50;
+}
+
+.error {
+  color: #f44336;
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { opacity: 0; }
+}
 

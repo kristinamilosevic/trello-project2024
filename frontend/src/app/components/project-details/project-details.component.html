@@ -1,3 +1,5 @@
+<p *ngIf="successMessage" class="notification success">{{ successMessage }}</p>
+<p *ngIf="errorMessage" class="notification error">{{ errorMessage }}</p>
 <div *ngIf="showDeleteConfirmation" class="modal-overlay">
   <div class="modal">
     <p>Are you sure you want to delete the project?</p>

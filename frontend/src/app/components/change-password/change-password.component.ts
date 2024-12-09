@@ -14,7 +14,8 @@ import { CommonModule } from '@angular/common';
 export class ChangePasswordComponent {
   changePasswordForm: FormGroup;
   errorMessage: string = '';
-
+  successMessage: string = '';
+  
   constructor(private fb: FormBuilder, private userService: UserService, private router: Router) {
     this.changePasswordForm = this.fb.group({
       oldPassword: ['', [Validators.required]],
@@ -31,47 +32,48 @@ export class ChangePasswordComponent {
       const { oldPassword, newPassword, confirmPassword } = this.changePasswordForm.value;
   
       if (newPassword !== confirmPassword) {
-        alert('The new password and the confirmation password do not match!');
+        this.errorMessage = 'The new password and the confirmation password do not match!';
+        setTimeout(() => {
+          this.errorMessage = '';
+        }, 6000);
         return;
       }
   
-      // Pozivanje UserService-a za promenu lozinke
       this.userService.changePassword(oldPassword, newPassword, confirmPassword).subscribe({
         next: () => {
-          alert('Password changed successfully!');
-          this.router.navigate(['/users-profile']);
+          this.successMessage = 'Password changed successfully!';
+          setTimeout(() => {
+            this.successMessage = '';
+            this.router.navigate(['/users-profile']);
+          }, 6000);
         },
         error: (error) => {
-          console.error('Error:', error);
-  
-          if (error.status === 400 && error.error) {
-            // Proveri da li poruka sadrži specifične ključne reči
-            const errorMessage = typeof error.error === 'string' ? error.error : error.error.message;
-
+          const errorMessage = typeof error.error === 'string' ? error.error : error.error?.message;
           if (errorMessage) {
             if (errorMessage.includes('old password is incorrect')) {
-              alert('The old password is incorrect. Please try again.');
+              this.errorMessage = 'The old password is incorrect. Please try again.';
             } else if (errorMessage.includes('new password and confirmation do not match')) {
-              alert('The new password and confirmation password do not match!');
+              this.errorMessage = 'The new password and confirmation password do not match!';
             } else if (errorMessage.includes('Password does not meet the required criteria')) {
-              alert('The new password does not meet the required criteria. Please try a stronger password!');
+              this.errorMessage = 'The new password does not meet the required criteria. Please try a stronger password!';
             } else if (errorMessage.includes('Password is too common')) {
-              alert('The new password is too common. Please choose a more unique password!');
+              this.errorMessage = 'The new password is too common. Please choose a more unique password!';
             } else {
-              alert('Error changing password: ' + errorMessage);
+              this.errorMessage = 'An unexpected error occurred. Please try again later.';
             }
           } else {
-            alert('An unexpected error occurred. Please try again later.');
+            this.errorMessage = 'An unexpected error occurred. Please try again later.';
           }
-        } else {
-          alert('An unexpected error occurred. Please try again later.');
-        }
-      },
-    });
-  } else {
-    alert('Please fill out all fields correctly!');
+          setTimeout(() => {
+            this.errorMessage = '';
+          }, 6000);
+        },
+      });
+    } else {
+      this.errorMessage = 'Please fill out all fields correctly!';
+      setTimeout(() => {
+        this.errorMessage = '';
+      }, 6000);
+    }
   }
-}
-  
-  
-}
+}  
