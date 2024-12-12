@@ -17,9 +17,11 @@ export class ViewMembersTaskComponent implements OnInit {
   taskId: string | null = null;
   projectId: string | null = null;
   members: any[] = [];
-  errorMessage: string | null = null;
   isManager: boolean = false;
   private subscription: Subscription = new Subscription();
+  successMessage: string | null = null;
+  errorMessage: string | null = null;
+
 
   constructor(
     private route: ActivatedRoute,
@@ -79,22 +81,33 @@ export class ViewMembersTaskComponent implements OnInit {
     if (this.taskId && member.id) {
       this.taskService.removeMemberFromTask(this.taskId, member.id).subscribe({
         next: (response) => {
-          alert('Member removed successfully');
-          this.loadTaskMembers();  // Ponovno učitaj članove nakon uklanjanja
+          this.successMessage = 'Member removed successfully!';
+          this.errorMessage = null; 
+          setTimeout(() => {
+            this.successMessage = null; 
+          }, 2000);
+          this.loadTaskMembers(); 
         },
         error: (error) => {
-          // Proveri specifičnu grešku vezanu za status
+          this.successMessage = null; 
           if (error && error.error && error.error.message) {
-            alert(error.error.message);  // Ovdje se koristi ispravan ključ "message"
+            this.errorMessage = error.error.message; 
           } else {
-            alert('Only members of completed tasks can be removed!');
+            this.errorMessage = 'Only members of completed tasks can be removed!';
           }
+          setTimeout(() => {
+            this.errorMessage = null; 
+          }, 2000);
         }
       });
     } else {
-      alert('Invalid task or member');
+      this.errorMessage = 'Invalid task or member';
+      setTimeout(() => {
+        this.errorMessage = null; 
+      }, 2000);
     }
   }
+  
   
   
   ngOnDestroy(): void {

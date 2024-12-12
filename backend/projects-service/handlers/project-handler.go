@@ -317,3 +317,29 @@ func GetProjectsByUsername(s *services.ProjectService) http.HandlerFunc {
 		}
 	}
 }
+func (h *ProjectHandler) RemoveProjectHandler(w http.ResponseWriter, r *http.Request) {
+	// Provera korisničke uloge
+	if err := checkRole(r, []string{"manager"}); err != nil {
+		log.Printf("Access forbidden: insufficient permissions. Error: %v", err)
+		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
+		return
+	}
+
+	// Ekstrakcija projectId iz URL parametara
+	vars := mux.Vars(r)
+	projectID := vars["projectId"]
+
+	log.Printf("Received request to delete project with ID: %s", projectID)
+
+	// Pozivanje servisa za brisanje projekta i povezanih zadataka
+	err := h.Service.DeleteProjectAndTasks(r.Context(), projectID, r) // Prosleđivanje originalnog HTTP zahteva
+	if err != nil {
+		log.Printf("Failed to delete project and tasks: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Uspešan odgovor
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Project and related tasks deleted successfully"})
+}

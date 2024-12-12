@@ -78,6 +78,7 @@ func main() {
 	r.HandleFunc("/api/tasks/create", taskHandler.CreateTask).Methods("POST")                      // Kreiranje novog zadatka
 	r.HandleFunc("/api/tasks/project/{projectId}", taskHandler.GetTasksByProjectID).Methods("GET") // Zadatke po ID-u projekta
 	r.HandleFunc("/api/tasks/status", taskHandler.ChangeTaskStatus).Methods("POST")
+	r.HandleFunc("/api/tasks/project/{projectId}", taskHandler.DeleteTasksByProjectHandler).Methods(http.MethodDelete)
 
 	// Svi ostali taskovi
 	r.HandleFunc("/api/tasks", func(w http.ResponseWriter, r *http.Request) {

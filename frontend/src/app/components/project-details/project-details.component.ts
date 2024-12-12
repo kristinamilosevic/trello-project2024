@@ -23,6 +23,9 @@ export class ProjectDetailsComponent implements OnInit {
   isManager: boolean = false;
   isMember: boolean = false;
   isAuthenticated: boolean = false;
+  showDeleteConfirmation: boolean = false; 
+  errorMessage: string = '';
+  successMessage: string = '';
   private subscription: Subscription = new Subscription();
 
 
@@ -43,7 +46,10 @@ export class ProjectDetailsComponent implements OnInit {
     if (projectId) {
       this.loadProjectAndTasks(projectId);
     } else {
-      alert('Invalid Project ID. Redirecting to the projects list.');
+      this.errorMessage = 'Invalid Project ID. Redirecting to the projects list.';
+      setTimeout(() => {
+        this.errorMessage = '';
+      }, 5000);
       //this.router.navigate(['/projects']);
       this.router.navigate(['/projects-list']);
     }
@@ -126,8 +132,10 @@ export class ProjectDetailsComponent implements OnInit {
 
   updateTaskStatus(task: any): void {
     if (!task || !task.id || !task.status) {
-      console.error('Task data is incomplete or invalid:', task);
-      alert('Cannot update task status. Task data is invalid.');
+      this.errorMessage = 'Cannot update task status. Task data is invalid.';
+      setTimeout(() => {
+        this.errorMessage = '';
+      }, 5000);
       return;
     }
 
@@ -139,9 +147,10 @@ export class ProjectDetailsComponent implements OnInit {
         dependentTask.status !== 'Completed' &&
         task.status !== 'Pending'
       ) {
-        alert(
-          `Cannot change status to "${task.status}" because dependent task "${dependentTask.title}" is not completed.`
-        );
+        this.errorMessage = `Cannot change status to "${task.status}" because dependent task "${dependentTask.title}" is not completed.`;
+        setTimeout(() => {
+          this.errorMessage = '';
+        }, 5000);
         return;
       }
     }
@@ -160,18 +169,18 @@ export class ProjectDetailsComponent implements OnInit {
 
     this.taskService.updateTaskStatus(task.id, task.status).subscribe({
       next: () => {
-        console.log(
-          `Status for task "${task.title}" successfully updated to "${task.status}"`
-        );
+        this.successMessage = `Status for task "${task.title}" successfully updated to "${task.status}".`;
+        setTimeout(() => {
+          this.successMessage = '';
+        }, 5000);
         this.getTasks(this.project?.id!); // Refresh tasks
       },
       error: (err: any) => {
         console.error('Error updating task status:', err);
-        alert(
-          `Failed to update status for task "${task.title}": ${
-            err.error || err.message
-          }`
-        );
+        this.errorMessage = `Failed to update status for task "${task.title}". Please try again later.`;
+        setTimeout(() => {
+          this.errorMessage = '';
+        }, 5000);
       }
     });
   }
@@ -201,4 +210,42 @@ export class ProjectDetailsComponent implements OnInit {
   ngOnDestroy(): void {
     this.subscription.unsubscribe(); // Clean up subscriptions
   }
+
+  confirmDelete(): void {
+    this.showDeleteConfirmation = true; // Prikaži modal
+  }
+
+  cancelDelete(): void {
+    this.showDeleteConfirmation = false; // Sakrij modal
+  }
+
+  deleteProject(): void {
+    if (!this.project) {
+      console.error('No project to delete');
+      return;
+    }
+
+    this.projectService.deleteProject(this.project.id).subscribe({
+      next: () => {
+        this.successMessage = 'Project deleted successfully!';
+        setTimeout(() => {
+          this.successMessage = '';
+        }, 5000);
+
+        this.router.navigate(['/projects-list']); 
+      },
+      error: (err) => {
+        console.error('Failed to delete project:', err);
+        this.errorMessage = 'Failed to delete project. Please try again later.';
+        setTimeout(() => {
+          this.errorMessage = '';
+        }, 5000);
+
+      },
+    });
+
+    this.showDeleteConfirmation = false; 
+  }
 }
+
+

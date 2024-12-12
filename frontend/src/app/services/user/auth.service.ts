@@ -95,4 +95,10 @@ export class AuthService {
     const headers = this.getAuthHeaders();
     return this.http.get<any>(`${this.apiUrl}/users-profile`, { headers });
   }
+
+  resetPassword(token: string, newPassword: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/reset-password`, { token, newPassword });
+  }
+  
+  
 }

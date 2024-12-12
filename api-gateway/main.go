@@ -19,6 +19,8 @@ func main() {
 	mux.Handle("/api/projects/users", authMiddleware(reverseProxyURL("http://projects-service:8003"), []string{"manager", "member"}))
 	mux.Handle("/api/projects/{id}/tasks", authMiddleware(reverseProxyURL("http://projects-service:8003"), []string{"manager", "member"}))
 	mux.Handle("/api/projects/{username}", authMiddleware(reverseProxyURL("http://projects-service:8003"), []string{"manager", "member"}))
+	mux.Handle("/api/projects/{id}/delete", authMiddleware(reverseProxyURL("http://projects-service:8003"), []string{"manager"}))
+
 	// Rute za Tasks Service (samo menadžer dodaje zadatke, član menja status)
 	mux.Handle("/api/tasks/create", authMiddleware(reverseProxyURL("http://tasks-service:8002"), []string{"manager"}))
 	mux.Handle("/api/tasks/status", authMiddleware(reverseProxyURL("http://tasks-service:8002"), []string{"member"}))

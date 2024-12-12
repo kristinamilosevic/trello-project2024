@@ -106,6 +106,7 @@ func main() {
 	mux.HandleFunc("/api/users/login", loginHandler.Login)
 	mux.HandleFunc("/api/users/check-username", loginHandler.CheckUsername)
 	mux.HandleFunc("/api/users/forgot-password", loginHandler.ForgotPassword)
+	mux.HandleFunc("/api/users/reset-password", loginHandler.ResetPassword)
 	mux.HandleFunc("/api/users/auth/delete-account", userHandler.DeleteAccountHandler)
 	mux.HandleFunc("/api/users/magic-link", loginHandler.MagicLink)
 	mux.HandleFunc("/api/users/magic-login", loginHandler.MagicLogin)

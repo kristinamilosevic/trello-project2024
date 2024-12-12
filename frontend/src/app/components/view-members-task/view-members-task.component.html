@@ -25,4 +25,13 @@
   <ng-template #noMembers>
     <p class="info">No members assigned to this task.</p>
   </ng-template>
+
+  <div *ngIf="successMessage" class="success-message">
+    {{ successMessage }}
+  </div>
+
+
+  <div *ngIf="errorMessage" class="error-message">
+    {{ errorMessage }}
+  </div>
 </div>

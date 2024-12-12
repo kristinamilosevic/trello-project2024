@@ -397,3 +397,61 @@ func (s *ProjectService) GetProjectsByUsername(username string) ([]models.Projec
 	log.Printf("Found %d projects for username %s", len(projects), username)
 	return projects, nil
 }
+
+func (s *ProjectService) DeleteProjectAndTasks(ctx context.Context, projectID string, r *http.Request) error {
+	// Konverzija projectID u ObjectID
+	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
+	if err != nil {
+		log.Printf("Invalid project ID format: %v", projectID)
+		return fmt.Errorf("invalid project ID format")
+	}
+
+	// Provera postojanja projekta
+	filter := bson.M{"_id": projectObjectID}
+	var project bson.M
+	err = s.ProjectsCollection.FindOne(ctx, filter).Decode(&project)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			log.Printf("Project not found: %v", projectID)
+			return fmt.Errorf("project not found")
+		}
+		log.Printf("Failed to fetch project: %v", err)
+		return fmt.Errorf("failed to fetch project: %v", err)
+	}
+
+	// Priprema zahteva za tasks-service
+	taskServiceURL := "http://tasks-service:8002"
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/api/tasks/project/%s", taskServiceURL, projectID), nil)
+	if err != nil {
+		log.Printf("Failed to create request to tasks-service: %v", err)
+		return fmt.Errorf("failed to create request to task service: %v", err)
+	}
+
+	// Prosleđivanje zaglavlja
+	req.Header.Set("Authorization", r.Header.Get("Authorization"))
+	req.Header.Set("Role", r.Header.Get("Role"))
+
+	// Slanje zahteva ka tasks-service
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Failed to send request to tasks-service: %v", err)
+		return fmt.Errorf("failed to send request to task service: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Tasks-service returned non-OK status: %v", resp.Status)
+		return fmt.Errorf("task service returned an error: %v", resp.Status)
+	}
+
+	// Brisanje projekta iz baze
+	_, err = s.ProjectsCollection.DeleteOne(ctx, filter)
+	if err != nil {
+		log.Printf("Failed to delete project: %v", err)
+		return fmt.Errorf("failed to delete project: %v", err)
+	}
+
+	log.Printf("Successfully deleted project and related tasks for ID: %s", projectID)
+	return nil
+}

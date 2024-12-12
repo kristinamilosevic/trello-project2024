@@ -21,6 +21,7 @@ import { AuthGuard } from './guards/auth.guard';
 import { RoleGuard } from './guards/role.guard';
 
 import { NotificationsUserComponent } from './components/notifications-user/notifications-user.component';
+import { ResetPasswordComponent } from './reset-password/reset-password.component';
 
 
 
@@ -73,6 +74,8 @@ export const routes: Routes = [
  { path: 'register', component: RegisterComponent },
  { path: 'verify', component: VerifyCodeComponent },
  { path: 'magic-login', component: LoginComponent },
+ { path: 'reset-password', component: ResetPasswordComponent },
+
 
  // Stranice zaštićene autentifikacijom
  { path: 'projects-list', component: ProjectListComponent, canActivate: [AuthGuard] },
@@ -90,6 +93,7 @@ export const routes: Routes = [
  { path: 'remove-members/:id', component: RemoveMembersComponent, canActivate: [RoleGuard], data: { roles: ['manager'] } },
  { path: 'change-password', component: ChangePasswordComponent, canActivate: [RoleGuard], data: { roles: ['manager', 'member'] } },
  { path: 'notifications-user', component: NotificationsUserComponent },
+ { path: 'delete-project/:id', component: ProjectDetailsComponent, canActivate: [RoleGuard], data: { roles: ['manager'] } },
  // Fallback ruta za neprijavljene korisnike
  { path: '**', redirectTo: '/login' },
 
