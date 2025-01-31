@@ -70,11 +70,13 @@ export class AddMembersComponent implements OnInit {
   fetchUsers() {
     this.projectMembersService.getAllUsers().subscribe(
       (allUsers: Member[]) => {
-        this.members = allUsers.map((user: Member) => {
-          const userId = user.id.toString();
-          const isSelected = this.projectMembers.some((projMember: Member) => projMember.id === userId);
-          return { ...user, selected: isSelected };
-        });
+        this.members = allUsers
+          .filter((user: Member) => user.role === 'member') // Filtriraj samo korisnike sa rolom 'member'
+          .map((user: Member) => {
+            const userId = user.id.toString();
+            const isSelected = this.projectMembers.some((projMember: Member) => projMember.id === userId);
+            return { ...user, selected: isSelected };
+          });
       },
       (error: any) => {
         console.error('Error fetching users:', error);
