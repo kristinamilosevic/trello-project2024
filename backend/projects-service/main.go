@@ -101,6 +101,8 @@ func main() {
 	r.HandleFunc("/api/projects/username/{username}", handlers.GetProjectsByUsername(projectService)).Methods("GET", "OPTIONS")
 	r.HandleFunc("/api/projects/{id}", projectHandler.GetProjectByIDHandler).Methods("GET")
 	r.HandleFunc("/api/projects/{id}/tasks", projectHandler.DisplayTasksForProjectHandler).Methods("GET")
+	r.HandleFunc("/api/projects/{id}/tasks", projectHandler.UpdateProjectTasksHandler).Methods("PATCH")
+
 	corsRouter := enableCORS(r)
 
 	fmt.Println("Projects service server running on http://localhost:8003")

@@ -17,54 +17,54 @@ import (
 )
 
 type TaskService struct {
-	tasksCollection    *mongo.Collection
-	projectsCollection *mongo.Collection
+	tasksCollection   *mongo.Collection
+	projectServiceURL string
 }
 
-func NewTaskService(tasksCollection, projectsCollection *mongo.Collection) *TaskService {
+func NewTaskService(tasksCollection *mongo.Collection, projectServiceURL string) *TaskService {
 	return &TaskService{
-		tasksCollection:    tasksCollection,
-		projectsCollection: projectsCollection,
+		tasksCollection:   tasksCollection,
+		projectServiceURL: projectServiceURL,
 	}
 }
 
 func (s *TaskService) GetAvailableMembersForTask(projectID, taskID string) ([]models.Member, error) {
-	// Pretvori projectID u ObjectID ako je potrebno
-	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
+	// Kreiraj URL za dobijanje članova projekta
+	url := fmt.Sprintf("%s/api/projects/%s/members", s.projectServiceURL, projectID)
+
+	// Pošalji HTTP GET zahtev
+	resp, err := http.Get(url)
 	if err != nil {
-		return nil, fmt.Errorf("invalid project ID format: %v", err)
+		return nil, fmt.Errorf("failed to fetch project members: %v", err)
 	}
-	// Dohvatanje članova projekta
-	var project struct {
-		Members []models.Member `bson:"members"`
+	defer resp.Body.Close()
+
+	// Proveri statusni kod
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("project service returned status: %d", resp.StatusCode)
 	}
-	// Pretvori taskID u ObjectID
+
+	// Parsiraj odgovor u listu članova
+	var projectMembers []models.Member
+	if err := json.NewDecoder(resp.Body).Decode(&projectMembers); err != nil {
+		return nil, fmt.Errorf("failed to decode project members response: %v", err)
+	}
+
+	// Dohvati članove zadatka iz MongoDB-a
 	taskObjectID, err := primitive.ObjectIDFromHex(taskID)
 	if err != nil {
-		log.Printf("Error converting taskID to ObjectID: %s, error: %v", taskID, err)
 		return nil, fmt.Errorf("invalid task ID format")
 	}
 
-	log.Printf("Searching for project with projectID: %s", projectID)
-
-	err = s.projectsCollection.FindOne(context.Background(), bson.M{"_id": projectObjectID}).Decode(&project)
-	if err != nil {
-		log.Printf("Failed to fetch project members for projectID: %s, error: %v", projectID, err)
-		return nil, fmt.Errorf("failed to fetch project members: %v", err)
-	}
-
-	// Dohvatanje članova zadatka
 	var task models.Task
 	err = s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskObjectID}).Decode(&task)
 	if err != nil {
-		log.Printf("Failed to fetch task members for taskID: %s, error: %v", taskID, err)
-		return nil, fmt.Errorf("failed to fetch task members: %v", err)
+		return nil, fmt.Errorf("task not found: %v", err)
 	}
 
-	// Filtriraj članove koji nisu dodati na ovaj task
-	// Filtriraj članove koji nisu već dodeljeni ovom zadatku
+	// Filtriraj članove projekta koji nisu dodati na ovaj task
 	availableMembers := []models.Member{}
-	for _, member := range project.Members {
+	for _, member := range projectMembers {
 		if !containsMember(task.Members, member.ID) {
 			availableMembers = append(availableMembers, member)
 		}
@@ -208,18 +208,12 @@ func (s *TaskService) GetMembersForTask(taskID primitive.ObjectID) ([]models.Mem
 }
 
 func (s *TaskService) CreateTask(projectID string, title, description string, dependsOn *primitive.ObjectID, status models.TaskStatus) (*models.Task, error) {
-
 	if dependsOn != nil {
 		var dependentTask models.Task
 		err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": *dependsOn}).Decode(&dependentTask)
 		if err != nil {
 			return nil, fmt.Errorf("dependent task not found")
 		}
-	}
-
-	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
-	if err != nil {
-		return nil, fmt.Errorf("invalid project ID format: %v", err)
 	}
 
 	if status == "" {
@@ -230,17 +224,17 @@ func (s *TaskService) CreateTask(projectID string, title, description string, de
 	sanitizedTitle := html.EscapeString(title)
 	sanitizedDescription := html.EscapeString(description)
 
+	// Kreiranje novog zadatka
 	task := &models.Task{
 		ID:          primitive.NewObjectID(),
 		ProjectID:   projectID,
 		Title:       sanitizedTitle,
 		Description: sanitizedDescription,
-
-		Status:    status,
-		DependsOn: dependsOn,
+		Status:      status,
+		DependsOn:   dependsOn,
 	}
 
-	// Unos u kolekciju zadataka
+	// Unos zadatka u kolekciju zadataka
 	result, err := s.tasksCollection.InsertOne(context.Background(), task)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create task: %v", err)
@@ -248,16 +242,53 @@ func (s *TaskService) CreateTask(projectID string, title, description string, de
 
 	task.ID = result.InsertedID.(primitive.ObjectID)
 
-	// Ažuriranje projekta sa ID-em zadatka
-	filter := bson.M{"_id": projectObjectID}
-	update := bson.M{"$push": bson.M{"taskIDs": task.ID}}
-
-	_, err = s.projectsCollection.UpdateOne(context.Background(), filter, update)
+	// Ažuriranje projekta slanjem HTTP zahteva Project servisu
+	err = s.updateProjectWithTask(projectID, task.ID.Hex())
 	if err != nil {
 		return nil, fmt.Errorf("failed to update project with task ID: %v", err)
 	}
 
 	return task, nil
+}
+
+func (s *TaskService) updateProjectWithTask(projectID, taskID string) error {
+	projectServiceURL := os.Getenv("PROJECT_SERVICE_URL")
+	if projectServiceURL == "" {
+		return fmt.Errorf("project service URL is not set in .env")
+	}
+
+	// Formiranje URL-a
+	url := fmt.Sprintf("%s/api/projects/%s/tasks", projectServiceURL, projectID)
+
+	// Payload za slanje
+	payload := map[string]string{"taskID": taskID}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %v", err)
+	}
+
+	// Kreiranje HTTP POST zahteva
+	req, err := http.NewRequest(http.MethodPatch, url, bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		return fmt.Errorf("failed to create HTTP request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	// Slanje HTTP zahteva
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send HTTP request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("project service returned status code: %d", resp.StatusCode)
+	}
+
+	log.Printf("Successfully updated project %s with task %s", projectID, taskID)
+	return nil
 }
 
 func (s *TaskService) GetAllTasks() ([]*models.Task, error) {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 
 	"log"
 	"net/http"
@@ -36,6 +37,11 @@ func main() {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 
+	projectServiceURL := os.Getenv("PROJECT_SERVICE_URL")
+	if projectServiceURL == "" {
+		log.Fatal("Project service URL is not set in the environment variables")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -45,25 +51,25 @@ func main() {
 	}
 	defer tasksClient.Disconnect(ctx)
 
-	projectsClient, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://mongo-projects:27017"))
-	if err != nil {
-		log.Fatal("Database connection for mongo-projects failed:", err)
-	}
-	defer projectsClient.Disconnect(ctx)
+	// projectsClient, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://mongo-projects:27017"))
+	// if err != nil {
+	// 	log.Fatal("Database connection for mongo-projects failed:", err)
+	// }
+	// defer projectsClient.Disconnect(ctx)
 
 	if err := tasksClient.Ping(ctx, nil); err != nil {
 		log.Fatal("MongoDB connection error for mongo-tasks:", err)
 	}
-	if err := projectsClient.Ping(ctx, nil); err != nil {
-		log.Fatal("MongoDB connection error for mongo-projects:", err)
-	}
+	// if err := projectsClient.Ping(ctx, nil); err != nil {
+	// 	log.Fatal("MongoDB connection error for mongo-projects:", err)
+	// }
 
 	// Kolekcije
 	tasksCollection := tasksClient.Database("mongo-tasks").Collection("tasks")
-	projectsCollection := projectsClient.Database("mongo-projects").Collection("projects")
+	//projectsCollection := projectsClient.Database("mongo-projects").Collection("projects")
 
 	// Servis i handler
-	taskService := services.NewTaskService(tasksCollection, projectsCollection)
+	taskService := services.NewTaskService(tasksCollection, projectServiceURL)
 	taskHandler := handlers.NewTaskHandler(taskService)
 
 	// Kreiranje mux routera

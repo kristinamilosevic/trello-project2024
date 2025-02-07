@@ -317,3 +317,32 @@ func GetProjectsByUsername(s *services.ProjectService) http.HandlerFunc {
 		}
 	}
 }
+func (h *ProjectHandler) UpdateProjectTasksHandler(w http.ResponseWriter, r *http.Request) {
+	if err := checkRole(r, []string{"manager"}); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
+	vars := mux.Vars(r)
+	projectID, err := primitive.ObjectIDFromHex(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid project ID", http.StatusBadRequest)
+		return
+	}
+
+	var payload struct {
+		TaskID string `json:"taskID"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Invalid payload", http.StatusBadRequest)
+		return
+	}
+
+	err = h.Service.AddTaskToProject(projectID, payload.TaskID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to add task to project: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

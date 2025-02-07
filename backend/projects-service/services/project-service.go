@@ -397,3 +397,15 @@ func (s *ProjectService) GetProjectsByUsername(username string) ([]models.Projec
 	log.Printf("Found %d projects for username %s", len(projects), username)
 	return projects, nil
 }
+func (s *ProjectService) AddTaskToProject(projectID primitive.ObjectID, taskID string) error {
+	filter := bson.M{"_id": projectID}
+	update := bson.M{"$addToSet": bson.M{"tasks": taskID}}
+
+	_, err := s.ProjectsCollection.UpdateOne(context.Background(), filter, update)
+	if err != nil {
+		return fmt.Errorf("failed to update project with task ID: %v", err)
+	}
+
+	log.Printf("Task ID %s successfully added to project %s", taskID, projectID.Hex())
+	return nil
+}
