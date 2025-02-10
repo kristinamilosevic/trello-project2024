@@ -80,49 +80,63 @@ func (s *ProjectService) CreateProject(name string, description string, expected
 }
 
 // AddMembersToProject adds multiple members to a project.
-func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, memberIDs []primitive.ObjectID) error {
+func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, usernames []string) error {
 	var project models.Project
 	err := s.ProjectsCollection.FindOne(context.Background(), bson.M{"_id": projectID}).Decode(&project)
 	if err != nil {
-		fmt.Printf("Error finding project: %v\n", err)
+		log.Printf("Error finding project: %v\n", err)
 		return fmt.Errorf("project not found: %v", err)
 	}
 
 	// Provera maksimalnog broja članova
-	if len(project.Members)+len(memberIDs) > project.MaxMembers {
-		fmt.Println("Maximum number of members reached for the project")
+	if len(project.Members)+len(usernames) > project.MaxMembers {
+		log.Println("Maximum number of members reached for the project")
 		return fmt.Errorf("maximum number of members reached for the project")
 	}
 
 	// Filtriranje članova koji su već na projektu
-	existingMemberIDs := make(map[primitive.ObjectID]bool)
+	existingMemberUsernames := make(map[string]bool)
 	for _, member := range project.Members {
-		existingMemberIDs[member.ID] = true
+		existingMemberUsernames[member.Username] = true
 	}
 
-	var newMemberIDs []primitive.ObjectID
-	for _, memberID := range memberIDs {
-		if !existingMemberIDs[memberID] {
-			newMemberIDs = append(newMemberIDs, memberID)
+	var newUsernames []string
+	for _, username := range usernames {
+		if !existingMemberUsernames[username] {
+			newUsernames = append(newUsernames, username)
 		} else {
-			fmt.Printf("Member %s is already in the project, skipping.\n", memberID.Hex())
+			log.Printf("Member %s is already in the project, skipping.\n", username)
 		}
 	}
 
-	if len(newMemberIDs) == 0 {
-		fmt.Println("No new members to add.")
+	if len(newUsernames) == 0 {
+		log.Println("No new members to add.")
 		return fmt.Errorf("all provided members are already part of the project")
 	}
 
-	// Dohvatanje korisničkih podataka i priprema za ažuriranje
+	// Dohvatanje korisničkih podataka iz users-service pomoću username-a
 	var members []models.Member
-	for _, memberID := range newMemberIDs {
-		var user models.Member
-		err := s.UsersCollection.FindOne(context.Background(), bson.M{"_id": memberID}).Decode(&user)
+	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
+	for _, username := range newUsernames {
+		fmt.Printf("Fetching user data from: %s/api/users/member/%s\n", usersServiceURL, username)
+		resp, err := http.Get(fmt.Sprintf("%s/api/users/member/%s", usersServiceURL, username))
 		if err != nil {
-			fmt.Printf("Error finding member: %v\n", err)
-			return err // Greška ako član nije pronađen
+			log.Printf("Failed to fetch member %s: %v\n", username, err)
+			return err
 		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("Failed to fetch member %s, status code: %d\n", username, resp.StatusCode)
+			return fmt.Errorf("failed to fetch member %s", username)
+		}
+
+		var user models.Member
+		if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+			log.Printf("Failed to decode member %s: %v\n", username, err)
+			return err
+		}
+
 		members = append(members, user)
 	}
 
@@ -131,21 +145,11 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, membe
 	update := bson.M{"$push": bson.M{"members": bson.M{"$each": members}}}
 	_, err = s.ProjectsCollection.UpdateOne(context.Background(), filter, update)
 	if err != nil {
-		fmt.Printf("Error updating project members: %v\n", err)
+		log.Printf("Error updating project members: %v\n", err)
 		return err
 	}
 
-	// Slanje notifikacija za svakog novog člana
-	for _, member := range members {
-		message := fmt.Sprintf("You have been added to the project: %s!", project.Name)
-		err = s.sendNotification(member, message)
-		if err != nil {
-			fmt.Printf("Failed to send notification to member %s: %v\n", member.Username, err)
-			// Loguj grešku i nastavi sa ostalim članovima
-		}
-	}
-
-	fmt.Println("Members successfully added and notifications sent.")
+	log.Println("Members successfully added to the project.")
 	return nil
 }
 
@@ -218,20 +222,22 @@ func (s *ProjectService) GetProjectMembers(ctx context.Context, projectID string
 
 // GetAllUsers retrieves all users from the users collection.
 func (s *ProjectService) GetAllUsers() ([]models.Member, error) {
-	var users []models.Member
-	cursor, err := s.UsersCollection.Find(context.Background(), bson.M{})
+	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
+	resp, err := http.Get(fmt.Sprintf("%s/api/users/members", usersServiceURL))
 	if err != nil {
-		fmt.Println("Error finding users:", err) // Log greške pri dohvaćanju korisnika
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch users from users-service: %v", err)
 	}
-	defer cursor.Close(context.Background())
+	defer resp.Body.Close()
 
-	if err = cursor.All(context.Background(), &users); err != nil {
-		fmt.Println("Error decoding users:", err) // Log greške pri dekodiranju korisnika
-		return nil, err
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("users-service returned status: %d", resp.StatusCode)
 	}
 
-	fmt.Println("Fetched users:", users) // Log za proveru vraćenih korisnika
+	var users []models.Member
+	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
+		return nil, fmt.Errorf("failed to decode response from users-service: %v", err)
+	}
+
 	return users, nil
 }
 
@@ -454,4 +460,35 @@ func (s *ProjectService) DeleteProjectAndTasks(ctx context.Context, projectID st
 
 	log.Printf("Successfully deleted project and related tasks for ID: %s", projectID)
 	return nil
+}
+
+func (s *ProjectService) GetAllMembers() ([]models.Member, error) {
+	// Učitaj URL `users-service` iz .env fajla
+	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
+	if usersServiceURL == "" {
+		log.Println("USERS_SERVICE_URL is not set in .env file")
+		return nil, fmt.Errorf("users-service URL is not configured")
+	}
+
+	// Napravi HTTP GET zahtev
+	resp, err := http.Get(usersServiceURL + "/api/users/members")
+	if err != nil {
+		log.Printf("Failed to fetch members from users-service: %v", err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("users-service returned non-200 status: %d", resp.StatusCode)
+		return nil, fmt.Errorf("failed to get members, status: %d", resp.StatusCode)
+	}
+
+	// Dekodiraj odgovor
+	var members []models.Member
+	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
+		log.Printf("Failed to decode members response: %v", err)
+		return nil, err
+	}
+
+	return members, nil
 }

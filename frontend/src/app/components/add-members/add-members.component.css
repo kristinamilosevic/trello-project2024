@@ -63,3 +63,30 @@ button:hover {
   90% { opacity: 1; }
   100% { opacity: 0; }
 }
+
+input[type="checkbox"] {
+  appearance: none; /* Uklanja defaultni izgled */
+  width: 18px;
+  height: 18px;
+  border: 2px solid #85586F;
+  border-radius: 4px;
+  background-color: white;
+  cursor: pointer;
+  position: relative;
+}
+
+input[type="checkbox"]:checked {
+  background-color: #85586F;
+  border: 2px solid #85586F;
+}
+
+input[type="checkbox"]:checked::after {
+  content: '\2713'; /* Unicode za čekiran znak */
+  font-size: 14px;
+  color: white;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+

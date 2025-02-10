@@ -2,10 +2,12 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
 	"log"
+	"net/http"
 	"strings"
 
 	"time"
@@ -13,6 +15,7 @@ import (
 	"trello-project/microservices/users-service/models"
 	"trello-project/microservices/users-service/utils"
 
+	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"golang.org/x/crypto/bcrypt"
@@ -407,4 +410,51 @@ func (s *UserService) SendPasswordResetLink(username, email string) error {
 	}
 
 	return nil
+}
+
+func (s *UserService) GetMemberByUsernameHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	username := vars["username"]
+
+	fmt.Println("Received username:", username)
+
+	var user models.User
+	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+	if err != nil {
+		fmt.Printf("User not found for username: %s, error: %v\n", username, err)
+		http.Error(w, "Member not found", http.StatusNotFound)
+		return
+	}
+
+	// Sakrij lozinku pre slanja odgovora
+	user.Password = ""
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(user)
+}
+
+// vraca sve korisnike koji imaju role member
+func (s *UserService) GetAllMembers() ([]models.User, error) {
+	// Pravljenje filtera koji selektuje samo korisnike čiji je role = "member"
+	filter := bson.M{"role": "member"}
+
+	// Izvršavanje upita na bazi
+	cursor, err := s.UserCollection.Find(context.Background(), filter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch members: %v", err)
+	}
+	defer cursor.Close(context.Background())
+
+	// Parsiranje rezultata
+	var members []models.User
+	if err := cursor.All(context.Background(), &members); err != nil {
+		return nil, fmt.Errorf("failed to parse members: %v", err)
+	}
+
+	// Uklanjanje lozinki iz odgovora
+	for i := range members {
+		members[i].Password = ""
+	}
+
+	return members, nil
 }

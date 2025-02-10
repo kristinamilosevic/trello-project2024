@@ -13,5 +13,5 @@ type Project struct {
 	ManagerID       primitive.ObjectID `bson:"manager_id" json:"managerId"`
 	ExpectedEndDate time.Time          `bson:"expected_end_date" json:"expectedEndDate"`
 	Tasks           []Task             `bson:"tasks" json:"tasks"`
-	Members         []Member           `bson:"members" json:"members"`
+	Members         []User             `bson:"members" json:"members"`
 }

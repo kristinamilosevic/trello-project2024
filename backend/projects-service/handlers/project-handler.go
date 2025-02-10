@@ -14,10 +14,12 @@ import (
 	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type ProjectHandler struct {
-	Service *services.ProjectService
+	Service            *services.ProjectService
+	ProjectsCollection *mongo.Collection
 }
 
 func NewProjectHandler(service *services.ProjectService) *ProjectHandler {
@@ -113,11 +115,13 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProjectHandler) AddMemberToProjectHandler(w http.ResponseWriter, r *http.Request) {
+	// Provera da li je korisnik menadžer
 	if err := checkRole(r, []string{"manager"}); err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
+	// Dobavljanje projectID iz URL-a
 	vars := mux.Vars(r)
 	projectID, err := primitive.ObjectIDFromHex(vars["id"])
 	if err != nil {
@@ -125,14 +129,24 @@ func (h *ProjectHandler) AddMemberToProjectHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
-	var memberIDs []primitive.ObjectID
-	if err := json.NewDecoder(r.Body).Decode(&memberIDs); err != nil {
+	// Parsiranje JSON zahteva
+	var request struct {
+		Usernames []string `json:"usernames"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, "Invalid members data", http.StatusBadRequest)
 		return
 	}
 
-	// Pozivamo servis za dodavanje članova i proveravamo greške
-	err = h.Service.AddMembersToProject(projectID, memberIDs)
+	// Provera da li postoji bar jedan username za dodavanje
+	if len(request.Usernames) == 0 {
+		http.Error(w, "No usernames provided", http.StatusBadRequest)
+		return
+	}
+
+	// Poziv servisa za dodavanje članova pomoću username-a
+	err = h.Service.AddMembersToProject(projectID, request.Usernames)
 	if err != nil {
 		switch err.Error() {
 		case "all provided members are already part of the project":
@@ -147,6 +161,7 @@ func (h *ProjectHandler) AddMemberToProjectHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
+	// Uspešno dodavanje članova
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"message": "Members added successfully"}`))
 }
@@ -342,4 +357,16 @@ func (h *ProjectHandler) RemoveProjectHandler(w http.ResponseWriter, r *http.Req
 	// Uspešan odgovor
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Project and related tasks deleted successfully"})
+}
+
+func (h *ProjectHandler) GetAllMembersHandler(w http.ResponseWriter, r *http.Request) {
+	members, err := h.Service.GetAllMembers()
+	if err != nil {
+		http.Error(w, "Failed to fetch members", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(members)
 }
