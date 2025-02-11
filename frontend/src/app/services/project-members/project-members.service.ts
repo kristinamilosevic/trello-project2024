@@ -49,10 +49,10 @@ export class ProjectMembersService {
     );
   }
 
-  addMembers(projectId: string, memberIds: string[]): Observable<any> {
+  addMembers(projectId: string, usernames: string[]): Observable<any> {
     const headers = this.getHeadersWithRole();
     headers.append('Content-Type', 'application/json');
-    return this.http.post(`${this.apiUrl}/projects/${projectId}/members`, memberIds, { headers }).pipe(
+    return this.http.post(`${this.apiUrl}/projects/${projectId}/members`, { usernames }, { headers }).pipe(
       catchError((error) => {
         console.error('Error in addMembers:', error);
         return throwError(error);

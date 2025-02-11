@@ -113,6 +113,10 @@ func main() {
 	mux.HandleFunc("/api/users/verify-magic-link", loginHandler.VerifyMagicLink)
 	mux.HandleFunc("/api/users/users-profile", userHandler.GetUserForCurrentSession)
 	mux.HandleFunc("/api/users/change-password", userHandler.ChangePassword)
+	//mux.HandleFunc("/api/users/members", userHandler.GetAllMembers)
+	mux.HandleFunc("/api/users/member/{username}", userHandler.GetMemberByUsernameHandler)
+	mux.HandleFunc("/api/users/projects/{projectId}/members", userHandler.GetMembersByProjectIDHandler)
+	mux.HandleFunc("/api/users/members", userHandler.GetAllMembers)
 
 	finalHandler := enableCORS(mux)
 

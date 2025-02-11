@@ -102,6 +102,7 @@ func main() {
 	r.HandleFunc("/api/projects/{id}", projectHandler.GetProjectByIDHandler).Methods("GET")
 	r.HandleFunc("/api/projects/{id}/tasks", projectHandler.DisplayTasksForProjectHandler).Methods("GET")
 	r.HandleFunc("/api/projects/{projectId}", projectHandler.RemoveProjectHandler).Methods(http.MethodDelete)
+	r.HandleFunc("/api/projects/members", projectHandler.GetAllMembersHandler)
 
 	corsRouter := enableCORS(r)
 

@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 	"trello-project/microservices/users-service/models"
 	"trello-project/microservices/users-service/services"
 	"trello-project/microservices/users-service/utils"
 
+	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -376,4 +378,139 @@ func (h *UserHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	response := map[string]string{"message": "Password updated successfully"}
 	json.NewEncoder(w).Encode(response)
 
+}
+
+// func (h *UserHandler) GetAllMembers(w http.ResponseWriter, r *http.Request) {
+// 	// Pravljenje filtera koji selektuje samo korisnike čiji je role = "member"
+// 	filter := bson.M{"role": "member"}
+
+// 	// Izvršavanje upita na bazi
+// 	cursor, err := h.UserService.UserCollection.Find(context.Background(), filter)
+// 	if err != nil {
+// 		http.Error(w, "Failed to fetch members", http.StatusInternalServerError)
+// 		return
+// 	}
+// 	defer cursor.Close(context.Background())
+
+// 	// Parsiranje rezultata
+// 	var members []models.User
+// 	if err := cursor.All(context.Background(), &members); err != nil {
+// 		http.Error(w, "Failed to parse members", http.StatusInternalServerError)
+// 		return
+// 	}
+
+// 	// Uklanjanje lozinki iz odgovora
+// 	for i := range members {
+// 		members[i].Password = ""
+// 	}
+
+// 	// Slanje JSON odgovora
+// 	w.Header().Set("Content-Type", "application/json")
+// 	w.WriteHeader(http.StatusOK)
+// 	json.NewEncoder(w).Encode(members)
+// }
+
+func (h *UserHandler) GetMemberByUsernameHandler(w http.ResponseWriter, r *http.Request) {
+	// Loguj celu putanju za debug
+	path := r.URL.Path
+	fmt.Printf("Full URL Path: %s\n", path)
+
+	// Parsiraj username iz putanje
+	parts := strings.Split(path, "/")
+	if len(parts) < 5 { // Očekujemo da je username na kraju URL-a
+		http.Error(w, "Invalid URL format", http.StatusBadRequest)
+		return
+	}
+
+	username := parts[len(parts)-1]
+	fmt.Printf("Extracted username manually: %s\n", username)
+
+	// Ako je username prazan
+	if username == "" {
+		http.Error(w, "Username parameter is missing", http.StatusBadRequest)
+		return
+	}
+
+	// Dohvatanje člana iz baze pomoću username-a
+	var member models.User
+	err := h.UserService.UserCollection.FindOne(r.Context(), bson.M{"username": username}).Decode(&member)
+	if err != nil {
+		fmt.Printf("User not found in database: %s, error: %v\n", username, err)
+		http.Error(w, "Member not found", http.StatusNotFound)
+		return
+	}
+
+	fmt.Printf("User found: %+v\n", member)
+
+	// Kreiranje odgovora
+	response := struct {
+		ID       string `json:"id"`
+		Name     string `json:"name"`
+		LastName string `json:"lastName"`
+		Username string `json:"username"`
+		Email    string `json:"email"`
+		Role     string `json:"role"`
+		IsActive bool   `json:"isActive"`
+	}{
+		ID:       member.ID.Hex(),
+		Name:     member.Name,
+		LastName: member.LastName,
+		Username: member.Username,
+		Email:    member.Email,
+		Role:     member.Role,
+		IsActive: member.IsActive,
+	}
+
+	// Slanje JSON odgovora
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (h *UserHandler) GetMembersByProjectIDHandler(w http.ResponseWriter, r *http.Request) {
+	// Preuzmite projectId iz parametara URL-a
+	vars := mux.Vars(r)
+	projectID := vars["projectId"]
+
+	// Kreirajte URL za poziv projects servisa
+	projectsServiceURL := os.Getenv("PROJECTS_SERVICE_URL")
+	url := fmt.Sprintf("%s/api/projects/%s/members/all", projectsServiceURL, projectID)
+
+	// Pošaljite GET zahtev ka projects servisu
+	resp, err := http.Get(url)
+	if err != nil {
+		http.Error(w, "Failed to communicate with projects service", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, fmt.Sprintf("Projects service returned status %d", resp.StatusCode), http.StatusInternalServerError)
+		return
+	}
+
+	// Pročitajte i prosledite odgovor klijentu
+	var members []map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
+		http.Error(w, "Failed to decode response from projects service", http.StatusInternalServerError)
+		return
+	}
+
+	// Vratite podatke o članovima
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(members)
+}
+
+// vraca sve korisnike koji imaju role member
+func (h *UserHandler) GetAllMembers(w http.ResponseWriter, r *http.Request) {
+	// Pozovi servis da dobavi članove (users sa role = "member")
+	members, err := h.UserService.GetAllMembers()
+	if err != nil {
+		http.Error(w, "Failed to fetch members", http.StatusInternalServerError)
+		return
+	}
+
+	// Slanje JSON odgovora
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(members)
 }

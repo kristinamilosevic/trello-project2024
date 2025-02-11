@@ -94,7 +94,7 @@ export class AddMembersComponent implements OnInit {
     
     const newMembersToAdd = this.members
       .filter((member: Member) => member.selected && !this.isMemberAlreadyAdded(member))
-      .map((member: Member) => member.id);
+      .map((member: Member) => member.username);
   
     if (newMembersToAdd.length === 0) {
       this.errorMessage = 'No new members selected for addition.';
