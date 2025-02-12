@@ -93,8 +93,8 @@ func (h *TaskHandler) GetAvailableMembersForTask(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Pozivamo servis za dobijanje dostupnih članova
-	members, err := h.service.GetAvailableMembersForTask(projectID, taskID)
+	// Pozivamo servis za dobijanje dostupnih članova - sada prosleđujemo i `r`
+	members, err := h.service.GetAvailableMembersForTask(r, projectID, taskID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

@@ -28,32 +28,91 @@ func NewTaskService(tasksCollection, projectsCollection *mongo.Collection) *Task
 	}
 }
 
-func (s *TaskService) GetAvailableMembersForTask(projectID, taskID string) ([]models.Member, error) {
-	// Pretvori projectID u ObjectID ako je potrebno
-	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
+func (s *TaskService) GetAvailableMembersForTask(r *http.Request, projectID, taskID string) ([]models.Member, error) {
+	// Učitaj URL projects-service iz .env fajla
+	projectsServiceURL := os.Getenv("PROJECTS_SERVICE_URL")
+	if projectsServiceURL == "" {
+		log.Println("PROJECTS_SERVICE_URL is not set in .env file")
+		return nil, fmt.Errorf("projects-service URL is not configured")
+	}
+
+	// Napravi URL za HTTP GET zahtev ka projects-service
+	url := fmt.Sprintf("%s/api/projects/%s/members/all", projectsServiceURL, projectID)
+	log.Printf("Fetching project members from: %s", url)
+
+	// Dohvati Authorization i Role iz dolaznog HTTP zahteva
+	authToken := r.Header.Get("Authorization")
+	userRole := r.Header.Get("Role")
+
+	// Napravi HTTP zahtev sa zaglavljima
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("invalid project ID format: %v", err)
+		log.Printf("Failed to create request to projects-service: %v", err)
+		return nil, err
 	}
-	// Dohvatanje članova projekta
-	var project struct {
-		Members []models.Member `bson:"members"`
+
+	// Postavi potrebna zaglavlja
+	req.Header.Set("Authorization", authToken)
+	req.Header.Set("Role", userRole)
+
+	// Pošalji zahtev
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Failed to fetch project members from projects-service: %v", err)
+		return nil, err
 	}
-	// Pretvori taskID u ObjectID
+	defer resp.Body.Close()
+
+	// Proveri statusni kod odgovora
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("projects-service returned status: %d", resp.StatusCode)
+		return nil, fmt.Errorf("failed to fetch project members, status: %d", resp.StatusCode)
+	}
+
+	// Dekodiraj JSON odgovor u listu članova
+	var rawProjectMembers []map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&rawProjectMembers); err != nil {
+		log.Printf("Failed to decode response from projects-service: %v", err)
+		return nil, err
+	}
+
+	// Konvertuj listu članova u models.Member sa ispravnim ID-jem
+	var projectMembers []models.Member
+	for _, rawMember := range rawProjectMembers {
+		idStr, ok := rawMember["_id"].(string)
+		if !ok {
+			log.Printf("Warning: Member %+v has an invalid _id format", rawMember)
+			continue
+		}
+
+		objectID, err := primitive.ObjectIDFromHex(idStr)
+		if err != nil {
+			log.Printf("Warning: Failed to convert member ID %s to ObjectID: %v", idStr, err)
+			continue
+		}
+
+		member := models.Member{
+			ID:       objectID,
+			Name:     rawMember["name"].(string),
+			LastName: rawMember["lastName"].(string),
+			Username: rawMember["username"].(string),
+			Role:     rawMember["role"].(string),
+		}
+
+		projectMembers = append(projectMembers, member)
+	}
+
+	// ✅ LOG: Članovi sa projekta pre bilo kakve obrade
+	log.Printf("Project members fetched and converted for project %s: %+v", projectID, projectMembers)
+
+	// Dohvati podatke o tasku
 	taskObjectID, err := primitive.ObjectIDFromHex(taskID)
 	if err != nil {
 		log.Printf("Error converting taskID to ObjectID: %s, error: %v", taskID, err)
 		return nil, fmt.Errorf("invalid task ID format")
 	}
 
-	log.Printf("Searching for project with projectID: %s", projectID)
-
-	err = s.projectsCollection.FindOne(context.Background(), bson.M{"_id": projectObjectID}).Decode(&project)
-	if err != nil {
-		log.Printf("Failed to fetch project members for projectID: %s, error: %v", projectID, err)
-		return nil, fmt.Errorf("failed to fetch project members: %v", err)
-	}
-
-	// Dohvatanje članova zadatka
 	var task models.Task
 	err = s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskObjectID}).Decode(&task)
 	if err != nil {
@@ -61,25 +120,30 @@ func (s *TaskService) GetAvailableMembersForTask(projectID, taskID string) ([]mo
 		return nil, fmt.Errorf("failed to fetch task members: %v", err)
 	}
 
-	// Filtriraj članove koji nisu dodati na ovaj task
-	// Filtriraj članove koji nisu već dodeljeni ovom zadatku
+	// ✅ LOG: Članovi koji su već dodati na zadatak
+	log.Printf("Task members fetched for task %s: %+v", taskID, task.Members)
+
+	// Kreiraj mapu postojećih članova zadatka radi brže provere
+	existingTaskMemberIDs := make(map[string]bool)
+	for _, taskMember := range task.Members {
+		existingTaskMemberIDs[taskMember.ID.Hex()] = true
+	}
+
+	// Dodaj u availableMembers samo one koji NISU u tasku
 	availableMembers := []models.Member{}
-	for _, member := range project.Members {
-		if !containsMember(task.Members, member.ID) {
+	for _, member := range projectMembers {
+		if _, exists := existingTaskMemberIDs[member.ID.Hex()]; !exists {
+			log.Printf("Adding member %s to available list for task %s", member.Username, taskID)
 			availableMembers = append(availableMembers, member)
+		} else {
+			log.Printf("Skipping member %s because they are already in task %s", member.Username, taskID)
 		}
 	}
+
+	// ✅ LOG: Konačna lista dostupnih članova
+	log.Printf("Final available members for task %s: %+v", taskID, availableMembers)
 
 	return availableMembers, nil
-}
-
-func containsMember(members []models.Member, memberID primitive.ObjectID) bool {
-	for _, m := range members {
-		if m.ID == memberID {
-			return true
-		}
-	}
-	return false
 }
 
 // Dodaj članove zadatku
