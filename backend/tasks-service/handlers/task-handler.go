@@ -110,25 +110,42 @@ func (h TaskHandler) GetTasksByProjectID(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)
 		return
 	}
-	log.Println("Requested URL:", r.URL.Path)
-	projectID := strings.TrimPrefix(r.URL.Path, "/tasks/project/")
-	log.Println("Extracted Project ID:", projectID)
 
-	if projectID == "" || projectID == "/" {
+	// Loguj celu URL putanju
+	log.Println("Requested URL:", r.URL.Path)
+
+	// Ekstraktuj projectID
+	projectID := strings.TrimPrefix(r.URL.Path, "/api/tasks/project/")
+	log.Println("Extracted Project ID (before cleanup):", projectID)
+
+	// Ukloni eventualne nepotrebne '/' karaktere
+	projectID = strings.Trim(projectID, "/")
+	log.Println("Extracted Project ID (after cleanup):", projectID)
+
+	// Ako je projectID prazan, vrati grešku
+	if projectID == "" {
+		log.Println("Project ID is missing or empty!")
 		http.Error(w, "Missing project ID", http.StatusBadRequest)
 		return
 	}
 
+	// Pozovi servis i loguj rezultat
+	log.Println("Fetching tasks for project ID:", projectID)
 	tasks, err := h.service.GetTasksByProject(projectID)
 	if err != nil {
-		log.Println("Error fetching tasks:", err)
+		log.Println("Error fetching tasks for project ID:", projectID, "Error:", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	// Loguj broj pronađenih zadataka
+	log.Println("Number of tasks found:", len(tasks))
+
+	// Vrati rezultate
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(tasks)
 }
+
 func (h *TaskHandler) AddMembersToTask(w http.ResponseWriter, r *http.Request) {
 	if err := checkRole(r, []string{"manager"}); err != nil {
 		http.Error(w, "Access forbidden: insufficient permissions", http.StatusForbidden)

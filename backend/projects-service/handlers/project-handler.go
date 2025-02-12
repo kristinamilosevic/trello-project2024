@@ -25,6 +25,7 @@ type ProjectHandler struct {
 func NewProjectHandler(service *services.ProjectService) *ProjectHandler {
 	return &ProjectHandler{Service: service}
 }
+
 func checkRole(r *http.Request, allowedRoles []string) error {
 	userRole := r.Header.Get("Role")
 	if userRole == "" {
@@ -282,6 +283,7 @@ func (h *ProjectHandler) DisplayTasksForProjectHandler(w http.ResponseWriter, r 
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
+
 	vars := mux.Vars(r)
 	projectID, err := primitive.ObjectIDFromHex(vars["id"])
 	if err != nil {
@@ -289,7 +291,10 @@ func (h *ProjectHandler) DisplayTasksForProjectHandler(w http.ResponseWriter, r 
 		return
 	}
 
-	tasks, err := h.Service.GetTasksForProject(projectID)
+	role := r.Header.Get("Role")
+	authToken := r.Header.Get("Authorization")
+
+	tasks, err := h.Service.GetTasksForProject(projectID, role, authToken)
 	if err != nil {
 		if strings.Contains(err.Error(), "project not found") {
 			http.Error(w, "Project not found", http.StatusNotFound)
@@ -332,6 +337,7 @@ func GetProjectsByUsername(s *services.ProjectService) http.HandlerFunc {
 		}
 	}
 }
+
 func (h *ProjectHandler) RemoveProjectHandler(w http.ResponseWriter, r *http.Request) {
 	// Provera korisničke uloge
 	if err := checkRole(r, []string{"manager"}); err != nil {

@@ -343,31 +343,40 @@ func (s *ProjectService) GetProjectByID(projectID string) (*models.Project, erro
 	return &project, nil
 }
 
-func (s *ProjectService) GetTasksForProject(projectID primitive.ObjectID) ([]*models.Task, error) {
-	var project models.Project
-	err := s.ProjectsCollection.FindOne(context.Background(), bson.M{"_id": projectID}).Decode(&project)
+func (s *ProjectService) GetTasksForProject(projectID primitive.ObjectID, role string, authToken string) ([]*models.Task, error) {
+	tasksServiceURL := os.Getenv("TASKS_SERVICE_URL")
+	if tasksServiceURL == "" {
+		return nil, fmt.Errorf("TASKS_SERVICE_URL not set")
+	}
+
+	url := fmt.Sprintf("%s/api/tasks/project/%s", tasksServiceURL, projectID.Hex())
+	fmt.Printf("Fetching tasks from: %s\n", url)
+
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("project not found: %v", err)
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	req.Header.Set("Role", role)
+	req.Header.Set("Authorization", authToken)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Failed to fetch tasks for project %s: %v\n", projectID.Hex(), err)
+		return nil, fmt.Errorf("failed to fetch tasks: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Failed to fetch tasks for project %s, status code: %d\n", projectID.Hex(), resp.StatusCode)
+		return nil, fmt.Errorf("failed to fetch tasks, status code: %d", resp.StatusCode)
 	}
 
 	var tasks []*models.Task
-	filter := bson.M{"_id": bson.M{"$in": project.Tasks}}
-	cursor, err := s.TasksCollection.Find(context.Background(), filter)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve tasks: %v", err)
-	}
-	defer cursor.Close(context.Background())
-
-	for cursor.Next(context.Background()) {
-		var task models.Task
-		if err := cursor.Decode(&task); err != nil {
-			return nil, fmt.Errorf("failed to decode task: %v", err)
-		}
-		tasks = append(tasks, &task)
-	}
-
-	if err := cursor.Err(); err != nil {
-		return nil, fmt.Errorf("cursor error: %v", err)
+	if err := json.NewDecoder(resp.Body).Decode(&tasks); err != nil {
+		log.Printf("Failed to decode tasks response: %v\n", err)
+		return nil, fmt.Errorf("failed to decode tasks: %v", err)
 	}
 
 	return tasks, nil
