@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 	"trello-project/microservices/tasks-service/models"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -281,11 +282,13 @@ func (s *TaskService) CreateTask(projectID string, title, description string, de
 		}
 	}
 
-	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
+	// Provera validnosti projectID
+	_, err := primitive.ObjectIDFromHex(projectID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid project ID format: %v", err)
 	}
 
+	// Ako status nije prosleđen, postavljamo podrazumevanu vrednost
 	if status == "" {
 		status = models.StatusPending
 	}
@@ -294,32 +297,66 @@ func (s *TaskService) CreateTask(projectID string, title, description string, de
 	sanitizedTitle := html.EscapeString(title)
 	sanitizedDescription := html.EscapeString(description)
 
+	// Kreiranje objekta zadatka
 	task := &models.Task{
 		ID:          primitive.NewObjectID(),
 		ProjectID:   projectID,
 		Title:       sanitizedTitle,
 		Description: sanitizedDescription,
-
-		Status:    status,
-		DependsOn: dependsOn,
+		Status:      status,
+		DependsOn:   dependsOn,
 	}
 
-	// Unos u kolekciju zadataka
+	// Unos zadatka u tasks kolekciju
 	result, err := s.tasksCollection.InsertOne(context.Background(), task)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create task: %v", err)
 	}
 
+	// Ažuriramo ID zadatka na onaj koji je generisan prilikom unosa u bazu
 	task.ID = result.InsertedID.(primitive.ObjectID)
 
-	// Ažuriranje projekta sa ID-em zadatka
-	filter := bson.M{"_id": projectObjectID}
-	update := bson.M{"$push": bson.M{"taskIDs": task.ID}}
-
-	_, err = s.projectsCollection.UpdateOne(context.Background(), filter, update)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update project with task ID: %v", err)
+	// 🔹 **Direktan HTTP zahtev ka `projects-service` za ažuriranje projekta**
+	projectsServiceURL := os.Getenv("PROJECTS_SERVICE_URL")
+	if projectsServiceURL == "" {
+		log.Println("🚨 PROJECTS_SERVICE_URL is not set in .env file")
+		return nil, fmt.Errorf("projects-service URL is not configured")
 	}
+
+	url := fmt.Sprintf("%s/api/projects/%s/add-task", projectsServiceURL, projectID)
+	requestBody, err := json.Marshal(map[string]string{"taskID": task.ID.Hex()})
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request body: %v", err)
+	}
+
+	log.Printf("🟢 Sending request to projects-service: %s", url)
+	log.Printf("📨 Request body: %s", string(requestBody))
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	// Postavljanje HTTP zaglavlja
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Role", "manager")
+
+	// Slanje HTTP zahteva ka `projects-service`
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("🚨 Warning: Task was created, but failed to notify projects-service: %v", err)
+		return task, nil // **Ne brišemo zadatak ako ovo ne uspe, samo logujemo grešku**
+	}
+	defer resp.Body.Close()
+
+	// Provera statusa odgovora
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("🚨 Warning: projects-service returned status %d when adding task %s to project %s", resp.StatusCode, task.ID.Hex(), projectID)
+		return task, nil
+	}
+
+	log.Printf("✅ Successfully notified projects-service about new task %s for project %s", task.ID.Hex(), projectID)
 
 	return task, nil
 }
