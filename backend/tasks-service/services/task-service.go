@@ -506,3 +506,22 @@ func (s *TaskService) DeleteTasksByProject(projectID string) error {
 	log.Printf("Successfully deleted %d tasks for project ID %s", result.DeletedCount, projectID)
 	return nil
 }
+
+func (s *TaskService) HasActiveTasks(ctx context.Context, projectID, memberID string) (bool, error) {
+	filter := bson.M{
+		"projectID":   projectID,
+		"members._id": memberID,
+		"status":      bson.M{"$eq": "In progress"},
+	}
+
+	log.Printf("Checking active tasks with filter: %+v\n", filter)
+
+	count, err := s.tasksCollection.CountDocuments(ctx, filter)
+	if err != nil {
+		return false, err
+	}
+
+	log.Printf("Found %d active tasks\n", count)
+
+	return count > 0, nil
+}

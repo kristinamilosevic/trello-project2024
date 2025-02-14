@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -245,67 +246,60 @@ func (s *ProjectService) GetAllUsers() ([]models.Member, error) {
 func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID, memberID string) error {
 	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
 	if err != nil {
-		return errors.New("invalid project ID format")
+		log.Println("Invalid project ID format")
+		return fmt.Errorf("invalid project ID format")
 	}
 
 	memberObjectID, err := primitive.ObjectIDFromHex(memberID)
 	if err != nil {
-		return errors.New("invalid member ID format")
+		log.Println("Invalid member ID format")
+		return fmt.Errorf("invalid member ID format")
 	}
 
-	// Proverite da li član ima aktivne zadatke
-	taskFilter := bson.M{
-		"projectId": projectObjectID.Hex(), // ID projekta
-		"status":    "in progress",
-		"assignees": memberObjectID, // ID člana
-	}
+	taskServiceURL := os.Getenv("TASKS_SERVICE_URL")
+	checkURL := fmt.Sprintf("%s/api/tasks/has-active?projectId=%s&memberId=%s", taskServiceURL, projectID, memberID)
 
-	cursor, err := s.TasksCollection.Find(ctx, taskFilter)
+	resp, err := http.Get(checkURL)
 	if err != nil {
-		return errors.New("failed to check task assignments")
+		log.Printf("Failed to reach task service: %v\n", err)
+		return fmt.Errorf("failed to connect to task service")
 	}
-	defer cursor.Close(ctx)
+	defer resp.Body.Close()
 
-	// Proverite ima li aktivnih zadataka
-	if cursor.TryNext(ctx) { // Ako postoje rezultati
-		return errors.New("cannot remove member assigned to an in-progress task")
-	}
-
-	// Dohvati projekat za ime projekta
-	var project models.Project
-	err = s.ProjectsCollection.FindOne(ctx, bson.M{"_id": projectObjectID}).Decode(&project)
-	if err != nil {
-		return errors.New("project not found")
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("Task service error (%d): %s\n", resp.StatusCode, string(body))
+		return fmt.Errorf("task service returned status %d", resp.StatusCode)
 	}
 
-	// Dohvati podatke o članu za notifikaciju
-	var member models.Member
-	err = s.UsersCollection.FindOne(ctx, bson.M{"_id": memberObjectID}).Decode(&member)
-	if err != nil {
-		return errors.New("member not found")
+	var response struct {
+		HasActiveTasks bool `json:"hasActiveTasks"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		log.Printf("Failed to decode task service response: %v\n", err)
+		return fmt.Errorf("failed to decode task service response")
 	}
 
-	// Uklonite člana iz projekta
-	projectFilter := bson.M{"_id": projectObjectID}
+	if response.HasActiveTasks {
+		log.Println("Cannot remove member assigned to an active task")
+		return fmt.Errorf("cannot remove member assigned to an active task")
+	}
+
+	filter := bson.M{"_id": projectObjectID}
 	update := bson.M{"$pull": bson.M{"members": bson.M{"_id": memberObjectID}}}
 
-	result, err := s.ProjectsCollection.UpdateOne(ctx, projectFilter, update)
+	result, err := s.ProjectsCollection.UpdateOne(ctx, filter, update)
 	if err != nil {
-		return errors.New("failed to remove member from project")
+		log.Println("Failed to remove member from project")
+		return fmt.Errorf("failed to remove member from project")
 	}
 
 	if result.ModifiedCount == 0 {
-		return errors.New("member not found in project or already removed")
+		log.Println("Member not found in project or already removed")
+		return fmt.Errorf("member not found in project or already removed")
 	}
 
-	// Slanje notifikacije nakon uspešnog uklanjanja
-	message := fmt.Sprintf("You have been removed from the project: %s!", project.Name)
-	err = s.sendNotification(member, message)
-	if err != nil {
-		log.Printf("Failed to send notification to member %s: %v\n", member.Username, err)
-		// Log greške, ali ne prekidaj proces
-	}
-
+	log.Println("Member successfully removed from project.")
 	return nil
 }
 

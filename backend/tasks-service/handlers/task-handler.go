@@ -292,3 +292,23 @@ func (h *TaskHandler) DeleteTasksByProjectHandler(w http.ResponseWriter, r *http
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Tasks deleted successfully"})
 }
+
+func (h *TaskHandler) HasActiveTasksHandler(w http.ResponseWriter, r *http.Request) {
+	projectID := r.URL.Query().Get("projectId")
+	memberID := r.URL.Query().Get("memberId")
+
+	if projectID == "" || memberID == "" {
+		http.Error(w, "Missing projectId or memberId", http.StatusBadRequest)
+		return
+	}
+
+	hasActive, err := h.service.HasActiveTasks(r.Context(), projectID, memberID)
+	if err != nil {
+		log.Printf("Error checking active tasks: %v\n", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{"hasActiveTasks": hasActive})
+}
