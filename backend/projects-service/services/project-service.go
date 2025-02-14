@@ -495,3 +495,38 @@ func (s *ProjectService) GetAllMembers() ([]models.Member, error) {
 
 	return members, nil
 }
+
+func (s *ProjectService) AddTaskToProject(projectID string, taskID string) error {
+	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
+	if err != nil {
+		return fmt.Errorf("invalid project ID format: %v", err)
+	}
+
+	taskObjectID, err := primitive.ObjectIDFromHex(taskID)
+	if err != nil {
+		return fmt.Errorf("invalid task ID format: %v", err)
+	}
+
+	log.Printf("🟢 Received request to add task %s to project %s", taskID, projectID)
+
+	// Ažuriranje projekta dodavanjem ID-ja zadatka
+	filter := bson.M{"_id": projectObjectID}
+	update := bson.M{"$push": bson.M{"taskIDs": taskObjectID}}
+
+	log.Printf("🔄 MongoDB filter: %+v", filter)
+	log.Printf("🔄 MongoDB update: %+v", update)
+
+	result, err := s.ProjectsCollection.UpdateOne(context.Background(), filter, update)
+	if err != nil {
+		log.Printf("🚨 Failed to update project with task ID: %v", err)
+		return fmt.Errorf("failed to update project with task ID: %v", err)
+	}
+
+	if result.ModifiedCount == 0 {
+		log.Printf("⚠️ No project was updated. Possible that project ID %s does not exist.", projectID)
+		return fmt.Errorf("no project found with ID %s", projectID)
+	}
+
+	log.Printf("✅ Task %s successfully added to project %s", taskID, projectID)
+	return nil
+}
