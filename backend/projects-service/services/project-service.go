@@ -257,8 +257,12 @@ func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID,
 	}
 
 	taskServiceURL := os.Getenv("TASKS_SERVICE_URL")
-	checkURL := fmt.Sprintf("%s/api/tasks/has-active?projectId=%s&memberId=%s", taskServiceURL, projectID, memberID)
+	if taskServiceURL == "" {
+		log.Println("TASKS_SERVICE_URL is not set")
+		return fmt.Errorf("task service URL is not configured")
+	}
 
+	checkURL := fmt.Sprintf("%s/api/tasks/has-active?projectId=%s&memberId=%s", taskServiceURL, projectID, memberID)
 	resp, err := http.Get(checkURL)
 	if err != nil {
 		log.Printf("Failed to reach task service: %v\n", err)
@@ -268,8 +272,8 @@ func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID,
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		log.Printf("Task service error (%d): %s\n", resp.StatusCode, string(body))
-		return fmt.Errorf("task service returned status %d", resp.StatusCode)
+		log.Printf("Task service returned status %d: %s\n", resp.StatusCode, string(body))
+		return fmt.Errorf("task service returned error %d", resp.StatusCode)
 	}
 
 	var response struct {
@@ -507,26 +511,26 @@ func (s *ProjectService) AddTaskToProject(projectID string, taskID string) error
 		return fmt.Errorf("invalid task ID format: %v", err)
 	}
 
-	log.Printf("🟢 Received request to add task %s to project %s", taskID, projectID)
+	log.Printf("Received request to add task %s to project %s", taskID, projectID)
 
 	// Ažuriranje projekta dodavanjem ID-ja zadatka
 	filter := bson.M{"_id": projectObjectID}
 	update := bson.M{"$push": bson.M{"taskIDs": taskObjectID}}
 
-	log.Printf("🔄 MongoDB filter: %+v", filter)
-	log.Printf("🔄 MongoDB update: %+v", update)
+	log.Printf("MongoDB filter: %+v", filter)
+	log.Printf("MongoDB update: %+v", update)
 
 	result, err := s.ProjectsCollection.UpdateOne(context.Background(), filter, update)
 	if err != nil {
-		log.Printf("🚨 Failed to update project with task ID: %v", err)
+		log.Printf("Failed to update project with task ID: %v", err)
 		return fmt.Errorf("failed to update project with task ID: %v", err)
 	}
 
 	if result.ModifiedCount == 0 {
-		log.Printf("⚠️ No project was updated. Possible that project ID %s does not exist.", projectID)
+		log.Printf("No project was updated. Possible that project ID %s does not exist.", projectID)
 		return fmt.Errorf("no project found with ID %s", projectID)
 	}
 
-	log.Printf("✅ Task %s successfully added to project %s", taskID, projectID)
+	log.Printf("Task %s successfully added to project %s", taskID, projectID)
 	return nil
 }

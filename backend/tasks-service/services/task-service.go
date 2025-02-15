@@ -545,13 +545,17 @@ func (s *TaskService) DeleteTasksByProject(projectID string) error {
 }
 
 func (s *TaskService) HasActiveTasks(ctx context.Context, projectID, memberID string) (bool, error) {
-	filter := bson.M{
-		"projectID":   projectID,
-		"members._id": memberID,
-		"status":      bson.M{"$eq": "In progress"},
+	memberObjectID, err := primitive.ObjectIDFromHex(memberID)
+	if err != nil {
+		log.Printf("Invalid memberID: %s\n", memberID)
+		return false, err
 	}
 
-	log.Printf("Checking active tasks with filter: %+v\n", filter)
+	filter := bson.M{
+		"projectId":   projectID,
+		"members._id": memberObjectID,
+		"status":      "In progress",
+	}
 
 	count, err := s.tasksCollection.CountDocuments(ctx, filter)
 	if err != nil {
