@@ -285,8 +285,8 @@ func (h *ProjectHandler) DisplayTasksForProjectHandler(w http.ResponseWriter, r 
 	}
 
 	vars := mux.Vars(r)
-	projectID, err := primitive.ObjectIDFromHex(vars["id"])
-	if err != nil {
+	projectID := vars["id"]
+	if projectID == "" {
 		http.Error(w, "Invalid project ID", http.StatusBadRequest)
 		return
 	}
@@ -304,6 +304,7 @@ func (h *ProjectHandler) DisplayTasksForProjectHandler(w http.ResponseWriter, r 
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(tasks)
 }

@@ -341,13 +341,13 @@ func (s *ProjectService) GetProjectByID(projectID string) (*models.Project, erro
 	return &project, nil
 }
 
-func (s *ProjectService) GetTasksForProject(projectID primitive.ObjectID, role string, authToken string) ([]*models.Task, error) {
+func (s *ProjectService) GetTasksForProject(projectID string, role string, authToken string) ([]map[string]interface{}, error) {
 	tasksServiceURL := os.Getenv("TASKS_SERVICE_URL")
 	if tasksServiceURL == "" {
 		return nil, fmt.Errorf("TASKS_SERVICE_URL not set")
 	}
 
-	url := fmt.Sprintf("%s/api/tasks/project/%s", tasksServiceURL, projectID.Hex())
+	url := fmt.Sprintf("%s/api/tasks/project/%s", tasksServiceURL, projectID)
 	fmt.Printf("Fetching tasks from: %s\n", url)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -361,17 +361,17 @@ func (s *ProjectService) GetTasksForProject(projectID primitive.ObjectID, role s
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("Failed to fetch tasks for project %s: %v\n", projectID.Hex(), err)
+		log.Printf("Failed to fetch tasks for project %s: %v\n", projectID, err)
 		return nil, fmt.Errorf("failed to fetch tasks: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("Failed to fetch tasks for project %s, status code: %d\n", projectID.Hex(), resp.StatusCode)
+		log.Printf("Failed to fetch tasks for project %s, status code: %d\n", projectID, resp.StatusCode)
 		return nil, fmt.Errorf("failed to fetch tasks, status code: %d", resp.StatusCode)
 	}
 
-	var tasks []*models.Task
+	var tasks []map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&tasks); err != nil {
 		log.Printf("Failed to decode tasks response: %v\n", err)
 		return nil, fmt.Errorf("failed to decode tasks: %v", err)
