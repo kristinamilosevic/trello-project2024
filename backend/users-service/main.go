@@ -18,7 +18,7 @@ import (
 
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "https://localhost:4200")
+		w.Header().Set("Access-Control-Allow-Origin", os.Getenv("CORS_ORIGIN"))
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Role, Manager-ID")
 
@@ -51,20 +51,32 @@ func main() {
 	fmt.Println("Successfully loaded variables from .env file")
 
 	// Učitaj black listu
-	blackList, err := services.LoadBlackList("/app/blacklist.txt")
+	blacklistFilePath := os.Getenv("BLACKLIST_FILE_PATH")
+	if blacklistFilePath == "" {
+		log.Fatal("BLACKLIST_FILE_PATH is not set in the environment variables")
+	}
+
+	blackList, err := services.LoadBlackList(blacklistFilePath)
 	if err != nil {
 		log.Fatalf("Failed to load black list: %v", err)
 	}
 
-	clientOptionsUsers := options.Client().ApplyURI("mongodb://mongo-users:27017")
+	mongoUsersURI := os.Getenv("MONGO_USERS_URI")
+	if mongoUsersURI == "" {
+		log.Fatal("MONGO_USERS_URI is not set in the environment variables")
+	}
+
+	clientOptionsUsers := options.Client().ApplyURI(mongoUsersURI)
 	clientUsers, err := mongo.Connect(context.TODO(), clientOptionsUsers)
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	err = clientUsers.Ping(context.TODO(), nil)
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	fmt.Println("Connected to MongoDB Users database!")
 
 	clientOptionsProjects := options.Client().ApplyURI("mongodb://mongo-projects:27017")
@@ -89,7 +101,18 @@ func main() {
 	}
 	fmt.Println("Connected to MongoDB Tasks database!")
 
-	userCollection := clientUsers.Database("mongo-users").Collection("users")
+	mongoUsersDB := os.Getenv("MONGO_USERS_DB")
+	if mongoUsersDB == "" {
+		log.Fatal("MONGO_USERS_DB is not set in the environment variables")
+	}
+
+	mongoUsersCollection := os.Getenv("MONGO_USERS_COLLECTION")
+	if mongoUsersCollection == "" {
+		log.Fatal("MONGO_USERS_COLLECTION is not set in the environment variables")
+	}
+
+	userCollection := clientUsers.Database(mongoUsersDB).Collection(mongoUsersCollection)
+
 	projectCollection := clientProjects.Database("mongo-projects").Collection("projects")
 	taskCollection := clientTasks.Database("mongo-tasks").Collection("tasks")
 
@@ -122,15 +145,21 @@ func main() {
 
 	startUserCleanupJob(userService)
 
+	serverPort := os.Getenv("SERVER_PORT")
+	if serverPort == "" {
+		log.Fatal("SERVER_PORT is not set in the environment variables")
+	}
+
 	srv := &http.Server{
-		Addr:         ":8001",
+		Addr:         serverPort,
 		Handler:      finalHandler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
 
-	fmt.Println("Server is running on port 8001")
+	fmt.Println("Server is running on port", serverPort)
 	log.Fatal(srv.ListenAndServe())
+
 }
 
 func startUserCleanupJob(userService *services.UserService) {

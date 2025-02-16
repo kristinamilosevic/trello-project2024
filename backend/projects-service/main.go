@@ -32,7 +32,6 @@ func createProjectNameIndex(collection *mongo.Collection) error {
 }
 
 func main() {
-	// Učitavanje .env fajla
 	err := godotenv.Load(".env")
 	if err != nil {
 		log.Fatalf("Error loading .env file")
@@ -43,49 +42,41 @@ func main() {
 		log.Fatal("JWT_SECRET is not set in the environment variables")
 	}
 
+	mongoURI := os.Getenv("MONGO_URI")
+	if mongoURI == "" {
+		log.Fatal("MONGO_URI is not set in the environment variables")
+	}
+
+	mongoDBName := os.Getenv("MONGO_DB_NAME")
+	if mongoDBName == "" {
+		log.Fatal("MONGO_DB_NAME is not set in the environment variables")
+	}
+
+	mongoCollectionName := os.Getenv("MONGO_COLLECTION")
+	if mongoCollectionName == "" {
+		log.Fatal("MONGO_COLLECTION is not set in the environment variables")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	projectsClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://mongo-projects:27017"))
+	projectsClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(mongoURI))
 	if err != nil {
 		log.Fatal("Database connection for mongo-projects failed:", err)
 	}
 	defer projectsClient.Disconnect(context.TODO())
 
-	tasksClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://mongo-tasks:27017"))
-	if err != nil {
-		log.Fatal("Database connection for mongo-tasks failed:", err)
-	}
-	defer tasksClient.Disconnect(context.TODO())
-
-	usersClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI("mongodb://mongo-users:27017"))
-	if err != nil {
-		log.Fatal("Database connection for mongo-users failed:", err)
-	}
-	defer usersClient.Disconnect(context.TODO())
-
 	if err := projectsClient.Ping(ctx, nil); err != nil {
 		log.Fatal("MongoDB connection error for mongo-projects:", err)
 	}
-	if err := tasksClient.Ping(ctx, nil); err != nil {
-		log.Fatal("MongoDB connection error for mongo-tasks:", err)
-	}
-	if err := usersClient.Ping(ctx, nil); err != nil {
-		log.Fatal("MongoDB connection error for mongo-users:", err)
-	}
 
-	projectsDB := projectsClient.Database("mongo-projects")
-	tasksDB := tasksClient.Database("mongo-tasks")
-	usersDB := usersClient.Database("mongo-users")
+	projectsDB := projectsClient.Database(mongoDBName)
 
 	projectService := &services.ProjectService{
-		ProjectsCollection: projectsDB.Collection("projects"),
-		TasksCollection:    tasksDB.Collection("tasks"),
-		UsersCollection:    usersDB.Collection("users"),
+		ProjectsCollection: projectsDB.Collection(mongoCollectionName),
 	}
 
-	// Kreiranje jedinstvenog indeksa
-	if err := createProjectNameIndex(projectsDB.Collection("projects")); err != nil {
+	if err := createProjectNameIndex(projectsDB.Collection(mongoCollectionName)); err != nil {
 		log.Fatal(err)
 	}
 
@@ -107,13 +98,21 @@ func main() {
 
 	corsRouter := enableCORS(r)
 
-	fmt.Println("Projects service server running on http://localhost:8003")
-	log.Fatal(http.ListenAndServe(":8003", corsRouter))
+	serverPort := os.Getenv("SERVER_PORT")
+	if serverPort == "" {
+		log.Fatal("SERVER_PORT is not set in the environment variables")
+	}
+
+	serverAddress := fmt.Sprintf(":%s", serverPort)
+
+	fmt.Println("Projects service server running on", serverAddress)
+	log.Fatal(http.ListenAndServe(serverAddress, corsRouter))
+
 }
 
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "https://localhost:4200")
+		w.Header().Set("Access-Control-Allow-Origin", os.Getenv("CORS_ORIGIN"))
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Role, Manager-ID")
 

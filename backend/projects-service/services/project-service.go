@@ -433,7 +433,7 @@ func (s *ProjectService) DeleteProjectAndTasks(ctx context.Context, projectID st
 	}
 
 	// Priprema zahteva za tasks-service
-	taskServiceURL := "http://tasks-service:8002"
+	taskServiceURL := os.Getenv("TASKS_SERVICE_URL")
 	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/api/tasks/project/%s", taskServiceURL, projectID), nil)
 	if err != nil {
 		log.Printf("Failed to create request to tasks-service: %v", err)

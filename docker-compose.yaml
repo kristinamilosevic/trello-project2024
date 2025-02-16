@@ -15,9 +15,9 @@ services:
     #     - app-network
   notifications-service:
     build:
-      context: ./backend/notifications-service
+      context: ${NOTIFICATIONS_SERVICE_PATH}
       dockerfile: Dockerfile
-    hostname: notifications-service
+    hostname: ${NOTIFICATIONS_SERVICE_NAME}
     ports:
       - "${NOTIFICATIONS_SERVICE_PORT}:${NOTIFICATIONS_SERVICE_INTERNAL_PORT}"
     environment:
@@ -34,8 +34,8 @@ services:
   
   cassandra:
     image: cassandra:4.1
-    container_name: cassandra
-    hostname: cassandra
+    container_name: ${CASSANDRA_NAME}
+    hostname: ${CASSANDRA_NAME}
     ports:
       - "${CASSANDRA_PORT}:${CASSANDRA_PORT}"
     environment:
@@ -51,9 +51,9 @@ services:
     
   tasks-service:
     build:
-      context: ./backend/tasks-service
+      context: ${TASKS_SERVICE_PATH}
       dockerfile: Dockerfile
-    hostname: tasks-service
+    hostname: ${TASKS_SERVICE_NAME}
     ports:
       - "${TASKS_SERVICE_PORT}:${TASKS_SERVICE_INTERNAL_PORT}"
     environment:
@@ -65,9 +65,9 @@ services:
 
   projects-service:
     build:
-      context: ./backend/projects-service
+      context: ${PROJECTS_SERVICE_PATH}
       dockerfile: Dockerfile
-    hostname: projects-service
+    hostname: ${PROJECTS_SERVICE_NAME}
     ports:
       - "${PROJECTS_SERVICE_PORT}:${PROJECTS_SERVICE_INTERNAL_PORT}"
     environment:
@@ -79,9 +79,9 @@ services:
 
   users-service:
     build:
-      context: ./backend/users-service
+      context: ${USERS_SERVICE_PATH}
       dockerfile: Dockerfile
-    hostname: users-service
+    hostname: ${USERS_SERVICE_NAME}
     ports:
       - "${USERS_SERVICE_PORT}:${USERS_SERVICE_INTERNAL_PORT}"
     environment:
@@ -95,9 +95,9 @@ services:
 
   api_gateway:
     build:
-      context: ./api-gateway/
+      context: ${GATEWAY_PATH}
       dockerfile: Dockerfile
-    container_name: api-gateway
+    container_name: ${GATEWAY_NAME}
     restart: on-failure
     ports:
       - "${GATEWAY_PORT}:${GATEWAY_PORT}"
@@ -110,8 +110,8 @@ services:
 
   mongo-tasks:
     image: mongo:latest
-    container_name: mongo-tasks
-    hostname: mongo-tasks
+    container_name: ${MONGO_TASKS_NAME}
+    hostname: ${MONGO_TASKS_NAME}
     ports:
       - "${MONGO_TASKS_PORT}:${MONGO_TASKS_INTERNAL_PORT}"
     volumes:
@@ -121,8 +121,8 @@ services:
 
   mongo-projects:
     image: mongo:latest
-    container_name: mongo-projects
-    hostname: mongo-projects
+    container_name: ${MONGO_PROJECTS_NAME}
+    hostname: ${MONGO_PROJECTS_NAME}
     ports:
       - "${MONGO_PROJECTS_PORT}:${MONGO_PROJECTS_INTERNAL_PORT}"
     volumes:
@@ -132,8 +132,8 @@ services:
 
   mongo-users:
     image: mongo:latest
-    container_name: mongo-users
-    hostname: mongo-users
+    container_name: ${MONGO_USERS_NAME}
+    hostname: ${MONGO_USERS_NAME}
     ports:
       - "${MONGO_USERS_PORT}:${MONGO_USERS_INTERNAL_PORT}"
     volumes:

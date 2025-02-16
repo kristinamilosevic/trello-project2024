@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"os"
 
 	"log"
 	"net/http"
@@ -17,7 +19,7 @@ import (
 
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "https://localhost:4200")
+		w.Header().Set("Access-Control-Allow-Origin", os.Getenv("CORS_ORIGIN"))
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Role, Manager-ID")
 
@@ -30,40 +32,31 @@ func enableCORS(next http.Handler) http.Handler {
 	})
 }
 func main() {
-	// Učitavanje .env fajla
 	err := godotenv.Load(".env")
 	if err != nil {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 
+	mongoURI := os.Getenv("MONGO_URI")
+	mongoDBName := os.Getenv("MONGO_DB_NAME")
+	mongoCollectionName := os.Getenv("MONGO_COLLECTION")
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	tasksClient, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://mongo-tasks:27017"))
+	tasksClient, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
 	if err != nil {
-		log.Fatal("Database connection for mongo-tasks failed:", err)
+		log.Fatal("Database connection failed:", err)
 	}
 	defer tasksClient.Disconnect(ctx)
 
-	projectsClient, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://mongo-projects:27017"))
-	if err != nil {
-		log.Fatal("Database connection for mongo-projects failed:", err)
-	}
-	defer projectsClient.Disconnect(ctx)
-
 	if err := tasksClient.Ping(ctx, nil); err != nil {
-		log.Fatal("MongoDB connection error for mongo-tasks:", err)
-	}
-	if err := projectsClient.Ping(ctx, nil); err != nil {
-		log.Fatal("MongoDB connection error for mongo-projects:", err)
+		log.Fatal("MongoDB connection error:", err)
 	}
 
-	// Kolekcije
-	tasksCollection := tasksClient.Database("mongo-tasks").Collection("tasks")
-	projectsCollection := projectsClient.Database("mongo-projects").Collection("projects")
+	tasksCollection := tasksClient.Database(mongoDBName).Collection(mongoCollectionName)
 
-	// Servis i handler
-	taskService := services.NewTaskService(tasksCollection, projectsCollection)
+	taskService := services.NewTaskService(tasksCollection)
 	taskHandler := handlers.NewTaskHandler(taskService)
 
 	// Kreiranje mux routera
@@ -93,8 +86,15 @@ func main() {
 		}
 	})
 	// Pokretanje servera
-	log.Println("Server running on http://localhost:8002")
-	if err := http.ListenAndServe(":8002", enableCORS(r)); err != nil {
+	serverPort := os.Getenv("SERVER_PORT")
+	if serverPort == "" {
+		log.Fatal("SERVER_PORT is not set in the environment variables")
+	}
+
+	serverAddress := fmt.Sprintf(":%s", serverPort)
+
+	log.Printf("Server running on http://localhost%s", serverAddress)
+	if err := http.ListenAndServe(serverAddress, enableCORS(r)); err != nil {
 		log.Fatal(err)
 	}
 

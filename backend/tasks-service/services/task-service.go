@@ -22,15 +22,13 @@ type TaskService struct {
 	projectsCollection *mongo.Collection
 }
 
-func NewTaskService(tasksCollection, projectsCollection *mongo.Collection) *TaskService {
+func NewTaskService(tasksCollection *mongo.Collection) *TaskService {
 	return &TaskService{
-		tasksCollection:    tasksCollection,
-		projectsCollection: projectsCollection,
+		tasksCollection: tasksCollection,
 	}
 }
 
 func (s *TaskService) GetAvailableMembersForTask(r *http.Request, projectID, taskID string) ([]models.Member, error) {
-	// Učitaj URL projects-service iz .env fajla
 	projectsServiceURL := os.Getenv("PROJECTS_SERVICE_URL")
 	if projectsServiceURL == "" {
 		log.Println("PROJECTS_SERVICE_URL is not set in .env file")
@@ -104,7 +102,7 @@ func (s *TaskService) GetAvailableMembersForTask(r *http.Request, projectID, tas
 		projectMembers = append(projectMembers, member)
 	}
 
-	// ✅ LOG: Članovi sa projekta pre bilo kakve obrade
+	//LOG: Članovi sa projekta pre bilo kakve obrade
 	log.Printf("Project members fetched and converted for project %s: %+v", projectID, projectMembers)
 
 	// Dohvati podatke o tasku
@@ -121,7 +119,6 @@ func (s *TaskService) GetAvailableMembersForTask(r *http.Request, projectID, tas
 		return nil, fmt.Errorf("failed to fetch task members: %v", err)
 	}
 
-	// ✅ LOG: Članovi koji su već dodati na zadatak
 	log.Printf("Task members fetched for task %s: %+v", taskID, task.Members)
 
 	// Kreiraj mapu postojećih članova zadatka radi brže provere
@@ -141,7 +138,6 @@ func (s *TaskService) GetAvailableMembersForTask(r *http.Request, projectID, tas
 		}
 	}
 
-	// ✅ LOG: Konačna lista dostupnih članova
 	log.Printf("Final available members for task %s: %+v", taskID, availableMembers)
 
 	return availableMembers, nil
@@ -224,7 +220,6 @@ func (s *TaskService) sendNotification(member models.Member, message string) err
 		return nil
 	}
 
-	// Učitaj URL iz .env fajla
 	notificationURL := os.Getenv("NOTIFICATIONS_SERVICE_URL")
 	if notificationURL == "" {
 		fmt.Println("Notification service URL is not set in .env")
@@ -319,7 +314,7 @@ func (s *TaskService) CreateTask(projectID string, title, description string, de
 	// 🔹 **Direktan HTTP zahtev ka `projects-service` za ažuriranje projekta**
 	projectsServiceURL := os.Getenv("PROJECTS_SERVICE_URL")
 	if projectsServiceURL == "" {
-		log.Println("🚨 PROJECTS_SERVICE_URL is not set in .env file")
+		log.Println(" PROJECTS_SERVICE_URL is not set in .env file")
 		return nil, fmt.Errorf("projects-service URL is not configured")
 	}
 
@@ -329,8 +324,8 @@ func (s *TaskService) CreateTask(projectID string, title, description string, de
 		return nil, fmt.Errorf("failed to marshal request body: %v", err)
 	}
 
-	log.Printf("🟢 Sending request to projects-service: %s", url)
-	log.Printf("📨 Request body: %s", string(requestBody))
+	log.Printf("Sending request to projects-service: %s", url)
+	log.Printf("Request body: %s", string(requestBody))
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
 	if err != nil {
@@ -345,18 +340,18 @@ func (s *TaskService) CreateTask(projectID string, title, description string, de
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("🚨 Warning: Task was created, but failed to notify projects-service: %v", err)
-		return task, nil // **Ne brišemo zadatak ako ovo ne uspe, samo logujemo grešku**
+		log.Printf("Warning: Task was created, but failed to notify projects-service: %v", err)
+		return task, nil
 	}
 	defer resp.Body.Close()
 
 	// Provera statusa odgovora
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("🚨 Warning: projects-service returned status %d when adding task %s to project %s", resp.StatusCode, task.ID.Hex(), projectID)
+		log.Printf(" Warning: projects-service returned status %d when adding task %s to project %s", resp.StatusCode, task.ID.Hex(), projectID)
 		return task, nil
 	}
 
-	log.Printf("✅ Successfully notified projects-service about new task %s for project %s", task.ID.Hex(), projectID)
+	log.Printf(" Successfully notified projects-service about new task %s for project %s", task.ID.Hex(), projectID)
 
 	return task, nil
 }
