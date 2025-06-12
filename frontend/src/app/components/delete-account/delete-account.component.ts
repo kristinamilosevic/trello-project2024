@@ -14,6 +14,7 @@ export class DeleteAccountComponent implements OnInit {
   isLoading = false;
   errorMessage: string | null = null;
   successMessage: string | null = null;
+  username: string | null = null;
 
   constructor(
     private accountService: AccountService,
@@ -21,17 +22,23 @@ export class DeleteAccountComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    
     const token = localStorage.getItem('token');
-    if (!token) {
-      console.error("User is not logged in. Redirecting to login page.");
+    this.username = localStorage.getItem('username'); // Preuzimamo username iz localStorage-a
+
+    if (!token || !this.username) {
+      console.error("User is not logged in or username is missing. Redirecting to login page.");
       this.router.navigate(['/login']);
     }
   }
 
   deleteAccount(): void {
+    if (!this.username) {
+      this.errorMessage = 'Username not found.';
+      return;
+    }
+
     this.isLoading = true;
-    this.accountService.deleteAccount().subscribe({
+    this.accountService.deleteAccount(this.username).subscribe({
       next: () => {
         this.successMessage = 'Account deleted successfully!';
         localStorage.clear(); 

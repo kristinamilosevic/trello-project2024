@@ -458,3 +458,12 @@ func (s *UserService) GetAllMembers() ([]models.User, error) {
 
 	return members, nil
 }
+
+func (s *UserService) GetRoleByUsername(username string) (string, error) {
+	var user models.User
+	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+	if err != nil {
+		return "", err
+	}
+	return user.Role, nil
+}

@@ -94,6 +94,7 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/api/projects/{projectId}/members/all", projectHandler.GetProjectMembersHandler).Methods("GET")
 	r.HandleFunc("/api/projects/remove/{projectId}/members/{memberId}/remove", projectHandler.RemoveMemberFromProjectHandler).Methods("DELETE")
+	r.HandleFunc("/api/projects/remove-member/{projectId}/{memberId}", projectHandler.RemoveAnyMemberHandler).Methods("DELETE")
 	r.HandleFunc("/api/projects/add", projectHandler.CreateProject).Methods("POST")
 	r.HandleFunc("/api/projects/{id}/members", projectHandler.AddMemberToProjectHandler).Methods("POST")
 	r.HandleFunc("/api/projects/users", projectHandler.GetAllUsersHandler).Methods("GET")
@@ -104,6 +105,7 @@ func main() {
 	r.HandleFunc("/api/projects/{projectId}", projectHandler.RemoveProjectHandler).Methods(http.MethodDelete)
 	r.HandleFunc("/api/projects/members", projectHandler.GetAllMembersHandler)
 	r.HandleFunc("/api/projects/{projectId}/add-task", projectHandler.AddTaskToProjectHandler).Methods("POST")
+	r.HandleFunc("/api/projects/user-projects/{userID}", projectHandler.GetUserProjectsHandler).Methods("GET")
 
 	corsRouter := enableCORS(r)
 

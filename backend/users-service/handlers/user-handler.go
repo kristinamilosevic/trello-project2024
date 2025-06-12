@@ -514,3 +514,27 @@ func (h *UserHandler) GetAllMembers(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(members)
 }
+
+func (h *UserHandler) GetRoleByUsernameHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	username := vars["username"]
+
+	if username == "" {
+		http.Error(w, "Username parameter is missing", http.StatusBadRequest)
+		return
+	}
+
+	role, err := h.UserService.GetRoleByUsername(username)
+	if err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	response := map[string]string{
+		"username": username,
+		"role":     role,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}

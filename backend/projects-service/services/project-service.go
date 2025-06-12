@@ -309,6 +309,35 @@ func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID,
 	return nil
 }
 
+// RemoveAnyMemberFromProject removes any member from a project.
+func (s *ProjectService) RemoveAnyMemberFromProject(ctx context.Context, projectID, memberID string) error {
+	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
+	if err != nil {
+		return errors.New("invalid project ID format")
+	}
+
+	memberObjectID, err := primitive.ObjectIDFromHex(memberID)
+	if err != nil {
+		return errors.New("invalid member ID format")
+	}
+
+	// Uklonite člana iz projekta
+	projectFilter := bson.M{"_id": projectObjectID}
+	update := bson.M{"$pull": bson.M{"members": bson.M{"_id": memberObjectID}}}
+
+	result, err := s.ProjectsCollection.UpdateOne(ctx, projectFilter, update)
+	if err != nil {
+		return errors.New("failed to remove member from project")
+	}
+
+	if result.ModifiedCount == 0 {
+		return errors.New("member not found in project or already removed")
+	}
+
+	log.Printf("User %s removed from project %s", memberID, projectID)
+	return nil
+}
+
 // GetAllProjects - preuzima sve projekte iz kolekcije
 func (s *ProjectService) GetAllProjects() ([]models.Project, error) {
 	var projects []models.Project
@@ -535,4 +564,100 @@ func (s *ProjectService) AddTaskToProject(projectID string, taskID string) error
 
 	log.Printf("✅ Task %s successfully added to project %s", taskID, projectID)
 	return nil
+}
+
+func (s *ProjectService) RemoveUserFromProjects(userID string, role string) error {
+	// Ako je korisnik menadžer, proveravamo da li ima projekte sa nedovršenim zadacima
+	if role == "manager" {
+		projectFilter := bson.M{"manager_id": userID}
+		cursor, err := s.ProjectsCollection.Find(context.Background(), projectFilter)
+		if err != nil {
+			log.Printf("Error fetching projects for manager %s: %v\n", userID, err)
+			return fmt.Errorf("failed to fetch projects")
+		}
+		defer cursor.Close(context.Background())
+
+		// Proveravamo da li su zadaci u projektima završeni
+		for cursor.Next(context.Background()) {
+			var project models.Project
+			if err := cursor.Decode(&project); err != nil {
+				log.Printf("Error decoding project: %v\n", err)
+				continue
+			}
+
+			taskFilter := bson.M{"projectId": project.ID.Hex(), "status": bson.M{"$ne": "Completed"}}
+			count, err := s.TasksCollection.CountDocuments(context.Background(), taskFilter)
+			if err != nil {
+				log.Printf("Error checking unfinished tasks for project %s: %v\n", project.ID.Hex(), err)
+				continue
+			}
+
+			if count > 0 {
+				log.Printf("Cannot remove manager %s: unfinished tasks in project %s\n", userID, project.ID.Hex())
+				return fmt.Errorf("manager cannot be removed from project %s due to unfinished tasks", project.ID.Hex())
+			}
+		}
+
+		// Ako menadžer može biti uklonjen, brišemo ga iz projekata
+		update := bson.M{"$unset": bson.M{"manager_id": ""}}
+		_, err = s.ProjectsCollection.UpdateMany(context.Background(), projectFilter, update)
+		if err != nil {
+			log.Printf("Failed to remove manager %s from projects: %v\n", userID, err)
+			return fmt.Errorf("failed to update projects")
+		}
+	}
+
+	// Ako je korisnik član, brišemo ga iz members liste u projektima
+	if role == "member" {
+		filter := bson.M{"members._id": userID}
+		update := bson.M{"$pull": bson.M{"members": bson.M{"_id": userID}}}
+		_, err := s.ProjectsCollection.UpdateMany(context.Background(), filter, update)
+		if err != nil {
+			log.Printf("Failed to remove user %s from projects: %v\n", userID, err)
+			return fmt.Errorf("failed to update projects")
+		}
+	}
+
+	log.Printf("User %s successfully removed from all projects", userID)
+	return nil
+}
+
+func (s *ProjectService) GetUserProjects(username string) ([]map[string]interface{}, error) {
+	var response []map[string]interface{}
+
+	filter := bson.M{"members.username": username}
+
+	log.Printf("Executing MongoDB query with filter: %v", filter)
+
+	cursor, err := s.ProjectsCollection.Find(context.Background(), filter)
+	if err != nil {
+		log.Printf("Error fetching projects from MongoDB: %v", err)
+		return nil, fmt.Errorf("error fetching projects: %v", err)
+	}
+	defer cursor.Close(context.Background())
+
+	for cursor.Next(context.Background()) {
+		var project models.Project
+		if err := cursor.Decode(&project); err != nil {
+			log.Printf("Error decoding project document: %v", err)
+			continue
+		}
+
+		// Konverzija ObjectID u string
+		projectData := map[string]interface{}{
+			"id":          project.ID.Hex(), // Rešava problem dekodiranja
+			"name":        project.Name,
+			"description": project.Description,
+		}
+
+		response = append(response, projectData)
+	}
+
+	if err := cursor.Err(); err != nil {
+		log.Printf("Cursor error: %v", err)
+		return nil, fmt.Errorf("cursor error: %v", err)
+	}
+
+	log.Printf("Found %d projects for user %s", len(response), username)
+	return response, nil
 }

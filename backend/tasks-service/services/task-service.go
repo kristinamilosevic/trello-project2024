@@ -18,14 +18,12 @@ import (
 )
 
 type TaskService struct {
-	tasksCollection    *mongo.Collection
-	projectsCollection *mongo.Collection
+	tasksCollection *mongo.Collection
 }
 
-func NewTaskService(tasksCollection, projectsCollection *mongo.Collection) *TaskService {
+func NewTaskService(tasksCollection *mongo.Collection) *TaskService {
 	return &TaskService{
-		tasksCollection:    tasksCollection,
-		projectsCollection: projectsCollection,
+		tasksCollection: tasksCollection,
 	}
 }
 

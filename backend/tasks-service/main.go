@@ -60,10 +60,9 @@ func main() {
 
 	// Kolekcije
 	tasksCollection := tasksClient.Database("mongo-tasks").Collection("tasks")
-	projectsCollection := projectsClient.Database("mongo-projects").Collection("projects")
 
 	// Servis i handler
-	taskService := services.NewTaskService(tasksCollection, projectsCollection)
+	taskService := services.NewTaskService(tasksCollection)
 	taskHandler := handlers.NewTaskHandler(taskService)
 
 	// Kreiranje mux routera

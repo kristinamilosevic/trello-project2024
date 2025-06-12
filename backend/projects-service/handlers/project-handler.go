@@ -222,6 +222,28 @@ func (h *ProjectHandler) RemoveMemberFromProjectHandler(w http.ResponseWriter, r
 	w.Write([]byte(`{"message": "Member removed successfully from project"}`))
 }
 
+func (h *ProjectHandler) RemoveAnyMemberHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("Request received:", r.URL.Path)
+
+	vars := mux.Vars(r)
+	projectID := vars["projectId"]
+	memberID := vars["memberId"]
+
+	fmt.Println("Extracted projectID:", projectID)
+	fmt.Println("Extracted memberID:", memberID)
+
+	err := h.Service.RemoveAnyMemberFromProject(r.Context(), projectID, memberID)
+	if err != nil {
+		fmt.Println("Error during member removal:", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"message": "Member removed successfully from project"}`))
+}
+
 // GetAllUsersHandler retrieves all users
 func (h *ProjectHandler) GetAllUsersHandler(w http.ResponseWriter, r *http.Request) {
 	users, err := h.Service.GetAllUsers()
@@ -410,4 +432,21 @@ func (h *ProjectHandler) AddTaskToProjectHandler(w http.ResponseWriter, r *http.
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"message": "Task added to project successfully"}`))
+}
+
+func (h *ProjectHandler) GetUserProjectsHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID := vars["userID"]
+
+	log.Printf("Fetching projects for user ID: %s", userID)
+
+	projects, err := h.Service.GetUserProjects(userID)
+	if err != nil {
+		log.Printf("Error fetching projects for user %s: %v", userID, err)
+		http.Error(w, "Error fetching projects", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(projects)
 }
