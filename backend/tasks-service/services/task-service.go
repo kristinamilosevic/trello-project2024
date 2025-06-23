@@ -541,3 +541,27 @@ func (s *TaskService) DeleteTasksByProject(projectID string) error {
 	log.Printf("Successfully deleted %d tasks for project ID %s", result.DeletedCount, projectID)
 	return nil
 }
+
+func (s *TaskService) GetTasksByProjectID(projectID string) ([]models.Task, error) {
+	filter := bson.M{"projectId": projectID}
+	cursor, err := s.tasksCollection.Find(context.Background(), filter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find tasks: %w", err)
+	}
+	defer cursor.Close(context.Background())
+
+	var tasks []models.Task
+	if err := cursor.All(context.Background(), &tasks); err != nil {
+		return nil, fmt.Errorf("failed to decode tasks: %w", err)
+	}
+	return tasks, nil
+}
+
+func HasUnfinishedTasks(tasks []models.Task) bool {
+	for _, task := range tasks {
+		if task.Status != models.StatusCompleted {
+			return true
+		}
+	}
+	return false
+}

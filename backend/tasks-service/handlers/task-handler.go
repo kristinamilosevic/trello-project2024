@@ -292,3 +292,31 @@ func (h *TaskHandler) DeleteTasksByProjectHandler(w http.ResponseWriter, r *http
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Tasks deleted successfully"})
 }
+
+func (h *TaskHandler) HasUnfinishedTasksHandler(w http.ResponseWriter, r *http.Request) {
+	projectID := mux.Vars(r)["projectId"]
+	if projectID == "" {
+		http.Error(w, "projectId is required", http.StatusBadRequest)
+		return
+	}
+
+	tasks, err := h.service.GetTasksByProjectID(projectID)
+	if err != nil {
+		http.Error(w, "failed to get tasks: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	hasUnfinished := HasUnfinishedTasks(tasks) // O ovome dole
+
+	resp := map[string]bool{"hasUnfinishedTasks": hasUnfinished}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+func HasUnfinishedTasks(tasks []models.Task) bool {
+	for _, task := range tasks {
+		if task.Status != models.StatusCompleted {
+			return true
+		}
+	}
+	return false
+}
