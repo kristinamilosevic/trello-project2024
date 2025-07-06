@@ -79,6 +79,7 @@ func main() {
 	r.HandleFunc("/api/tasks/status", taskHandler.ChangeTaskStatus).Methods("POST")
 	r.HandleFunc("/api/tasks/project/{projectId}", taskHandler.DeleteTasksByProjectHandler).Methods(http.MethodDelete)
 	r.HandleFunc("/api/tasks/project/{projectId}/has-unfinished", taskHandler.HasUnfinishedTasksHandler).Methods("GET")
+	r.HandleFunc("/api/tasks/remove-user/by-username/{username}", taskHandler.RemoveUserFromAllTasksByUsername).Methods("PATCH")
 
 	// Svi ostali taskovi
 	r.HandleFunc("/api/tasks", func(w http.ResponseWriter, r *http.Request) {

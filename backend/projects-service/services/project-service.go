@@ -309,35 +309,6 @@ func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID,
 	return nil
 }
 
-// RemoveAnyMemberFromProject removes any member from a project.
-func (s *ProjectService) RemoveAnyMemberFromProject(ctx context.Context, projectID, memberID string) error {
-	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
-	if err != nil {
-		return errors.New("invalid project ID format")
-	}
-
-	memberObjectID, err := primitive.ObjectIDFromHex(memberID)
-	if err != nil {
-		return errors.New("invalid member ID format")
-	}
-
-	// Uklonite člana iz projekta
-	projectFilter := bson.M{"_id": projectObjectID}
-	update := bson.M{"$pull": bson.M{"members": bson.M{"_id": memberObjectID}}}
-
-	result, err := s.ProjectsCollection.UpdateOne(ctx, projectFilter, update)
-	if err != nil {
-		return errors.New("failed to remove member from project")
-	}
-
-	if result.ModifiedCount == 0 {
-		return errors.New("member not found in project or already removed")
-	}
-
-	log.Printf("User %s removed from project %s", memberID, projectID)
-	return nil
-}
-
 // GetAllProjects - preuzima sve projekte iz kolekcije
 func (s *ProjectService) GetAllProjects() ([]models.Project, error) {
 	var projects []models.Project
@@ -410,10 +381,86 @@ func (s *ProjectService) GetTasksForProject(projectID primitive.ObjectID, role s
 
 	return tasks, nil
 }
+func (s *ProjectService) getUserIDByUsername(username string) (primitive.ObjectID, error) {
+	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
+	if usersServiceURL == "" {
+		return primitive.NilObjectID, fmt.Errorf("USERS_SERVICE_URL not set")
+	}
+
+	url := fmt.Sprintf("%s/api/users/id/%s", usersServiceURL, username)
+	resp, err := http.Get(url)
+	if err != nil {
+		return primitive.NilObjectID, fmt.Errorf("failed to contact users-service: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return primitive.NilObjectID, fmt.Errorf("users-service returned status: %v", resp.Status)
+	}
+
+	var data struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return primitive.NilObjectID, fmt.Errorf("failed to decode user ID response: %v", err)
+	}
+
+	userID, err := primitive.ObjectIDFromHex(data.ID)
+	if err != nil {
+		return primitive.NilObjectID, fmt.Errorf("invalid user ID format: %v", err)
+	}
+
+	return userID, nil
+}
+func (s *ProjectService) getUserRoleByUsername(username string) (string, error) {
+	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
+	if usersServiceURL == "" {
+		return "", fmt.Errorf("USERS_SERVICE_URL not set")
+	}
+
+	url := fmt.Sprintf("%s/api/users/role/%s", usersServiceURL, username)
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("failed to contact users-service: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("users-service returned status: %v", resp.Status)
+	}
+
+	var data struct {
+		Role string `json:"role"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return "", fmt.Errorf("failed to decode role response: %v", err)
+	}
+
+	return data.Role, nil
+}
 
 func (s *ProjectService) GetProjectsByUsername(username string) ([]models.Project, error) {
 	var projects []models.Project
-	filter := bson.M{"members.username": username}
+
+	// Dobavi userID iz username
+	userID, err := s.getUserIDByUsername(username)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user ID: %v", err)
+	}
+
+	// Dobavi role korisnika
+	role, err := s.getUserRoleByUsername(username)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user role: %v", err)
+	}
+
+	// Formiraj filter na osnovu role
+	var filter bson.M
+	if role == "manager" {
+		filter = bson.M{"manager_id": userID}
+	} else {
+		filter = bson.M{"members.username": username}
+	}
 
 	log.Printf("Executing MongoDB query with filter: %v", filter)
 
@@ -566,8 +613,12 @@ func (s *ProjectService) AddTaskToProject(projectID string, taskID string) error
 	return nil
 }
 
-func (s *ProjectService) RemoveUserFromProjects(userID string, role string) error {
-	// Ako je korisnik menadžer, proveravamo da li ima projekte sa nedovršenim zadacima
+func (s *ProjectService) RemoveUserFromProjects(userID string, role string, authToken string) error {
+	tasksServiceURL := os.Getenv("TASKS_SERVICE_URL")
+	if tasksServiceURL == "" {
+		return fmt.Errorf("TASKS_SERVICE_URL not set")
+	}
+
 	if role == "manager" {
 		projectFilter := bson.M{"manager_id": userID}
 		cursor, err := s.ProjectsCollection.Find(context.Background(), projectFilter)
@@ -577,7 +628,6 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string) erro
 		}
 		defer cursor.Close(context.Background())
 
-		// Proveravamo da li su zadaci u projektima završeni
 		for cursor.Next(context.Background()) {
 			var project models.Project
 			if err := cursor.Decode(&project); err != nil {
@@ -585,20 +635,42 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string) erro
 				continue
 			}
 
-			taskFilter := bson.M{"projectId": project.ID.Hex(), "status": bson.M{"$ne": "Completed"}}
-			count, err := s.TasksCollection.CountDocuments(context.Background(), taskFilter)
+			// Pripremi zahtev sa Authorization header-om
+			url := fmt.Sprintf("%s/api/tasks/project/%s/has-unfinished", tasksServiceURL, project.ID.Hex())
+			req, err := http.NewRequest("GET", url, nil)
 			if err != nil {
-				log.Printf("Error checking unfinished tasks for project %s: %v\n", project.ID.Hex(), err)
+				log.Printf("Failed to create request: %v", err)
+				continue
+			}
+			req.Header.Set("Authorization", "Bearer "+authToken)
+
+			client := &http.Client{}
+			resp, err := client.Do(req)
+			if err != nil {
+				log.Printf("Failed to contact task service: %v\n", err)
+				continue
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				log.Printf("Task service returned non-OK status for project %s: %s\n", project.ID.Hex(), resp.Status)
 				continue
 			}
 
-			if count > 0 {
+			var result struct {
+				HasUnfinishedTasks bool `json:"hasUnfinishedTasks"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+				log.Printf("Failed to decode task service response: %v\n", err)
+				continue
+			}
+
+			if result.HasUnfinishedTasks {
 				log.Printf("Cannot remove manager %s: unfinished tasks in project %s\n", userID, project.ID.Hex())
 				return fmt.Errorf("manager cannot be removed from project %s due to unfinished tasks", project.ID.Hex())
 			}
 		}
 
-		// Ako menadžer može biti uklonjen, brišemo ga iz projekata
 		update := bson.M{"$unset": bson.M{"manager_id": ""}}
 		_, err = s.ProjectsCollection.UpdateMany(context.Background(), projectFilter, update)
 		if err != nil {
@@ -607,7 +679,6 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string) erro
 		}
 	}
 
-	// Ako je korisnik član, brišemo ga iz members liste u projektima
 	if role == "member" {
 		filter := bson.M{"members._id": userID}
 		update := bson.M{"$pull": bson.M{"members": bson.M{"_id": userID}}}
@@ -623,41 +694,73 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string) erro
 }
 
 func (s *ProjectService) GetUserProjects(username string) ([]map[string]interface{}, error) {
-	var response []map[string]interface{}
+	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
+	if usersServiceURL == "" {
+		return nil, fmt.Errorf("USERS_SERVICE_URL not set")
+	}
 
-	filter := bson.M{"members.username": username}
+	// Prvo dohvati ID korisnika
+	resp, err := http.Get(fmt.Sprintf("%s/api/users/id/%s", usersServiceURL, username))
+	if err != nil {
+		return nil, fmt.Errorf("failed to contact users-service: %v", err)
+	}
+	defer resp.Body.Close()
 
-	log.Printf("Executing MongoDB query with filter: %v", filter)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch user ID: %v", resp.Status)
+	}
+
+	var data struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, fmt.Errorf("failed to decode user ID response: %v", err)
+	}
+
+	userID, err := primitive.ObjectIDFromHex(data.ID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid user ID format: %v", err)
+	}
+
+	// Dohvati ulogu korisnika (ako ti treba da razlikuješ manager/member)
+	roleResp, err := http.Get(fmt.Sprintf("%s/api/users/role/%s", usersServiceURL, username))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user role: %v", err)
+	}
+	defer roleResp.Body.Close()
+
+	var roleData struct {
+		Role string `json:"role"`
+	}
+	if err := json.NewDecoder(roleResp.Body).Decode(&roleData); err != nil {
+		return nil, fmt.Errorf("failed to decode role: %v", err)
+	}
+
+	var filter bson.M
+	if roleData.Role == "manager" {
+		filter = bson.M{"manager_id": userID}
+	} else {
+		filter = bson.M{"members._id": userID}
+	}
 
 	cursor, err := s.ProjectsCollection.Find(context.Background(), filter)
 	if err != nil {
-		log.Printf("Error fetching projects from MongoDB: %v", err)
-		return nil, fmt.Errorf("error fetching projects: %v", err)
+		return nil, fmt.Errorf("failed to fetch projects: %v", err)
 	}
 	defer cursor.Close(context.Background())
 
+	var projects []map[string]interface{}
 	for cursor.Next(context.Background()) {
 		var project models.Project
 		if err := cursor.Decode(&project); err != nil {
-			log.Printf("Error decoding project document: %v", err)
 			continue
 		}
-
-		// Konverzija ObjectID u string
-		projectData := map[string]interface{}{
-			"id":          project.ID.Hex(), // Rešava problem dekodiranja
+		projects = append(projects, map[string]interface{}{
+			"id":          project.ID.Hex(),
 			"name":        project.Name,
 			"description": project.Description,
-		}
-
-		response = append(response, projectData)
+		})
 	}
 
-	if err := cursor.Err(); err != nil {
-		log.Printf("Cursor error: %v", err)
-		return nil, fmt.Errorf("cursor error: %v", err)
-	}
-
-	log.Printf("Found %d projects for user %s", len(response), username)
-	return response, nil
+	return projects, nil
 }

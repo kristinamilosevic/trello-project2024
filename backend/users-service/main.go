@@ -119,6 +119,7 @@ func main() {
 	mux.HandleFunc("/api/users/projects/{projectId}/members", userHandler.GetMembersByProjectIDHandler).Methods("GET")
 	mux.HandleFunc("/api/users/members", userHandler.GetAllMembers).Methods("GET")
 	mux.HandleFunc("/api/users/role/{username}", userHandler.GetRoleByUsernameHandler).Methods("GET")
+	mux.HandleFunc("/api/users/id/{username}", userHandler.GetIDByUsernameHandler).Methods("GET")
 
 	finalHandler := enableCORS(mux)
 

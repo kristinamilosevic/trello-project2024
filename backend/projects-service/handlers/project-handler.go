@@ -28,6 +28,7 @@ func NewProjectHandler(service *services.ProjectService) *ProjectHandler {
 
 func checkRole(r *http.Request, allowedRoles []string) error {
 	userRole := r.Header.Get("Role")
+	log.Println(userRole, "ulogaaa")
 	if userRole == "" {
 		return fmt.Errorf("role is missing in request header")
 	}
@@ -222,28 +223,6 @@ func (h *ProjectHandler) RemoveMemberFromProjectHandler(w http.ResponseWriter, r
 	w.Write([]byte(`{"message": "Member removed successfully from project"}`))
 }
 
-func (h *ProjectHandler) RemoveAnyMemberHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Request received:", r.URL.Path)
-
-	vars := mux.Vars(r)
-	projectID := vars["projectId"]
-	memberID := vars["memberId"]
-
-	fmt.Println("Extracted projectID:", projectID)
-	fmt.Println("Extracted memberID:", memberID)
-
-	err := h.Service.RemoveAnyMemberFromProject(r.Context(), projectID, memberID)
-	if err != nil {
-		fmt.Println("Error during member removal:", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"message": "Member removed successfully from project"}`))
-}
-
 // GetAllUsersHandler retrieves all users
 func (h *ProjectHandler) GetAllUsersHandler(w http.ResponseWriter, r *http.Request) {
 	users, err := h.Service.GetAllUsers()
@@ -332,6 +311,7 @@ func (h *ProjectHandler) DisplayTasksForProjectHandler(w http.ResponseWriter, r 
 
 func GetProjectsByUsername(s *services.ProjectService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log.Println("da li dodje dovdeeeeee")
 		if err := checkRole(r, []string{"manager", "member"}); err != nil {
 			http.Error(w, err.Error(), http.StatusForbidden)
 			return
@@ -449,4 +429,36 @@ func (h *ProjectHandler) GetUserProjectsHandler(w http.ResponseWriter, r *http.R
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(projects)
+}
+
+func (h *ProjectHandler) RemoveUserFromProjectsHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID := vars["userID"]
+	role := r.URL.Query().Get("role")
+
+	if userID == "" || role == "" {
+		http.Error(w, "userID and role are required", http.StatusBadRequest)
+		return
+	}
+
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		http.Error(w, "Missing Authorization header", http.StatusUnauthorized)
+		return
+	}
+
+	authToken := strings.TrimPrefix(authHeader, "Bearer ")
+	if authToken == "" {
+		http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
+		return
+	}
+
+	err := h.Service.RemoveUserFromProjects(userID, role, authToken)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to remove user from projects: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("User successfully removed from all projects"))
 }

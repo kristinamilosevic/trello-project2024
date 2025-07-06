@@ -71,7 +71,7 @@ func (s *JWTService) GenerateAuthToken(username, role string) (string, error) {
 // ValidateToken proverava validnost JWT tokena
 func (s *JWTService) ValidateToken(tokenStr string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte(os.Getenv("JWT_SECRET")), nil
+		return []byte(s.secretKey), nil
 	})
 	if err != nil || !token.Valid {
 		return nil, err

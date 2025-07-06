@@ -8,6 +8,7 @@ import (
 	"html"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"time"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/exp/rand"
@@ -182,106 +184,151 @@ func (s *UserService) CreateUser(user models.User) error {
 	return nil
 }
 
-func (s *UserService) DeleteAccount(username string) error {
-	// Pronađi korisnika po username
+func (s *UserService) DeleteAccount(username string, authToken string) error {
 	var user models.User
 	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
 	if err != nil {
 		return fmt.Errorf("user not found")
 	}
-	userID := user.ID
+	userID := user.ID.Hex()
+	role := user.Role
+	fmt.Println("[DeleteAccount] Username:", username)
+	fmt.Println("[DeleteAccount] AuthToken (truncated):", authToken[:10]+"...")
 
-	// Provera uloge korisnika
-	if user.Role == "manager" {
-		// Pronađi projekte koje je menadžer kreirao
-		projectFilter := bson.M{"manager_id": userID}
-		cursor, err := s.ProjectCollection.Find(context.Background(), projectFilter)
+	tasksServiceURL := os.Getenv("TASKS_SERVICE_URL")
+	projectsServiceURL := os.Getenv("PROJECTS_SERVICE_URL")
+
+	if tasksServiceURL == "" || projectsServiceURL == "" {
+		return fmt.Errorf("TASKS_SERVICE_URL or PROJECTS_SERVICE_URL not set")
+	}
+
+	// Helper funkcija za pravljenje GET zahteva sa Authorization headerom
+	makeAuthorizedGetRequest := func(url, role string) (*http.Response, error) {
+		req, err := http.NewRequest(http.MethodGet, url, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Authorization", "Bearer "+authToken)
+		req.Header.Set("Role", role) // Dodaj rolu ovde (ili "X-Role", ako je to što koristiš)
+
+		return http.DefaultClient.Do(req)
+	}
+
+	if role == "manager" {
+		// GET projekata koje vodi
+		url := fmt.Sprintf("%s/api/projects/username/%s", projectsServiceURL, username)
+		resp, err := makeAuthorizedGetRequest(url, role)
 		if err != nil {
 			return fmt.Errorf("failed to fetch projects for manager: %v", err)
 		}
-		defer cursor.Close(context.Background())
+		defer resp.Body.Close()
 
-		// Proveri da li projekti imaju nezavršene zadatke
-		for cursor.Next(context.Background()) {
-			var project models.Project
-			if err := cursor.Decode(&project); err != nil {
-				return fmt.Errorf("failed to decode project: %v", err)
-			}
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("failed to get projects for manager: %v", resp.Status)
+		}
 
-			taskFilter := bson.M{
-				"projectId": project.ID.Hex(),
-				"status":    bson.M{"$ne": "Completed"},
-			}
-			count, err := s.TaskCollection.CountDocuments(context.Background(), taskFilter)
+		var projects []models.Project
+		if err := json.NewDecoder(resp.Body).Decode(&projects); err != nil {
+			return fmt.Errorf("failed to decode projects: %v", err)
+		}
+
+		for _, project := range projects {
+			url = fmt.Sprintf("%s/api/tasks/project/%s/has-unfinished", tasksServiceURL, project.ID.Hex())
+			taskResp, err := makeAuthorizedGetRequest(url, role)
 			if err != nil {
-				return fmt.Errorf("failed to check tasks for project '%s': %v", project.ID.Hex(), err)
+				return fmt.Errorf("task service error: %v", err)
 			}
+			defer taskResp.Body.Close()
 
-			if count > 0 {
+			var result struct {
+				HasUnfinishedTasks bool `json:"hasUnfinishedTasks"`
+			}
+			if err := json.NewDecoder(taskResp.Body).Decode(&result); err != nil {
+				return fmt.Errorf("error decoding task check: %v", err)
+			}
+			if result.HasUnfinishedTasks {
 				return fmt.Errorf("cannot delete account: project '%s' has unfinished tasks", project.ID.Hex())
 			}
 		}
 
-		// Ukloni menadžera iz projekata, ali ostavi projekte
-		update := bson.M{"$unset": bson.M{"manager_id": ""}}
-		_, err = s.ProjectCollection.UpdateMany(context.Background(), projectFilter, update)
+		// PATCH za uklanjanje managera
+		patchURL := fmt.Sprintf("%s/api/projects/remove-user/%s?role=manager", projectsServiceURL, userID)
+		req, err := http.NewRequest(http.MethodPatch, patchURL, nil)
 		if err != nil {
-			return fmt.Errorf("failed to remove manager from projects: %v", err)
+			return err
 		}
+		req.Header.Set("Authorization", "Bearer "+authToken)
+		resp, err = http.DefaultClient.Do(req)
+		if err != nil || resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("failed to remove manager from projects")
+		}
+		defer resp.Body.Close()
 	}
 
-	// Član: proveri da li je deo projekata sa nezavršenim zadacima
-	if user.Role == "member" {
-		projectFilter := bson.M{"members._id": userID}
-		cursor, err := s.ProjectCollection.Find(context.Background(), projectFilter)
+	if role == "member" {
+		// GET projekata gde je član
+		url := fmt.Sprintf("%s/api/projects/user-projects/%s", projectsServiceURL, username)
+		resp, err := makeAuthorizedGetRequest(url, role)
 		if err != nil {
 			return fmt.Errorf("failed to fetch projects for member: %v", err)
 		}
-		defer cursor.Close(context.Background())
+		defer resp.Body.Close()
+		log.Println(resp.StatusCode, "ovo je taj kod iz user servisa")
+		log.Println(url, "ovo je url")
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("failed to get projects for member: %v", resp.Status)
+		}
 
-		for cursor.Next(context.Background()) {
-			var project models.Project
-			if err := cursor.Decode(&project); err != nil {
-				return fmt.Errorf("failed to decode project: %v", err)
-			}
+		var projects []models.Project
+		if err := json.NewDecoder(resp.Body).Decode(&projects); err != nil {
+			return fmt.Errorf("failed to decode projects: %v", err)
+		}
 
-			taskFilter := bson.M{
-				"projectId": project.ID.Hex(),
-				"status":    bson.M{"$ne": "Completed"},
-			}
-			count, err := s.TaskCollection.CountDocuments(context.Background(), taskFilter)
+		for _, project := range projects {
+			url = fmt.Sprintf("%s/api/tasks/project/%s/has-unfinished", tasksServiceURL, project.ID.Hex())
+			taskResp, err := makeAuthorizedGetRequest(url, role)
 			if err != nil {
-				return fmt.Errorf("failed to check tasks for project '%s': %v", project.ID.Hex(), err)
+				return fmt.Errorf("task service error: %v", err)
 			}
+			defer taskResp.Body.Close()
 
-			if count > 0 {
+			var result struct {
+				HasUnfinishedTasks bool `json:"hasUnfinishedTasks"`
+			}
+			if err := json.NewDecoder(taskResp.Body).Decode(&result); err != nil {
+				return fmt.Errorf("error decoding task check: %v", err)
+			}
+			if result.HasUnfinishedTasks {
 				return fmt.Errorf("cannot delete account: project '%s' has unfinished tasks", project.ID.Hex())
 			}
 		}
 
-		// Ukloni člana iz projekata
-		projectUpdateFilter := bson.M{"members._id": userID}
-		projectUpdate := bson.M{"$pull": bson.M{"members": bson.M{"_id": userID}}}
-		_, err = s.ProjectCollection.UpdateMany(context.Background(), projectUpdateFilter, projectUpdate)
+		// PATCH uklanjanje člana iz projekata
+		patchURL := fmt.Sprintf("%s/api/projects/remove-user/%s?role=member", projectsServiceURL, userID)
+		req, err := http.NewRequest(http.MethodPatch, patchURL, nil)
 		if err != nil {
-			return fmt.Errorf("failed to remove user from projects: %v", err)
+			return err
 		}
+		req.Header.Set("Authorization", "Bearer "+authToken)
+		resp, err = http.DefaultClient.Do(req)
+		if err != nil || resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("failed to remove member from projects")
+		}
+		defer resp.Body.Close()
 
-		// Ukloni člana iz zadataka - `assignees` polje
-		taskAssigneesUpdateFilter := bson.M{"assignees": userID}
-		taskAssigneesUpdate := bson.M{"$pull": bson.M{"assignees": userID}}
-		_, err = s.TaskCollection.UpdateMany(context.Background(), taskAssigneesUpdateFilter, taskAssigneesUpdate)
+		// PATCH uklanjanje korisnika iz taskova
+		taskRemoveURL := fmt.Sprintf("%s/api/tasks/remove-user/by-username/%s", tasksServiceURL, username)
+		req, err = http.NewRequest(http.MethodPatch, taskRemoveURL, nil)
 		if err != nil {
-			return fmt.Errorf("failed to remove user from task assignees: %v", err)
+			return err
 		}
-
-		// Ukloni člana iz zadataka - `members` polje
-		taskMembersUpdateFilter := bson.M{"members._id": userID}
-		taskMembersUpdate := bson.M{"$pull": bson.M{"members": bson.M{"_id": userID}}}
-		_, err = s.TaskCollection.UpdateMany(context.Background(), taskMembersUpdateFilter, taskMembersUpdate)
-		if err != nil {
-			return fmt.Errorf("failed to remove user from task members: %v", err)
+		req.Header.Set("Authorization", "Bearer "+authToken)
+		resp, err = http.DefaultClient.Do(req)
+		if err != nil || resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("failed to remove user from tasks")
 		}
+		defer resp.Body.Close()
 	}
 
 	// Brisanje korisnika iz baze
@@ -466,4 +513,13 @@ func (s *UserService) GetRoleByUsername(username string) (string, error) {
 		return "", err
 	}
 	return user.Role, nil
+}
+
+func (s *UserService) GetIDByUsername(username string) (primitive.ObjectID, error) {
+	var user models.User
+	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
+	if err != nil {
+		return primitive.NilObjectID, fmt.Errorf("user not found: %v", err)
+	}
+	return user.ID, nil
 }

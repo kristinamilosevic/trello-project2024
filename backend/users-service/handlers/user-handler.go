@@ -248,8 +248,8 @@ func (h *UserHandler) DeleteAccountHandler(w http.ResponseWriter, r *http.Reques
 		tokenString = tokenString[7:]
 	}
 
-	// Validacija tokena i izvlačenje podataka (username, role)
 	claims, err := h.JWTService.ValidateToken(tokenString)
+	fmt.Printf("Decoded claims: %+v\n", claims)
 	if err != nil {
 		http.Error(w, "Invalid token", http.StatusUnauthorized)
 		return
@@ -257,19 +257,19 @@ func (h *UserHandler) DeleteAccountHandler(w http.ResponseWriter, r *http.Reques
 
 	username := claims.Username
 	fmt.Printf("Request to delete account for user: %s\n", username)
+	fmt.Println("Username iz tokena:", username)
+	fmt.Println("[DeleteAccountHandler] Token (truncated):", tokenString[:10]+"...")
 
-	// Provera i brisanje naloga
-	err = h.UserService.DeleteAccount(username)
+	err = h.UserService.DeleteAccount(username, tokenString) // Prosledi token dalje
 	if err != nil {
 		if strings.Contains(err.Error(), "unfinished tasks") {
-			http.Error(w, err.Error(), http.StatusConflict) // HTTP 409: Conflict
+			http.Error(w, err.Error(), http.StatusConflict)
 		} else {
 			http.Error(w, "Failed to delete account: "+err.Error(), http.StatusInternalServerError)
 		}
 		return
 	}
 
-	// Uspešno brisanje
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Account deleted successfully"})
@@ -537,4 +537,20 @@ func (h *UserHandler) GetRoleByUsernameHandler(w http.ResponseWriter, r *http.Re
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+func (h *UserHandler) GetIDByUsernameHandler(w http.ResponseWriter, r *http.Request) {
+	username := mux.Vars(r)["username"]
+
+	id, err := h.UserService.GetIDByUsername(username)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	resp := map[string]string{
+		"id": id.Hex(),
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }

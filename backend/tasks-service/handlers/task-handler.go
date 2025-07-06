@@ -131,7 +131,7 @@ func (h TaskHandler) GetTasksByProjectID(w http.ResponseWriter, r *http.Request)
 
 	// Pozovi servis i loguj rezultat
 	log.Println("Fetching tasks for project ID:", projectID)
-	tasks, err := h.service.GetTasksByProject(projectID)
+	tasks, err := h.service.GetTasksByProjectID(projectID)
 	if err != nil {
 		log.Println("Error fetching tasks for project ID:", projectID, "Error:", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -319,4 +319,18 @@ func HasUnfinishedTasks(tasks []models.Task) bool {
 		}
 	}
 	return false
+}
+
+func (h *TaskHandler) RemoveUserFromAllTasksByUsername(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	username := vars["username"]
+
+	err := h.service.RemoveUserFromAllTasksByUsername(username)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to remove user from tasks: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("User removed from all tasks successfully"))
 }
