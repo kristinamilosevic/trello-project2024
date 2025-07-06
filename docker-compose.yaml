@@ -51,8 +51,8 @@ services:
     
   tasks-service:
     build:
-      context: ${TASKS_SERVICE_PATH}
-      dockerfile: Dockerfile
+      context: ./backend    
+      dockerfile: tasks-service/Dockerfile
     hostname: ${TASKS_SERVICE_NAME}
     ports:
       - "${TASKS_SERVICE_PORT}:${TASKS_SERVICE_INTERNAL_PORT}"
@@ -65,8 +65,8 @@ services:
 
   projects-service:
     build:
-      context: ${PROJECTS_SERVICE_PATH}
-      dockerfile: Dockerfile
+      context: ./backend    
+      dockerfile: projects-service/Dockerfile
     hostname: ${PROJECTS_SERVICE_NAME}
     ports:
       - "${PROJECTS_SERVICE_PORT}:${PROJECTS_SERVICE_INTERNAL_PORT}"
@@ -79,8 +79,8 @@ services:
 
   users-service:
     build:
-      context: ${USERS_SERVICE_PATH}
-      dockerfile: Dockerfile
+      context: ./backend             
+      dockerfile: users-service/Dockerfile
     hostname: ${USERS_SERVICE_NAME}
     ports:
       - "${USERS_SERVICE_PORT}:${USERS_SERVICE_INTERNAL_PORT}"

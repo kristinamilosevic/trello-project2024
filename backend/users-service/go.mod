@@ -21,3 +21,7 @@ require (
 	golang.org/x/sync v0.9.0 // indirect
 	golang.org/x/text v0.20.0 // indirect
 )
+
+require trello-project/backend/utils v0.0.0
+
+replace trello-project/backend/utils => ../utils

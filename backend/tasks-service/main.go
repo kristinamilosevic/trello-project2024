@@ -11,6 +11,8 @@ import (
 	"trello-project/microservices/tasks-service/handlers"
 	"trello-project/microservices/tasks-service/services"
 
+	http_client "trello-project/backend/utils"
+
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -56,7 +58,9 @@ func main() {
 
 	tasksCollection := tasksClient.Database(mongoDBName).Collection(mongoCollectionName)
 
-	taskService := services.NewTaskService(tasksCollection)
+	httpClient := http_client.NewHTTPClient()
+
+	taskService := services.NewTaskService(tasksCollection, httpClient)
 	taskHandler := handlers.NewTaskHandler(taskService)
 
 	// Kreiranje mux routera

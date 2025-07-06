@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"strings"
-
 	"time"
 
 	"trello-project/microservices/users-service/models"
@@ -30,17 +29,23 @@ type UserService struct {
 	ProjectCollection *mongo.Collection
 	TaskCollection    *mongo.Collection
 	BlackList         map[string]bool
+	HTTPClient        *http.Client
 }
 
-func NewUserService(userCollection, projectCollection, taskCollection *mongo.Collection, jwtService *JWTService, blackList map[string]bool) *UserService {
+func NewUserService(
+	userCollection, projectCollection, taskCollection *mongo.Collection,
+	jwtService *JWTService,
+	blackList map[string]bool,
+	httpClient *http.Client,
+) *UserService {
 	return &UserService{
-
 		UserCollection:    userCollection,
 		TokenCache:        make(map[string]string),
-		JWTService:        &JWTService{},
+		JWTService:        jwtService,
 		ProjectCollection: projectCollection,
 		TaskCollection:    taskCollection,
 		BlackList:         blackList,
+		HTTPClient:        httpClient,
 	}
 }
 
@@ -288,6 +293,28 @@ func (s *UserService) DeleteAccount(username string) error {
 	_, err = s.UserCollection.DeleteOne(context.Background(), bson.M{"username": username})
 	if err != nil {
 		return fmt.Errorf("failed to delete user: %v", err)
+	}
+
+	// Npr. poziv eksternog servisa za čišćenje cache-a ili logovanje brisanja korisnika
+	req, err := http.NewRequest("POST", "http://external-service/api/cleanup-user", nil)
+	if err != nil {
+		log.Printf("Failed to create HTTP request: %v", err)
+	} else {
+		q := req.URL.Query()
+		q.Add("username", username)
+		req.URL.RawQuery = q.Encode()
+
+		resp, err := s.HTTPClient.Do(req)
+		if err != nil {
+			log.Printf("Failed to call external cleanup service: %v", err)
+		} else {
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				log.Printf("External cleanup service returned status: %d", resp.StatusCode)
+			} else {
+				log.Println("External cleanup service called successfully.")
+			}
+		}
 	}
 
 	return nil

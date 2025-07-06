@@ -23,14 +23,16 @@ type ProjectService struct {
 	ProjectsCollection *mongo.Collection
 	TasksCollection    *mongo.Collection
 	UsersCollection    *mongo.Collection
+	HTTPClient         *http.Client
 }
 
 // NewProjectService initializes a new ProjectService with the necessary MongoDB collections.
-func NewProjectService(projectsCollection, usersCollection, tasksCollection *mongo.Collection) *ProjectService {
+func NewProjectService(projectsCollection, usersCollection, tasksCollection *mongo.Collection, httpClient *http.Client) *ProjectService {
 	return &ProjectService{
 		ProjectsCollection: projectsCollection,
 		UsersCollection:    usersCollection,
 		TasksCollection:    tasksCollection,
+		HTTPClient:         httpClient,
 	}
 }
 
@@ -45,18 +47,16 @@ func (s *ProjectService) CreateProject(name string, description string, expected
 	if err != mongo.ErrNoDocuments {
 		return nil, fmt.Errorf("database error: %v", err)
 	}
-	// Validate input parameters
 	if minMembers < 1 || maxMembers < minMembers {
 		return nil, fmt.Errorf("invalid member constraints: minMembers=%d, maxMembers=%d", minMembers, maxMembers)
 	}
 	if expectedEndDate.Before(time.Now()) {
 		return nil, fmt.Errorf("expected end date must be in the future")
 	}
-	// Sanitizacija inputa
+
 	sanitizedName := html.EscapeString(name)
 	sanitizedDescription := html.EscapeString(description)
 
-	// Create the project
 	project := &models.Project{
 		ID:              primitive.NewObjectID(),
 		Name:            sanitizedName,
@@ -69,13 +69,11 @@ func (s *ProjectService) CreateProject(name string, description string, expected
 		Tasks:           []primitive.ObjectID{},
 	}
 
-	// Insert the project into the collection
 	result, err := s.ProjectsCollection.InsertOne(context.Background(), project)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create project: %v", err)
 	}
 
-	// Set the project ID from the inserted result
 	project.ID = result.InsertedID.(primitive.ObjectID)
 	return project, nil
 }
@@ -95,7 +93,7 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, usern
 		return fmt.Errorf("maximum number of members reached for the project")
 	}
 
-	// Filtriranje članova koji su već na projektu
+	// Filtriranje članova koji su već u projektu
 	existingMemberUsernames := make(map[string]bool)
 	for _, member := range project.Members {
 		existingMemberUsernames[member.Username] = true
@@ -115,12 +113,20 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, usern
 		return fmt.Errorf("all provided members are already part of the project")
 	}
 
-	// Dohvatanje korisničkih podataka iz users-service pomoću username-a
-	var members []models.Member
 	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
+	var members []models.Member
+
 	for _, username := range newUsernames {
-		fmt.Printf("Fetching user data from: %s/api/users/member/%s\n", usersServiceURL, username)
-		resp, err := http.Get(fmt.Sprintf("%s/api/users/member/%s", usersServiceURL, username))
+		url := fmt.Sprintf("%s/api/users/member/%s", usersServiceURL, username)
+		log.Printf("Fetching user data from: %s\n", url)
+
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			log.Printf("Error creating request for user %s: %v\n", username, err)
+			return err
+		}
+
+		resp, err := s.HTTPClient.Do(req)
 		if err != nil {
 			log.Printf("Failed to fetch member %s: %v\n", username, err)
 			return err
@@ -183,8 +189,7 @@ func (s *ProjectService) sendNotification(member models.Member, message string) 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Role", "manager")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := s.HTTPClient.Do(req)
 	if err != nil {
 		fmt.Printf("Error sending HTTP request: %v\n", err)
 		return nil
@@ -221,10 +226,16 @@ func (s *ProjectService) GetProjectMembers(ctx context.Context, projectID string
 	return project.Members, nil
 }
 
-// GetAllUsers retrieves all users from the users collection.
 func (s *ProjectService) GetAllUsers() ([]models.Member, error) {
 	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
-	resp, err := http.Get(fmt.Sprintf("%s/api/users/members", usersServiceURL))
+	url := fmt.Sprintf("%s/api/users/members", usersServiceURL)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	resp, err := s.HTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch users from users-service: %v", err)
 	}
@@ -263,7 +274,14 @@ func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID,
 	}
 
 	checkURL := fmt.Sprintf("%s/api/tasks/has-active?projectId=%s&memberId=%s", taskServiceURL, projectID, memberID)
-	resp, err := http.Get(checkURL)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", checkURL, nil)
+	if err != nil {
+		log.Printf("Failed to create HTTP request: %v\n", err)
+		return fmt.Errorf("failed to create HTTP request")
+	}
+
+	resp, err := s.HTTPClient.Do(req)
 	if err != nil {
 		log.Printf("Failed to reach task service: %v\n", err)
 		return fmt.Errorf("failed to connect to task service")
@@ -358,8 +376,7 @@ func (s *ProjectService) GetTasksForProject(projectID string, role string, authT
 	req.Header.Set("Role", role)
 	req.Header.Set("Authorization", authToken)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := s.HTTPClient.Do(req)
 	if err != nil {
 		log.Printf("Failed to fetch tasks for project %s: %v\n", projectID, err)
 		return nil, fmt.Errorf("failed to fetch tasks: %v", err)
@@ -444,9 +461,7 @@ func (s *ProjectService) DeleteProjectAndTasks(ctx context.Context, projectID st
 	req.Header.Set("Authorization", r.Header.Get("Authorization"))
 	req.Header.Set("Role", r.Header.Get("Role"))
 
-	// Slanje zahteva ka tasks-service
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := s.HTTPClient.Do(req)
 	if err != nil {
 		log.Printf("Failed to send request to tasks-service: %v", err)
 		return fmt.Errorf("failed to send request to task service: %v", err)
@@ -477,8 +492,14 @@ func (s *ProjectService) GetAllMembers() ([]models.Member, error) {
 		return nil, fmt.Errorf("users-service URL is not configured")
 	}
 
-	// Napravi HTTP GET zahtev
-	resp, err := http.Get(usersServiceURL + "/api/users/members")
+	// Priprema HTTP GET zahteva
+	req, err := http.NewRequest("GET", usersServiceURL+"/api/users/members", nil)
+	if err != nil {
+		log.Printf("Failed to create request for users-service: %v", err)
+		return nil, err
+	}
+
+	resp, err := s.HTTPClient.Do(req)
 	if err != nil {
 		log.Printf("Failed to fetch members from users-service: %v", err)
 		return nil, err

@@ -1,19 +1,22 @@
-# Dockerfile za projects servis
 FROM golang:alpine as build_container
 
-# Setovanje radnog direktorijuma
 WORKDIR /app
 
-COPY go.mod .
-COPY go.sum .
-RUN go mod download
-COPY . .
+COPY projects-service/go.mod projects-service/go.sum ./projects-service/
+COPY utils/go.mod ./utils/
 
-RUN go build -o projects-service .
+COPY projects-service ./projects-service
+COPY utils ./utils
+
+RUN cd projects-service && go mod download
+
+RUN cd projects-service && go build -o ../projects-service .
 
 FROM alpine
+RUN apk add --no-cache ca-certificates && update-ca-certificates
+
 WORKDIR /usr/bin
 COPY --from=build_container /app/projects-service .
-COPY --from=build_container /app/.env .env
-EXPOSE 8003
-ENTRYPOINT ["projects-service"]
+EXPOSE 8001
+RUN chmod +x /usr/bin/projects-service
+ENTRYPOINT ["./projects-service"]

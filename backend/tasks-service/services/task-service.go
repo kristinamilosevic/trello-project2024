@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"time"
 	"trello-project/microservices/tasks-service/models"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -20,11 +19,13 @@ import (
 type TaskService struct {
 	tasksCollection    *mongo.Collection
 	projectsCollection *mongo.Collection
+	httpClient         *http.Client
 }
 
-func NewTaskService(tasksCollection *mongo.Collection) *TaskService {
+func NewTaskService(tasksCollection *mongo.Collection, httpClient *http.Client) *TaskService {
 	return &TaskService{
 		tasksCollection: tasksCollection,
+		httpClient:      httpClient,
 	}
 }
 
@@ -55,8 +56,7 @@ func (s *TaskService) GetAvailableMembersForTask(r *http.Request, projectID, tas
 	req.Header.Set("Role", userRole)
 
 	// Pošalji zahtev
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		log.Printf("Failed to fetch project members from projects-service: %v", err)
 		return nil, err
@@ -235,8 +235,7 @@ func (s *TaskService) sendNotification(member models.Member, message string) err
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Role", "manager")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		fmt.Printf("Error sending HTTP request: %v\n", err)
 		return nil
@@ -337,8 +336,7 @@ func (s *TaskService) CreateTask(projectID string, title, description string, de
 	req.Header.Set("Role", "manager")
 
 	// Slanje HTTP zahteva ka `projects-service`
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		log.Printf("Warning: Task was created, but failed to notify projects-service: %v", err)
 		return task, nil

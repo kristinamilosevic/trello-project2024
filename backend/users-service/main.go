@@ -11,6 +11,8 @@ import (
 	"trello-project/microservices/users-service/handlers"
 	"trello-project/microservices/users-service/services"
 
+	http_client "trello-project/backend/utils"
+
 	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -32,6 +34,7 @@ func enableCORS(next http.Handler) http.Handler {
 }
 
 func main() {
+
 	err := godotenv.Load(".env")
 	if err != nil {
 		log.Fatalf("Error loading .env file")
@@ -50,7 +53,6 @@ func main() {
 
 	fmt.Println("Successfully loaded variables from .env file")
 
-	// Učitaj black listu
 	blacklistFilePath := os.Getenv("BLACKLIST_FILE_PATH")
 	if blacklistFilePath == "" {
 		log.Fatal("BLACKLIST_FILE_PATH is not set in the environment variables")
@@ -117,7 +119,9 @@ func main() {
 	taskCollection := clientTasks.Database("mongo-tasks").Collection("tasks")
 
 	jwtService := services.NewJWTService(secretKey)
-	userService := services.NewUserService(userCollection, projectCollection, taskCollection, jwtService, blackList)
+	httpClient := http_client.NewHTTPClient()
+
+	userService := services.NewUserService(userCollection, projectCollection, taskCollection, jwtService, blackList, httpClient)
 
 	userHandler := handlers.UserHandler{UserService: userService, JWTService: jwtService, BlackList: blackList}
 	loginHandler := handlers.LoginHandler{UserService: userService}

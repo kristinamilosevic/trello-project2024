@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 	"trello-project/microservices/projects-service/models"
@@ -12,7 +13,7 @@ import (
 	"trello-project/microservices/projects-service/utils"
 
 	"github.com/gorilla/mux"
-	"go.mongodb.org/mongo-driver/bson"
+	// "go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -46,33 +47,57 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
+
 	tokenString := r.Header.Get("Authorization")
 	if tokenString == "" {
 		http.Error(w, "Authorization token required", http.StatusUnauthorized)
 		return
 	}
 
-	// Ekstrakcija username-a iz tokena
 	username, err := utils.ExtractManagerUsernameFromToken(strings.TrimPrefix(tokenString, "Bearer "))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
-	// Pronađi ID menadžera u kolekciji korisnika koristeći username
-	var manager struct {
-		ID primitive.ObjectID `bson:"_id"`
-	}
+	userServiceURL := os.Getenv("USERS_SERVICE_URL")
+	url := fmt.Sprintf("%s/api/users/member/%s", userServiceURL, username)
 
-	err = h.Service.UsersCollection.FindOne(r.Context(), bson.M{"username": username}).Decode(&manager)
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		http.Error(w, "Manager not found", http.StatusUnauthorized)
+		http.Error(w, "Failed to create user service request", http.StatusInternalServerError)
 		return
 	}
 
-	managerID := manager.ID
+	req.Header.Set("Authorization", tokenString)
 
-	// Postavi ID menadžera u projekat
+	resp, err := h.Service.HTTPClient.Do(req)
+	if err != nil {
+		http.Error(w, "Failed to contact users service", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, "Manager not found in users service", http.StatusUnauthorized)
+		return
+	}
+
+	var userResp struct {
+		ID string `json:"id"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&userResp); err != nil {
+		http.Error(w, "Failed to parse users service response", http.StatusInternalServerError)
+		return
+	}
+
+	managerID, err := primitive.ObjectIDFromHex(userResp.ID)
+	if err != nil {
+		http.Error(w, "Invalid manager ID format", http.StatusInternalServerError)
+		return
+	}
+
 	var project models.Project
 	if err := json.NewDecoder(r.Body).Decode(&project); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)

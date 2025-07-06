@@ -11,6 +11,8 @@ import (
 	"trello-project/microservices/projects-service/handlers"
 	"trello-project/microservices/projects-service/services"
 
+	http_client "trello-project/backend/utils"
+
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/bson"
@@ -32,48 +34,35 @@ func createProjectNameIndex(collection *mongo.Collection) error {
 }
 
 func main() {
-	err := godotenv.Load(".env")
-	if err != nil {
-		log.Fatalf("Error loading .env file")
+	if err := godotenv.Load(".env"); err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
 	}
 
-	secretKey := os.Getenv("JWT_SECRET")
-	if secretKey == "" {
-		log.Fatal("JWT_SECRET is not set in the environment variables")
-	}
-
-	mongoURI := os.Getenv("MONGO_URI")
-	if mongoURI == "" {
-		log.Fatal("MONGO_URI is not set in the environment variables")
-	}
-
-	mongoDBName := os.Getenv("MONGO_DB_NAME")
-	if mongoDBName == "" {
-		log.Fatal("MONGO_DB_NAME is not set in the environment variables")
-	}
-
-	mongoCollectionName := os.Getenv("MONGO_COLLECTION")
-	if mongoCollectionName == "" {
-		log.Fatal("MONGO_COLLECTION is not set in the environment variables")
+	mongoURI, mongoDBName, mongoCollectionName := os.Getenv("MONGO_URI"), os.Getenv("MONGO_DB_NAME"), os.Getenv("MONGO_COLLECTION")
+	if mongoURI == "" || mongoDBName == "" || mongoCollectionName == "" {
+		log.Fatal("Missing required environment variables for MongoDB")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	projectsClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(mongoURI))
+	projectsClient, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
 	if err != nil {
-		log.Fatal("Database connection for mongo-projects failed:", err)
+		log.Fatalf("Database connection for mongo-projects failed: %v", err)
 	}
-	defer projectsClient.Disconnect(context.TODO())
+	defer projectsClient.Disconnect(ctx)
 
 	if err := projectsClient.Ping(ctx, nil); err != nil {
-		log.Fatal("MongoDB connection error for mongo-projects:", err)
+		log.Fatalf("MongoDB connection error for mongo-projects: %v", err)
 	}
 
 	projectsDB := projectsClient.Database(mongoDBName)
 
+	httpClient := http_client.NewHTTPClient()
+
 	projectService := &services.ProjectService{
 		ProjectsCollection: projectsDB.Collection(mongoCollectionName),
+		HTTPClient:         httpClient,
 	}
 
 	if err := createProjectNameIndex(projectsDB.Collection(mongoCollectionName)); err != nil {
@@ -95,7 +84,18 @@ func main() {
 	r.HandleFunc("/api/projects/{projectId}", projectHandler.RemoveProjectHandler).Methods(http.MethodDelete)
 	r.HandleFunc("/api/projects/members", projectHandler.GetAllMembersHandler)
 	r.HandleFunc("/api/projects/{projectId}/add-task", projectHandler.AddTaskToProjectHandler).Methods("POST")
+	r.HandleFunc("/test-http-client", func(w http.ResponseWriter, r *http.Request) {
+		resp, err := projectService.HTTPClient.Get("https://www.google.com")
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("HTTP client error: " + err.Error()))
+			return
+		}
+		defer resp.Body.Close()
 
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("HTTP client uspešno povezan! Status: " + resp.Status))
+	})
 	corsRouter := enableCORS(r)
 
 	serverPort := os.Getenv("SERVER_PORT")
@@ -107,12 +107,12 @@ func main() {
 
 	fmt.Println("Projects service server running on", serverAddress)
 	log.Fatal(http.ListenAndServe(serverAddress, corsRouter))
-
 }
 
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", os.Getenv("CORS_ORIGIN"))
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Role, Manager-ID")
 

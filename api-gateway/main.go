@@ -43,7 +43,7 @@ func main() {
 	mux.Handle("/api/notifications/delete", authMiddleware(reverseProxyURL("http://notifications-service:8004"), []string{"member"}))
 
 	// Pokretanje servera
-	http.ListenAndServe(":8000", mux)
+	http.ListenAndServe(":8000", enableCORS(mux))
 }
 
 // Reverse Proxy funkcija
@@ -66,4 +66,19 @@ func reverseProxyURL(target string) http.Handler {
 	}
 
 	return proxy
+}
+
+func enableCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Role, Manager-ID")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
