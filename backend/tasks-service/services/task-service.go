@@ -17,9 +17,8 @@ import (
 )
 
 type TaskService struct {
-	tasksCollection    *mongo.Collection
-	projectsCollection *mongo.Collection
-	httpClient         *http.Client
+	tasksCollection *mongo.Collection
+	httpClient      *http.Client
 }
 
 func NewTaskService(tasksCollection *mongo.Collection, httpClient *http.Client) *TaskService {
@@ -437,31 +436,6 @@ func (s *TaskService) GetTaskByID(taskID primitive.ObjectID) (*models.Task, erro
 	return &task, nil
 }
 
-func (s *TaskService) GetTasksByProject(projectID string) ([]*models.Task, error) {
-	var tasks []*models.Task
-
-	filter := bson.M{"projectId": projectID}
-	cursor, err := s.tasksCollection.Find(context.Background(), filter)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve tasks: %v", err)
-	}
-	defer cursor.Close(context.Background())
-
-	for cursor.Next(context.Background()) {
-		var task models.Task
-		if err := cursor.Decode(&task); err != nil {
-			return nil, fmt.Errorf("failed to decode task: %v", err)
-		}
-		tasks = append(tasks, &task)
-	}
-
-	if err := cursor.Err(); err != nil {
-		return nil, fmt.Errorf("cursor error: %v", err)
-	}
-
-	return tasks, nil
-}
-
 func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.TaskStatus, username string) (*models.Task, error) {
 	// Pronađi zadatak u bazi
 	var task models.Task
@@ -558,4 +532,52 @@ func (s *TaskService) HasActiveTasks(ctx context.Context, projectID, memberID st
 	log.Printf("Found %d active tasks\n", count)
 
 	return count > 0, nil
+}
+
+func (s *TaskService) GetTasksByProjectID(projectID string) ([]models.Task, error) {
+	filter := bson.M{"projectId": projectID}
+	cursor, err := s.tasksCollection.Find(context.Background(), filter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find tasks: %w", err)
+	}
+	defer cursor.Close(context.Background())
+
+	var tasks []models.Task
+	if err := cursor.All(context.Background(), &tasks); err != nil {
+		return nil, fmt.Errorf("failed to decode tasks: %w", err)
+	}
+	return tasks, nil
+}
+
+func HasUnfinishedTasks(tasks []models.Task) bool {
+	for _, task := range tasks {
+		if task.Status != models.StatusCompleted {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *TaskService) RemoveUserFromAllTasksByUsername(username string) error {
+	// Pronađi sve taskove gde se korisnik pojavljuje kao member
+	filter := bson.M{
+		"$or": []bson.M{
+			{"assignees": username},
+			{"members.username": username},
+		},
+	}
+
+	update := bson.M{
+		"$pull": bson.M{
+			"assignees": username,
+			"members":   bson.M{"username": username},
+		},
+	}
+
+	_, err := s.tasksCollection.UpdateMany(context.Background(), filter, update)
+	if err != nil {
+		return fmt.Errorf("failed to remove user from tasks by username: %v", err)
+	}
+
+	return nil
 }

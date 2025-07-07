@@ -6,7 +6,7 @@ import { Observable } from 'rxjs';
   providedIn: 'root',
 })
 export class AccountService {
-  private apiUrl = 'http://localhost:8000/api/users/auth/delete-account';
+  private apiUrl = 'http://localhost:8001/api/users/auth/delete-account'; // Ispravljena adresa
 
   constructor(private http: HttpClient) {}
 
@@ -22,8 +22,10 @@ export class AccountService {
       Role: role, 
     });
   }
-  deleteAccount(): Observable<any> {
+
+  deleteAccount(username: string): Observable<any> {  
     const headers = this.getAuthHeaders(); 
-    return this.http.delete(this.apiUrl, { headers });
+    const url = `${this.apiUrl}/${username}`;  // Dodajemo username u URL
+    return this.http.delete(url, { headers });
   }
 }

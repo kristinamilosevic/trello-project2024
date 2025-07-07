@@ -248,8 +248,8 @@ func (h *UserHandler) DeleteAccountHandler(w http.ResponseWriter, r *http.Reques
 		tokenString = tokenString[7:]
 	}
 
-	// Validacija tokena i izvlačenje podataka (username, role)
 	claims, err := h.JWTService.ValidateToken(tokenString)
+	fmt.Printf("Decoded claims: %+v\n", claims)
 	if err != nil {
 		http.Error(w, "Invalid token", http.StatusUnauthorized)
 		return
@@ -257,19 +257,19 @@ func (h *UserHandler) DeleteAccountHandler(w http.ResponseWriter, r *http.Reques
 
 	username := claims.Username
 	fmt.Printf("Request to delete account for user: %s\n", username)
+	fmt.Println("Username iz tokena:", username)
+	fmt.Println("[DeleteAccountHandler] Token (truncated):", tokenString[:10]+"...")
 
-	// Provera i brisanje naloga
-	err = h.UserService.DeleteAccount(username)
+	err = h.UserService.DeleteAccount(username, tokenString) // Prosledi token dalje
 	if err != nil {
 		if strings.Contains(err.Error(), "unfinished tasks") {
-			http.Error(w, err.Error(), http.StatusConflict) // HTTP 409: Conflict
+			http.Error(w, err.Error(), http.StatusConflict)
 		} else {
 			http.Error(w, "Failed to delete account: "+err.Error(), http.StatusInternalServerError)
 		}
 		return
 	}
 
-	// Uspešno brisanje
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Account deleted successfully"})
@@ -513,4 +513,44 @@ func (h *UserHandler) GetAllMembers(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(members)
+}
+
+func (h *UserHandler) GetRoleByUsernameHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	username := vars["username"]
+
+	if username == "" {
+		http.Error(w, "Username parameter is missing", http.StatusBadRequest)
+		return
+	}
+
+	role, err := h.UserService.GetRoleByUsername(username)
+	if err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	response := map[string]string{
+		"username": username,
+		"role":     role,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (h *UserHandler) GetIDByUsernameHandler(w http.ResponseWriter, r *http.Request) {
+	username := mux.Vars(r)["username"]
+
+	id, err := h.UserService.GetIDByUsername(username)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	resp := map[string]string{
+		"id": id.Hex(),
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }

@@ -32,7 +32,7 @@ func main() {
 	mux.Handle("/api/tasks/{taskID}/members/{memberID}", authMiddleware(reverseProxyURL("http://tasks-service:8002"), []string{"manager"}))
 	mux.Handle("/api/tasks/{taskID}/project/{projectID}/available-members", authMiddleware(reverseProxyURL("http://tasks-service:8002"), []string{"manager"}))
 	// Rute za Users Service (brisanje naloga dostupno svima)
-	mux.Handle("/api/users/auth/delete-account", authMiddleware(reverseProxyURL("http://users-service:8001"), []string{"manager", "member"}))
+	mux.Handle("/api/users/auth/delete-account/{username}", authMiddleware(reverseProxyURL("http://users-service:8001"), []string{"manager", "member"}))
 	mux.Handle("/api/users/users-profile", authMiddleware(reverseProxyURL("http://users-service:8001"), []string{"manager", "member"}))
 	mux.Handle("/api/users/check-username", authMiddleware(reverseProxyURL("http://users-service:8001"), []string{"manager", "member"}))
 	mux.Handle("/api/users/change-password", authMiddleware(reverseProxyURL("http://users-service:8001"), []string{"manager", "member"}))

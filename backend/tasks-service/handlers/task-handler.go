@@ -131,7 +131,7 @@ func (h TaskHandler) GetTasksByProjectID(w http.ResponseWriter, r *http.Request)
 
 	// Pozovi servis i loguj rezultat
 	log.Println("Fetching tasks for project ID:", projectID)
-	tasks, err := h.service.GetTasksByProject(projectID)
+	tasks, err := h.service.GetTasksByProjectID(projectID)
 	if err != nil {
 		log.Println("Error fetching tasks for project ID:", projectID, "Error:", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -311,4 +311,46 @@ func (h *TaskHandler) HasActiveTasksHandler(w http.ResponseWriter, r *http.Reque
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"hasActiveTasks": hasActive})
+}
+
+func (h *TaskHandler) HasUnfinishedTasksHandler(w http.ResponseWriter, r *http.Request) {
+	projectID := mux.Vars(r)["projectId"]
+	if projectID == "" {
+		http.Error(w, "projectId is required", http.StatusBadRequest)
+		return
+	}
+
+	tasks, err := h.service.GetTasksByProjectID(projectID)
+	if err != nil {
+		http.Error(w, "failed to get tasks: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	hasUnfinished := HasUnfinishedTasks(tasks) // O ovome dole
+
+	resp := map[string]bool{"hasUnfinishedTasks": hasUnfinished}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+func HasUnfinishedTasks(tasks []models.Task) bool {
+	for _, task := range tasks {
+		if task.Status != models.StatusCompleted {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *TaskHandler) RemoveUserFromAllTasksByUsername(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	username := vars["username"]
+
+	err := h.service.RemoveUserFromAllTasksByUsername(username)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to remove user from tasks: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("User removed from all tasks successfully"))
 }

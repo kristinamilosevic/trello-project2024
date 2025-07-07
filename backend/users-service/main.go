@@ -13,6 +13,7 @@ import (
 
 	http_client "trello-project/backend/utils"
 
+	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -126,24 +127,26 @@ func main() {
 	userHandler := handlers.UserHandler{UserService: userService, JWTService: jwtService, BlackList: blackList}
 	loginHandler := handlers.LoginHandler{UserService: userService}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/users/register", userHandler.Register)
-	mux.HandleFunc("/api/users/confirm", userHandler.ConfirmEmail)
-	mux.HandleFunc("/api/users/verify-code", userHandler.VerifyCode)
-	mux.HandleFunc("/api/users/login", loginHandler.Login)
-	mux.HandleFunc("/api/users/check-username", loginHandler.CheckUsername)
-	mux.HandleFunc("/api/users/forgot-password", loginHandler.ForgotPassword)
-	mux.HandleFunc("/api/users/reset-password", loginHandler.ResetPassword)
-	mux.HandleFunc("/api/users/auth/delete-account", userHandler.DeleteAccountHandler)
-	mux.HandleFunc("/api/users/magic-link", loginHandler.MagicLink)
-	mux.HandleFunc("/api/users/magic-login", loginHandler.MagicLogin)
-	mux.HandleFunc("/api/users/verify-magic-link", loginHandler.VerifyMagicLink)
-	mux.HandleFunc("/api/users/users-profile", userHandler.GetUserForCurrentSession)
-	mux.HandleFunc("/api/users/change-password", userHandler.ChangePassword)
+	mux := mux.NewRouter()
+	mux.HandleFunc("/api/users/register", userHandler.Register).Methods("POST")
+	mux.HandleFunc("/api/users/confirm", userHandler.ConfirmEmail).Methods("POST")
+	mux.HandleFunc("/api/users/verify-code", userHandler.VerifyCode).Methods("POST")
+	mux.HandleFunc("/api/users/login", loginHandler.Login).Methods("POST")
+	mux.HandleFunc("/api/users/check-username", loginHandler.CheckUsername).Methods("POST")
+	mux.HandleFunc("/api/users/forgot-password", loginHandler.ForgotPassword).Methods("POST")
+	mux.HandleFunc("/api/users/reset-password", loginHandler.ResetPassword).Methods("POST")
+	mux.HandleFunc("/api/users/auth/delete-account/{username}", userHandler.DeleteAccountHandler).Methods("DELETE")
+	mux.HandleFunc("/api/users/magic-link", loginHandler.MagicLink).Methods("POST")
+	mux.HandleFunc("/api/users/magic-login", loginHandler.MagicLogin).Methods("POST")
+	mux.HandleFunc("/api/users/verify-magic-link", loginHandler.VerifyMagicLink).Methods("POST")
+	mux.HandleFunc("/api/users/users-profile", userHandler.GetUserForCurrentSession).Methods("GET")
+	mux.HandleFunc("/api/users/change-password", userHandler.ChangePassword).Methods("POST")
 	//mux.HandleFunc("/api/users/members", userHandler.GetAllMembers)
-	mux.HandleFunc("/api/users/member/{username}", userHandler.GetMemberByUsernameHandler)
-	mux.HandleFunc("/api/users/projects/{projectId}/members", userHandler.GetMembersByProjectIDHandler)
-	mux.HandleFunc("/api/users/members", userHandler.GetAllMembers)
+	mux.HandleFunc("/api/users/member/{username}", userHandler.GetMemberByUsernameHandler).Methods("GET")
+	mux.HandleFunc("/api/users/projects/{projectId}/members", userHandler.GetMembersByProjectIDHandler).Methods("GET")
+	mux.HandleFunc("/api/users/members", userHandler.GetAllMembers).Methods("GET")
+	mux.HandleFunc("/api/users/role/{username}", userHandler.GetRoleByUsernameHandler).Methods("GET")
+	mux.HandleFunc("/api/users/id/{username}", userHandler.GetIDByUsernameHandler).Methods("GET")
 
 	finalHandler := enableCORS(mux)
 

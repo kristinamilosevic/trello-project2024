@@ -84,18 +84,9 @@ func main() {
 	r.HandleFunc("/api/projects/{projectId}", projectHandler.RemoveProjectHandler).Methods(http.MethodDelete)
 	r.HandleFunc("/api/projects/members", projectHandler.GetAllMembersHandler)
 	r.HandleFunc("/api/projects/{projectId}/add-task", projectHandler.AddTaskToProjectHandler).Methods("POST")
-	r.HandleFunc("/test-http-client", func(w http.ResponseWriter, r *http.Request) {
-		resp, err := projectService.HTTPClient.Get("https://www.google.com")
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("HTTP client error: " + err.Error()))
-			return
-		}
-		defer resp.Body.Close()
+	r.HandleFunc("/api/projects/user-projects/{username}", handlers.GetProjectsByUsername(projectService)).Methods("GET")
+	r.HandleFunc("/api/projects/remove-user/{userID}", projectHandler.RemoveUserFromProjectsHandler).Methods("PATCH")
 
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("HTTP client uspešno povezan! Status: " + resp.Status))
-	})
 	corsRouter := enableCORS(r)
 
 	serverPort := os.Getenv("SERVER_PORT")

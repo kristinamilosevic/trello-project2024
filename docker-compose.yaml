@@ -62,6 +62,7 @@ services:
       - mongo-tasks
     networks:
       - app-network
+    restart: on-failure
 
   projects-service:
     build:
@@ -76,6 +77,7 @@ services:
       - mongo-projects
     networks:
       - app-network
+    restart: on-failure
 
   users-service:
     build:

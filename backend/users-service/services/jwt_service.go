@@ -71,7 +71,7 @@ func (s *JWTService) GenerateAuthToken(username, role string) (string, error) {
 // ValidateToken proverava validnost JWT tokena
 func (s *JWTService) ValidateToken(tokenStr string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte(os.Getenv("JWT_SECRET")), nil
+		return []byte(s.secretKey), nil
 	})
 	if err != nil || !token.Valid {
 		return nil, err
@@ -99,4 +99,40 @@ func (s *JWTService) GeneratePasswordResetToken(username string) (string, error)
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+}
+
+func (s *JWTService) ExtractRoleFromToken(tokenString string) (string, error) {
+	claims, err := s.ValidateToken(tokenString)
+	if err != nil {
+		fmt.Println("❌ [ERROR] Token validation failed:", err)
+		return "", err
+	}
+
+	// Role je već string, nema potrebe za type assertion-om
+	role := claims.Role
+
+	if role == "" {
+		fmt.Println("❌ [ERROR] Role not found in token!")
+		return "", fmt.Errorf("role not found in token")
+	}
+
+	fmt.Println("✅ [DEBUG] Extracted Role from Token:", role)
+	return role, nil
+}
+
+// ParseToken parsira JWT token i vraća claimove
+func (s *JWTService) ParseToken(tokenString string) (jwt.MapClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, jwt.MapClaims{}, func(token *jwt.Token) (interface{}, error) {
+		return []byte(s.secretKey), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok || !token.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+
+	return claims, nil
 }
