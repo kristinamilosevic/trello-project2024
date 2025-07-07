@@ -219,11 +219,11 @@ func (s *UserService) DeleteAccount(username string, authToken string) error {
 		}
 		req.Header.Set("Authorization", "Bearer "+authToken)
 		req.Header.Set("Role", role)
-		return http.DefaultClient.Do(req)
+		return s.HTTPClient.Do(req)
 	}
 
 	if role == "manager" {
-		url := fmt.Sprintf("%s/api/projects/username/%s", projectsServiceURL, username)
+		url := fmt.Sprintf("%s/api/projects/username/%s", strings.TrimRight(projectsServiceURL, "/"), username)
 		resp, err := makeAuthorizedGetRequest(url, role)
 		if err != nil {
 			log.Println("[Manager] Greska prilikom GET projekata:", err)
@@ -244,7 +244,7 @@ func (s *UserService) DeleteAccount(username string, authToken string) error {
 		log.Printf("[Manager] Pronađeno %d projekata\n", len(projects))
 
 		for _, project := range projects {
-			url = fmt.Sprintf("%s/api/tasks/project/%s/has-unfinished", tasksServiceURL, project.ID.Hex())
+			url = fmt.Sprintf("%s/api/tasks/project/%s/has-unfinished", strings.TrimRight(tasksServiceURL, "/"), project.ID.Hex())
 			taskResp, err := makeAuthorizedGetRequest(url, role)
 			if err != nil {
 				log.Println("[Manager] Greška pri provere zadataka:", err)
@@ -273,7 +273,7 @@ func (s *UserService) DeleteAccount(username string, authToken string) error {
 			return err
 		}
 		req.Header.Set("Authorization", "Bearer "+authToken)
-		resp, err = http.DefaultClient.Do(req)
+		resp, err = s.HTTPClient.Do(req)
 		if err != nil || resp.StatusCode != http.StatusOK {
 			log.Printf("[Manager] Greska pri PATCH pozivu: err=%v, status=%v\n", err, resp.StatusCode)
 			return fmt.Errorf("failed to remove manager from projects")
@@ -304,8 +304,7 @@ func (s *UserService) DeleteAccount(username string, authToken string) error {
 		log.Printf("[Member] Pronađeno %d projekata\n", len(projects))
 
 		for _, project := range projects {
-			baseTasksURL := strings.TrimRight(tasksServiceURL, "/")
-			url := fmt.Sprintf("%s/api/tasks/project/%s/has-unfinished", baseTasksURL, project.ID.Hex())
+			url := fmt.Sprintf("%s/api/tasks/project/%s/has-unfinished", strings.TrimRight(tasksServiceURL, "/"), project.ID.Hex())
 			log.Println("[Check Unfinished Tasks] Poziv na:", url)
 			taskResp, err := makeAuthorizedGetRequest(url, role)
 			if err != nil {
@@ -335,7 +334,7 @@ func (s *UserService) DeleteAccount(username string, authToken string) error {
 			return err
 		}
 		req.Header.Set("Authorization", "Bearer "+authToken)
-		resp, err = http.DefaultClient.Do(req)
+		resp, err = s.HTTPClient.Do(req)
 		if err != nil || resp.StatusCode != http.StatusOK {
 			log.Printf("[Member] Greska pri PATCH zahtevu: err=%v, status=%v\n", err, resp.StatusCode)
 			return fmt.Errorf("failed to remove member from projects")
@@ -350,7 +349,7 @@ func (s *UserService) DeleteAccount(username string, authToken string) error {
 			return err
 		}
 		req.Header.Set("Authorization", "Bearer "+authToken)
-		resp, err = http.DefaultClient.Do(req)
+		resp, err = s.HTTPClient.Do(req)
 		if err != nil || resp.StatusCode != http.StatusOK {
 			log.Printf("[Member] Greska pri uklanjanju usera iz taskova: err=%v, status=%v\n", err, resp.StatusCode)
 			return fmt.Errorf("failed to remove user from tasks")
