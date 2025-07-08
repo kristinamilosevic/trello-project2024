@@ -25,19 +25,24 @@ export class UsersProjectsComponent implements OnInit {
       console.error('User not logged in');
       return;
     }
-    
+  
     try {
       const decodedToken: any = jwtDecode(token);
-      const username = decodedToken.username; 
-      
-      console.log("Decoded username:", username);   
-
+      const username = decodedToken.username;
+      const role = decodedToken.role;
+  
+      console.log("Decoded username:", username);
+  
       this.projectService.getProjectsByUsername(username).subscribe(
         (data) => {
           console.log("Fetched projects for user:", data);
-         
-          this.projects = data ? data.filter((project) => 
-            project.members.some(member => member.username === username)
+  
+          this.projects = data ? (
+            role === 'manager' 
+              ? data 
+              : data.filter((project) =>
+                  project.members.some(member => member.username === username)
+                )
           ) : [];
         },
         (error) => {
@@ -47,7 +52,7 @@ export class UsersProjectsComponent implements OnInit {
     } catch (error) {
       console.error('Error decoding token:', error);
     }
-  }
+  }  
 
   openDetails(project: Project): void {
     this.router.navigate(['/project', project.id]);

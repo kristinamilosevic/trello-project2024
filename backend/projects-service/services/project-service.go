@@ -396,6 +396,7 @@ func (s *ProjectService) GetTasksForProject(projectID string, role string, authT
 
 	return tasks, nil
 }
+
 func (s *ProjectService) getUserIDByUsername(username string) (primitive.ObjectID, error) {
 	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
 	if usersServiceURL == "" {
@@ -403,7 +404,13 @@ func (s *ProjectService) getUserIDByUsername(username string) (primitive.ObjectI
 	}
 
 	url := fmt.Sprintf("%s/api/users/id/%s", usersServiceURL, username)
-	resp, err := http.Get(url)
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return primitive.NilObjectID, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	resp, err := s.HTTPClient.Do(req)
 	if err != nil {
 		return primitive.NilObjectID, fmt.Errorf("failed to contact users-service: %v", err)
 	}
@@ -427,6 +434,7 @@ func (s *ProjectService) getUserIDByUsername(username string) (primitive.ObjectI
 
 	return userID, nil
 }
+
 func (s *ProjectService) getUserRoleByUsername(username string) (string, error) {
 	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
 	if usersServiceURL == "" {
@@ -434,7 +442,13 @@ func (s *ProjectService) getUserRoleByUsername(username string) (string, error) 
 	}
 
 	url := fmt.Sprintf("%s/api/users/role/%s", usersServiceURL, username)
-	resp, err := http.Get(url)
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %v", err)
+	}
+
+	resp, err := s.HTTPClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to contact users-service: %v", err)
 	}
@@ -472,7 +486,7 @@ func (s *ProjectService) GetProjectsByUsername(username string) ([]models.Projec
 	// Formiraj filter na osnovu role
 	var filter bson.M
 	if role == "manager" {
-		filter = bson.M{"manager_id": userID}
+		filter = bson.M{"manager_id": userID.Hex()}
 	} else {
 		filter = bson.M{"members.username": username}
 	}
@@ -654,7 +668,6 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string, auth
 				continue
 			}
 
-			// Pripremi zahtev sa Authorization header-om
 			url := fmt.Sprintf("%s/api/tasks/project/%s/has-unfinished", tasksServiceURL, project.ID.Hex())
 			req, err := http.NewRequest("GET", url, nil)
 			if err != nil {
@@ -663,8 +676,7 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string, auth
 			}
 			req.Header.Set("Authorization", "Bearer "+authToken)
 
-			client := &http.Client{}
-			resp, err := client.Do(req)
+			resp, err := s.HTTPClient.Do(req)
 			if err != nil {
 				log.Printf("Failed to contact task service: %v\n", err)
 				continue
@@ -719,7 +731,13 @@ func (s *ProjectService) GetUserProjects(username string) ([]map[string]interfac
 	}
 
 	// Prvo dohvati ID korisnika
-	resp, err := http.Get(fmt.Sprintf("%s/api/users/id/%s", usersServiceURL, username))
+	idURL := fmt.Sprintf("%s/api/users/id/%s", usersServiceURL, username)
+	idReq, err := http.NewRequest(http.MethodGet, idURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ID request: %v", err)
+	}
+
+	resp, err := s.HTTPClient.Do(idReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to contact users-service: %v", err)
 	}
@@ -741,8 +759,14 @@ func (s *ProjectService) GetUserProjects(username string) ([]map[string]interfac
 		return nil, fmt.Errorf("invalid user ID format: %v", err)
 	}
 
-	// Dohvati ulogu korisnika (ako ti treba da razlikuješ manager/member)
-	roleResp, err := http.Get(fmt.Sprintf("%s/api/users/role/%s", usersServiceURL, username))
+	// Dohvati ulogu korisnika
+	roleURL := fmt.Sprintf("%s/api/users/role/%s", usersServiceURL, username)
+	roleReq, err := http.NewRequest(http.MethodGet, roleURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create role request: %v", err)
+	}
+
+	roleResp, err := s.HTTPClient.Do(roleReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user role: %v", err)
 	}
