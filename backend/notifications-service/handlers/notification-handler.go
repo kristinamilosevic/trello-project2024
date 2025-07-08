@@ -78,11 +78,8 @@ func (nh *NotificationHandler) GetNotificationsByUsername(w http.ResponseWriter,
 		http.Error(w, "Failed to fetch notifications", http.StatusInternalServerError)
 		return
 	}
-	if len(notifications) == 0 {
-		http.Error(w, "No notifications found for the given username", http.StatusNotFound)
-		return
-	}
 
+	// UVEK vrati JSON niz, čak i ako je prazan
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(notifications)
 }
