@@ -41,7 +41,7 @@ export class AddProjectsComponent {
           this.successMessage = 'Project successfully created!';
         this.errorMessage = null;
         this.projectForm.reset();
-        this.router.navigate(['/projects-list']); 
+        this.router.navigate(['/users-projects']); 
       },
         error => {
           if (error.status === 400) {
