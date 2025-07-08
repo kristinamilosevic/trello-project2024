@@ -486,7 +486,7 @@ func (s *ProjectService) GetProjectsByUsername(username string) ([]models.Projec
 	// Formiraj filter na osnovu role
 	var filter bson.M
 	if role == "manager" {
-		filter = bson.M{"manager_id": userID.Hex()}
+		filter = bson.M{"manager_id": userID}
 	} else {
 		filter = bson.M{"members.username": username}
 	}
