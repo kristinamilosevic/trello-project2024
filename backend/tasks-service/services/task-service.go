@@ -391,6 +391,11 @@ func (s *TaskService) RemoveMemberFromTask(taskID string, memberID primitive.Obj
 		return fmt.Errorf("task not found: %v", err)
 	}
 
+	// ❗️Provera da li je task završen
+	if task.Status == "Completed" {
+		return fmt.Errorf("cannot remove member from a completed task")
+	}
+
 	// Provera da li je član deo zadatka
 	memberFound := false
 	var removedMember models.Member
