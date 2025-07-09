@@ -232,7 +232,7 @@ export class ProjectDetailsComponent implements OnInit {
           this.successMessage = '';
         }, 5000);
 
-        this.router.navigate(['/projects-list']); 
+        this.router.navigate(['/users-projects']); 
       },
       error: (err) => {
         console.error('Failed to delete project:', err);
