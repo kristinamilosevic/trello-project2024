@@ -80,7 +80,7 @@ func main() {
 	r.HandleFunc("/api/tasks/project/{projectId}/has-unfinished", taskHandler.HasUnfinishedTasksHandler).Methods("GET")
 	r.HandleFunc("/api/tasks/remove-user/by-username/{username}", taskHandler.RemoveUserFromAllTasksByUsername).Methods("PATCH")
 
-	// Svi ostali taskovi
+	// Svi ostali taskovi .
 	r.HandleFunc("/api/tasks", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
