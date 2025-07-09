@@ -471,8 +471,8 @@ func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.
 			return nil, fmt.Errorf("dependent task not found: %v", err)
 		}
 
-		if dependentTask.Status != models.StatusInProgress && dependentTask.Status != models.StatusCompleted && status != models.StatusPending {
-			return nil, fmt.Errorf("cannot change status because dependent task '%s' is not in progress or completed", dependentTask.Title)
+		if dependentTask.Status == models.StatusPending {
+			return nil, fmt.Errorf("cannot change status because dependent task '%s' is still pending", dependentTask.Title)
 		}
 	}
 
