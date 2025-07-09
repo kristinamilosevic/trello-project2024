@@ -391,6 +391,11 @@ func (s *TaskService) RemoveMemberFromTask(taskID string, memberID primitive.Obj
 		return fmt.Errorf("task not found: %v", err)
 	}
 
+	// ❗️Provera da li je task završen
+	if task.Status == "Completed" {
+		return fmt.Errorf("cannot remove member from a completed task")
+	}
+
 	// Provera da li je član deo zadatka
 	memberFound := false
 	var removedMember models.Member
@@ -466,8 +471,8 @@ func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.
 			return nil, fmt.Errorf("dependent task not found: %v", err)
 		}
 
-		if dependentTask.Status != models.StatusInProgress && dependentTask.Status != models.StatusCompleted && status != models.StatusPending {
-			return nil, fmt.Errorf("cannot change status because dependent task '%s' is not in progress or completed", dependentTask.Title)
+		if dependentTask.Status == models.StatusPending {
+			return nil, fmt.Errorf("cannot change status because dependent task '%s' is still pending", dependentTask.Title)
 		}
 	}
 

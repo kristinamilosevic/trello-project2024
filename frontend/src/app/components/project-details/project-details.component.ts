@@ -140,20 +140,20 @@ export class ProjectDetailsComponent implements OnInit {
     }
 
     // Check for dependencies
-    if (task.dependsOn) {
-      const dependentTask = this.tasks.find(t => t.id === task.dependsOn);
-      if (
-        dependentTask &&
-        dependentTask.status !== 'Completed' &&
-        task.status !== 'Pending'
-      ) {
-        this.errorMessage = `Cannot change status to "${task.status}" because dependent task "${dependentTask.title}" is not completed.`;
+     if (task.dependsOn) {
+    const dependentTask = this.tasks.find(t => t.id === task.dependsOn);
+    if (dependentTask) {
+      // Ako zavisni task još uvek čeka (Pending),
+      // ne dozvoljava se prelazak taska u bilo koji status osim Pending
+      if (dependentTask.status === 'Pending' && task.status !== 'Pending') {
+        this.errorMessage = `Cannot change status to "${task.status}" because dependent task "${dependentTask.title}" is still Pending.`;
         setTimeout(() => {
           this.errorMessage = '';
         }, 5000);
         return;
       }
     }
+  }
 
     const payload = {
       taskId: task.id,
