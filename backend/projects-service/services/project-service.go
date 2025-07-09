@@ -884,7 +884,7 @@ func (s *ProjectService) GetUserProjects(username string) ([]map[string]interfac
 		return nil, fmt.Errorf("USERS_SERVICE_URL not set")
 	}
 
-	// ➤ 1. Dohvati korisnikov ID kroz circuit breaker
+	// ➤ 1. Dohvati korisnikov ID kroz circuit breaker.
 	idURL := fmt.Sprintf("%s/api/users/id/%s", usersServiceURL, username)
 
 	idResult, err := s.UsersBreaker.Execute(func() (interface{}, error) {
