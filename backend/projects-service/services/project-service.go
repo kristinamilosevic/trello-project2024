@@ -87,6 +87,46 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, usern
 		return fmt.Errorf("project not found: %v", err)
 	}
 
+	taskServiceURL := os.Getenv("TASKS_SERVICE_URL")
+	if taskServiceURL == "" {
+		log.Println("TASKS_SERVICE_URL is not set")
+		return fmt.Errorf("task service URL is not configured")
+	}
+
+	checkURL := fmt.Sprintf("%s/api/tasks/project/%s/has-unfinished", taskServiceURL, projectID.Hex())
+
+	req, err := http.NewRequest("GET", checkURL, nil)
+	if err != nil {
+		log.Printf("Failed to create HTTP request to tasks-service: %v\n", err)
+		return fmt.Errorf("failed to create HTTP request")
+	}
+
+	resp, err := s.HTTPClient.Do(req)
+	if err != nil {
+		log.Printf("Failed to contact tasks-service: %v\n", err)
+		return fmt.Errorf("failed to contact tasks-service")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("tasks-service returned non-OK status: %d\n", resp.StatusCode)
+		return fmt.Errorf("task service returned an error")
+	}
+
+	var result struct {
+		HasUnfinishedTasks bool `json:"hasUnfinishedTasks"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Printf("Failed to decode response from tasks-service: %v\n", err)
+		return fmt.Errorf("failed to decode response from task service")
+	}
+
+	if !result.HasUnfinishedTasks {
+		log.Println("Cannot add members: project has no unfinished tasks")
+		return fmt.Errorf("cannot add members to a finished project")
+	}
+
 	// Provera maksimalnog broja članova
 	if len(project.Members)+len(usernames) > project.MaxMembers {
 		log.Println("Maximum number of members reached for the project")
