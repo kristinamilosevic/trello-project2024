@@ -29,6 +29,7 @@ type ProjectService struct {
 }
 
 // NewProjectService initializes a new ProjectService with the necessary MongoDB collections.
+// .
 //
 //	func NewProjectService(projectsCollection *mongo.Collection, httpClient *http.Client) *ProjectService {
 //		return &ProjectService{
