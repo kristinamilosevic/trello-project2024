@@ -129,31 +129,42 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, usern
 
 	checkURL := fmt.Sprintf("%s/api/tasks/project/%s/has-unfinished", taskServiceURL, projectID.Hex())
 
-	req, err := http.NewRequest("GET", checkURL, nil)
+	resultAny, err := s.TasksBreaker.Execute(func() (interface{}, error) {
+		req, err := http.NewRequest("GET", checkURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create HTTP request: %v", err)
+		}
+
+		resp, err := s.HTTPClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to contact tasks-service: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("tasks-service returned non-OK status %d: %s", resp.StatusCode, string(body))
+		}
+
+		var parsed struct {
+			HasUnfinishedTasks bool `json:"hasUnfinishedTasks"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+			return nil, fmt.Errorf("failed to decode response: %v", err)
+		}
+		return parsed, nil
+	})
+
 	if err != nil {
-		log.Printf("Failed to create HTTP request to tasks-service: %v\n", err)
-		return fmt.Errorf("failed to create HTTP request")
+		log.Printf("Task service unavailable or error: %v", err)
+		// Konzervativan fallback: ne dodaj članove ako ne znaš da li ima zadatke
+		return fmt.Errorf("could not verify if project has unfinished tasks")
 	}
 
-	resp, err := s.HTTPClient.Do(req)
-	if err != nil {
-		log.Printf("Failed to contact tasks-service: %v\n", err)
-		return fmt.Errorf("failed to contact tasks-service")
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("tasks-service returned non-OK status: %d\n", resp.StatusCode)
-		return fmt.Errorf("task service returned an error")
-	}
-
-	var result struct {
-		HasUnfinishedTasks bool `json:"hasUnfinishedTasks"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		log.Printf("Failed to decode response from tasks-service: %v\n", err)
-		return fmt.Errorf("failed to decode response from task service")
+	result := resultAny.(struct{ HasUnfinishedTasks bool })
+	if !result.HasUnfinishedTasks {
+		log.Println("Cannot add members: project has no unfinished tasks")
+		return fmt.Errorf("cannot add members to a finished project")
 	}
 
 	if !result.HasUnfinishedTasks {
@@ -360,48 +371,54 @@ func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID,
 
 	checkURL := fmt.Sprintf("%s/api/tasks/has-active?projectId=%s&memberId=%s", taskServiceURL, projectID, memberID)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", checkURL, nil)
+	// Circuit Breaker za task servis
+	result, err := s.TasksBreaker.Execute(func() (interface{}, error) {
+		req, err := http.NewRequestWithContext(ctx, "GET", checkURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create HTTP request: %v", err)
+		}
+
+		resp, err := s.HTTPClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to task service: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("task service returned status %d: %s", resp.StatusCode, string(body))
+		}
+
+		var r struct {
+			HasActiveTasks bool `json:"hasActiveTasks"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+			return nil, fmt.Errorf("failed to decode task service response: %v", err)
+		}
+
+		return r.HasActiveTasks, nil
+	})
 	if err != nil {
-		log.Printf("Failed to create HTTP request: %v\n", err)
-		return fmt.Errorf("failed to create HTTP request")
+		log.Printf("Circuit breaker error or fallback triggered: %v", err)
+		return fmt.Errorf("could not verify task assignment: %v", err)
 	}
 
-	resp, err := s.HTTPClient.Do(req)
-	if err != nil {
-		log.Printf("Failed to reach task service: %v\n", err)
-		return fmt.Errorf("failed to connect to task service")
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		log.Printf("Task service returned status %d: %s\n", resp.StatusCode, string(body))
-		return fmt.Errorf("task service returned error %d", resp.StatusCode)
-	}
-
-	var response struct {
-		HasActiveTasks bool `json:"hasActiveTasks"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		log.Printf("Failed to decode task service response: %v\n", err)
-		return fmt.Errorf("failed to decode task service response")
-	}
-
-	if response.HasActiveTasks {
+	if result.(bool) {
 		log.Println("Cannot remove member assigned to an active task")
 		return fmt.Errorf("cannot remove member assigned to an active task")
 	}
 
+	// Ako nema aktivnih zadataka, ukloni člana iz projekta
 	filter := bson.M{"_id": projectObjectID}
 	update := bson.M{"$pull": bson.M{"members": bson.M{"_id": memberObjectID}}}
 
-	result, err := s.ProjectsCollection.UpdateOne(ctx, filter, update)
+	resultUpdate, err := s.ProjectsCollection.UpdateOne(ctx, filter, update)
 	if err != nil {
 		log.Println("Failed to remove member from project")
 		return fmt.Errorf("failed to remove member from project")
 	}
 
-	if result.ModifiedCount == 0 {
+	if resultUpdate.ModifiedCount == 0 {
 		log.Println("Member not found in project or already removed")
 		return fmt.Errorf("member not found in project or already removed")
 	}
