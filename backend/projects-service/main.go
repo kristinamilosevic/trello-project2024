@@ -61,18 +61,6 @@ func main() {
 
 	httpClient := http_client.NewHTTPClient()
 
-	projectsBreaker := gobreaker.NewCircuitBreaker(gobreaker.Settings{
-		Name:        "ProjectsServiceCB",
-		MaxRequests: 1,
-		Timeout:     2 * time.Second,
-		ReadyToTrip: func(counts gobreaker.Counts) bool {
-			return counts.ConsecutiveFailures > 3
-		},
-		OnStateChange: func(name string, from, to gobreaker.State) {
-			log.Printf("Circuit Breaker '%s' changed from '%s' to '%s'\n", name, from.String(), to.String())
-		},
-	})
-
 	tasksBreaker := gobreaker.NewCircuitBreaker(gobreaker.Settings{
 		Name:        "TasksServiceCB",
 		MaxRequests: 1,
@@ -96,13 +84,24 @@ func main() {
 			log.Printf("Circuit Breaker '%s' changed from '%s' to '%s'\n", name, from.String(), to.String())
 		},
 	})
+	notificationsBreaker := gobreaker.NewCircuitBreaker(gobreaker.Settings{
+		Name:        "NotificationsServiceCB",
+		MaxRequests: 1,
+		Timeout:     5 * time.Second,
+		ReadyToTrip: func(counts gobreaker.Counts) bool {
+			return counts.ConsecutiveFailures > 3
+		},
+		OnStateChange: func(name string, from, to gobreaker.State) {
+			log.Printf("Circuit Breaker '%s' state changed from %s to %s", name, from.String(), to.String())
+		},
+	})
 
 	projectService := services.NewProjectService(
 		projectsDB.Collection(mongoCollectionName),
 		httpClient,
-		projectsBreaker,
 		tasksBreaker,
 		usersBreaker,
+		notificationsBreaker,
 	)
 
 	//projectService := services.NewProjectService(projectsDB.Collection(mongoCollectionName), httpClient)

@@ -21,11 +21,11 @@ import (
 )
 
 type ProjectService struct {
-	ProjectsCollection *mongo.Collection
-	HTTPClient         *http.Client
-	ProjectsBreaker    *gobreaker.CircuitBreaker
-	TasksBreaker       *gobreaker.CircuitBreaker
-	UsersBreaker       *gobreaker.CircuitBreaker
+	ProjectsCollection   *mongo.Collection
+	HTTPClient           *http.Client
+	TasksBreaker         *gobreaker.CircuitBreaker
+	UsersBreaker         *gobreaker.CircuitBreaker
+	NotificationsBreaker *gobreaker.CircuitBreaker
 }
 
 // NewProjectService initializes a new ProjectService with the necessary MongoDB collections.
@@ -43,16 +43,17 @@ type ProjectService struct {
 func NewProjectService(
 	projectsCollection *mongo.Collection,
 	httpClient *http.Client,
-	projectsBreaker *gobreaker.CircuitBreaker,
 	tasksBreaker *gobreaker.CircuitBreaker,
 	usersBreaker *gobreaker.CircuitBreaker,
+	notificationsBreaker *gobreaker.CircuitBreaker,
+
 ) *ProjectService {
 	return &ProjectService{
-		ProjectsCollection: projectsCollection,
-		HTTPClient:         httpClient,
-		ProjectsBreaker:    projectsBreaker,
-		TasksBreaker:       tasksBreaker,
-		UsersBreaker:       usersBreaker,
+		ProjectsCollection:   projectsCollection,
+		HTTPClient:           httpClient,
+		TasksBreaker:         tasksBreaker,
+		UsersBreaker:         usersBreaker,
+		NotificationsBreaker: notificationsBreaker,
 	}
 }
 
@@ -242,6 +243,22 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, usern
 	}
 
 	log.Println("Members successfully added to the project.")
+	// Slanje notifikacija novim članovima asinhrono sa Circuit Breaker zaštitom
+	for _, member := range members {
+		message := fmt.Sprintf("You have been added to the project: %s!", project.Name)
+
+		// Pokrećemo go rutinu za svaku notifikaciju
+		go func(mem models.Member, msg string) {
+			_, err := s.NotificationsBreaker.Execute(func() (interface{}, error) {
+				return nil, s.sendNotification(mem, msg)
+			})
+
+			if err != nil {
+				log.Printf("Failed to send notification to member %s: %v", mem.Username, err)
+			}
+		}(member, message)
+	}
+
 	return nil
 }
 
@@ -424,6 +441,45 @@ func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID,
 	}
 
 	log.Println("Member successfully removed from project.")
+	// ✅ Dohvatanje Member objekta iz user servisa
+	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
+	if usersServiceURL == "" {
+		log.Println("USERS_SERVICE_URL is not set")
+	} else {
+		memberURL := fmt.Sprintf("%s/api/users/member/id/%s", usersServiceURL, memberID)
+
+		req, err := http.NewRequestWithContext(ctx, "GET", memberURL, nil)
+		if err == nil {
+			resp, err := s.HTTPClient.Do(req)
+			if err == nil {
+				defer resp.Body.Close()
+
+				if resp.StatusCode == http.StatusOK {
+					var member models.Member
+					if err := json.NewDecoder(resp.Body).Decode(&member); err == nil {
+						go func() {
+							message := "You have been removed from a project."
+							_, err := s.NotificationsBreaker.Execute(func() (interface{}, error) {
+								return nil, s.sendNotification(member, message)
+							})
+							if err != nil {
+								log.Printf("Failed to send removal notification to %s: %v", member.Username, err)
+							}
+						}()
+					} else {
+						log.Printf("Failed to decode member response: %v", err)
+					}
+				} else {
+					log.Printf("User service returned status %d when fetching member info", resp.StatusCode)
+				}
+			} else {
+				log.Printf("Failed to fetch member from user service: %v", err)
+			}
+		} else {
+			log.Printf("Failed to create request to user service: %v", err)
+		}
+	}
+
 	return nil
 }
 
@@ -920,19 +976,59 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string, auth
 			log.Printf("Failed to remove manager %s from projects: %v\n", userID, err)
 			return fmt.Errorf("failed to update projects")
 		}
+
 	}
 
 	if role == "member" {
+		// Fetch member details from users-service
+		usersServiceURL := os.Getenv("USERS_SERVICE_URL")
+		getMemberURL := fmt.Sprintf("%s/api/users/id/%s", usersServiceURL, userID)
+
+		req, err := http.NewRequest("GET", getMemberURL, nil)
+		if err != nil {
+			log.Printf("Error creating request to users-service: %v", err)
+			return fmt.Errorf("failed to fetch user data")
+		}
+		req.Header.Set("Authorization", "Bearer "+authToken)
+
+		resp, err := s.HTTPClient.Do(req)
+		if err != nil {
+			log.Printf("Error contacting users-service: %v", err)
+			return fmt.Errorf("failed to fetch user data")
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("users-service returned status %d", resp.StatusCode)
+			return fmt.Errorf("failed to fetch user data")
+		}
+
+		var member models.Member
+		if err := json.NewDecoder(resp.Body).Decode(&member); err != nil {
+			log.Printf("Failed to decode user data: %v", err)
+			return fmt.Errorf("invalid user data from users-service")
+		}
+
 		filter := bson.M{"members._id": userID}
 		update := bson.M{"$pull": bson.M{"members": bson.M{"_id": userID}}}
-		_, err := s.ProjectsCollection.UpdateMany(context.Background(), filter, update)
+		_, err = s.ProjectsCollection.UpdateMany(context.Background(), filter, update)
 		if err != nil {
 			log.Printf("Failed to remove user %s from projects: %v\n", userID, err)
 			return fmt.Errorf("failed to update projects")
 		}
+
+		log.Printf("User %s successfully removed from all projects", userID)
+
+		// Notifikacija samo za member-e
+		message := "You have been removed from one or more projects."
+		_, err = s.NotificationsBreaker.Execute(func() (interface{}, error) {
+			return nil, s.sendNotification(member, message)
+		})
+		if err != nil {
+			log.Printf("Failed to send notification to member %s: %v", member.Username, err)
+		}
 	}
 
-	log.Printf("User %s successfully removed from all projects", userID)
 	return nil
 }
 

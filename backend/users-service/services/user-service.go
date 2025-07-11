@@ -575,3 +575,18 @@ func (s *UserService) GetIDByUsername(username string) (primitive.ObjectID, erro
 	}
 	return user.ID, nil
 }
+
+func (s *UserService) GetMemberByID(ctx context.Context, id string) (models.User, error) {
+	userID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return models.User{}, fmt.Errorf("invalid user ID format")
+	}
+
+	var member models.User
+	err = s.UserCollection.FindOne(ctx, bson.M{"_id": userID}).Decode(&member)
+	if err != nil {
+		return models.User{}, fmt.Errorf("user not found")
+	}
+
+	return member, nil
+}

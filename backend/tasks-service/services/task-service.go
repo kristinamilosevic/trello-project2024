@@ -6,25 +6,37 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"trello-project/microservices/tasks-service/models"
 
+	"github.com/sony/gobreaker"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type TaskService struct {
-	tasksCollection *mongo.Collection
-	httpClient      *http.Client
+	tasksCollection      *mongo.Collection
+	httpClient           *http.Client
+	ProjectsBreaker      *gobreaker.CircuitBreaker
+	NotificationsBreaker *gobreaker.CircuitBreaker
 }
 
-func NewTaskService(tasksCollection *mongo.Collection, httpClient *http.Client) *TaskService {
+func NewTaskService(
+	tasksCollection *mongo.Collection,
+	httpClient *http.Client,
+	projectsBreaker *gobreaker.CircuitBreaker,
+	notificationsBreaker *gobreaker.CircuitBreaker,
+
+) *TaskService {
 	return &TaskService{
-		tasksCollection: tasksCollection,
-		httpClient:      httpClient,
+		tasksCollection:      tasksCollection,
+		httpClient:           httpClient,
+		ProjectsBreaker:      projectsBreaker,
+		NotificationsBreaker: notificationsBreaker,
 	}
 }
 
@@ -54,26 +66,33 @@ func (s *TaskService) GetAvailableMembersForTask(r *http.Request, projectID, tas
 	req.Header.Set("Authorization", authToken)
 	req.Header.Set("Role", userRole)
 
-	// Pošalji zahtev
-	resp, err := s.httpClient.Do(req)
+	result, err := s.ProjectsBreaker.Execute(func() (interface{}, error) {
+		resp, err := s.httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("request to projects-service failed: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("projects-service returned status %d: %s", resp.StatusCode, string(body))
+		}
+
+		var rawProjectMembers []map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&rawProjectMembers); err != nil {
+			return nil, fmt.Errorf("failed to decode response: %w", err)
+		}
+
+		return rawProjectMembers, nil
+	})
 	if err != nil {
-		log.Printf("Failed to fetch project members from projects-service: %v", err)
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	// Proveri statusni kod odgovora
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("projects-service returned status: %d", resp.StatusCode)
-		return nil, fmt.Errorf("failed to fetch project members, status: %d", resp.StatusCode)
+		log.Printf("Circuit breaker triggered or request to projects-service failed: %v", err)
+		log.Println("Returning empty list of available members as fallback")
+		return []models.Member{}, nil
 	}
 
-	// Dekodiraj JSON odgovor u listu članova
-	var rawProjectMembers []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&rawProjectMembers); err != nil {
-		log.Printf("Failed to decode response from projects-service: %v", err)
-		return nil, err
-	}
+	// assertuj tip rezultata
+	rawProjectMembers := result.([]map[string]interface{})
 
 	// Konvertuj listu članova u models.Member sa ispravnim ID-jem
 	var projectMembers []models.Member
@@ -196,11 +215,15 @@ func (s *TaskService) AddMembersToTask(taskID string, membersToAdd []models.Memb
 		// Slanje notifikacija za nove članove
 		for _, member := range newMembers {
 			message := fmt.Sprintf("You have been added to the task: %s!", task.Title)
-			err = s.sendNotification(member, message)
-			if err != nil {
-				log.Printf("Failed to send notification to member %s: %v", member.Username, err)
-				// Log greške, ali ne prekidaj proces
-			}
+			go func(member models.Member, message string) {
+				_, err := s.NotificationsBreaker.Execute(func() (interface{}, error) {
+					return nil, s.sendNotification(member, message)
+				})
+				if err != nil {
+					log.Printf("⚠️ Failed to send notification to member %s: %v", member.Username, err)
+				}
+			}(member, message)
+
 		}
 	}
 
@@ -274,13 +297,11 @@ func (s *TaskService) CreateTask(projectID string, title, description string, de
 			return nil, fmt.Errorf("dependent task not found")
 		}
 	}
-
 	// Provera validnosti projectID
 	_, err := primitive.ObjectIDFromHex(projectID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid project ID format: %v", err)
 	}
-
 	// Ako status nije prosleđen, postavljamo podrazumevanu vrednost
 	if status == "" {
 		status = models.StatusPending
@@ -309,17 +330,18 @@ func (s *TaskService) CreateTask(projectID string, title, description string, de
 	// Ažuriramo ID zadatka na onaj koji je generisan prilikom unosa u bazu
 	task.ID = result.InsertedID.(primitive.ObjectID)
 
-	// 🔹 **Direktan HTTP zahtev ka `projects-service` za ažuriranje projekta**
+	// Circuit breaker deo za poziv projects-service
 	projectsServiceURL := os.Getenv("PROJECTS_SERVICE_URL")
 	if projectsServiceURL == "" {
-		log.Println(" PROJECTS_SERVICE_URL is not set in .env file")
-		return nil, fmt.Errorf("projects-service URL is not configured")
+		log.Println("PROJECTS_SERVICE_URL is not set in .env file")
+		return task, nil
 	}
 
 	url := fmt.Sprintf("%s/api/projects/%s/add-task", projectsServiceURL, projectID)
 	requestBody, err := json.Marshal(map[string]string{"taskID": task.ID.Hex()})
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request body: %v", err)
+		log.Printf("Failed to marshal request body for projects-service: %v", err)
+		return task, nil
 	}
 
 	log.Printf("Sending request to projects-service: %s", url)
@@ -327,28 +349,33 @@ func (s *TaskService) CreateTask(projectID string, title, description string, de
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
+		log.Printf("Failed to create request for projects-service: %v", err)
+		return task, nil
 	}
 
-	// Postavljanje HTTP zaglavlja
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Role", "manager")
 
-	// Slanje HTTP zahteva ka `projects-service`
-	resp, err := s.httpClient.Do(req)
+	_, err = s.ProjectsBreaker.Execute(func() (interface{}, error) {
+		resp, err := s.httpClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("projects-service returned status %d: %s", resp.StatusCode, string(body))
+		}
+
+		log.Printf("Successfully notified projects-service about new task %s for project %s", task.ID.Hex(), projectID)
+		return nil, nil
+	})
+
 	if err != nil {
 		log.Printf("Warning: Task was created, but failed to notify projects-service: %v", err)
-		return task, nil
+		// fallback: i dalje vraćamo task i ne prekidamo
 	}
-	defer resp.Body.Close()
-
-	// Provera statusa odgovora
-	if resp.StatusCode != http.StatusOK {
-		log.Printf(" Warning: projects-service returned status %d when adding task %s to project %s", resp.StatusCode, task.ID.Hex(), projectID)
-		return task, nil
-	}
-
-	log.Printf(" Successfully notified projects-service about new task %s for project %s", task.ID.Hex(), projectID)
 
 	return task, nil
 }
@@ -422,12 +449,16 @@ func (s *TaskService) RemoveMemberFromTask(taskID string, memberID primitive.Obj
 		return fmt.Errorf("failed to update task: %v", err)
 	}
 
-	// Slanje notifikacije uklonjenom članu
+	// Asinhrono slanje notifikacije preko Circuit Breaker-a
 	message := fmt.Sprintf("You have been removed from the task: %s", task.Title)
-	err = s.sendNotification(removedMember, message)
-	if err != nil {
-		log.Printf("Failed to send notification to member %s: %v", removedMember.Username, err)
-	}
+	go func(member models.Member, message string) {
+		_, err := s.NotificationsBreaker.Execute(func() (interface{}, error) {
+			return nil, s.sendNotification(member, message)
+		})
+		if err != nil {
+			log.Printf("⚠️ Failed to send notification to member %s: %v", member.Username, err)
+		}
+	}(removedMember, message)
 
 	return nil
 }
@@ -490,13 +521,17 @@ func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.
 
 	fmt.Printf("Status of task '%s' successfully updated to: %s\n", task.Title, status)
 
-	// Pošalji notifikacije svim članovima zadatka
+	// Pošalji notifikacije asinhrono svim članovima
 	message := fmt.Sprintf("The status of the task '%s' has been changed to: %s", task.Title, status)
 	for _, member := range task.Members {
-		err := s.sendNotification(member, message)
-		if err != nil {
-			log.Printf("Failed to send notification to member %s: %v", member.Username, err)
-		}
+		go func(member models.Member, message string) {
+			_, err := s.NotificationsBreaker.Execute(func() (interface{}, error) {
+				return nil, s.sendNotification(member, message)
+			})
+			if err != nil {
+				log.Printf("⚠️ Failed to send notification to member %s: %v", member.Username, err)
+			}
+		}(member, message)
 	}
 
 	return &task, nil
