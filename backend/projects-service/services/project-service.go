@@ -122,57 +122,6 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, usern
 		return fmt.Errorf("project not found: %v", err)
 	}
 
-	taskServiceURL := os.Getenv("TASKS_SERVICE_URL")
-	if taskServiceURL == "" {
-		log.Println("TASKS_SERVICE_URL is not set")
-		return fmt.Errorf("task service URL is not configured")
-	}
-
-	checkURL := fmt.Sprintf("%s/api/tasks/project/%s/has-unfinished", taskServiceURL, projectID.Hex())
-
-	resultAny, err := s.TasksBreaker.Execute(func() (interface{}, error) {
-		req, err := http.NewRequest("GET", checkURL, nil)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create HTTP request: %v", err)
-		}
-
-		resp, err := s.HTTPClient.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("failed to contact tasks-service: %v", err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			return nil, fmt.Errorf("tasks-service returned non-OK status %d: %s", resp.StatusCode, string(body))
-		}
-
-		var parsed struct {
-			HasUnfinishedTasks bool `json:"hasUnfinishedTasks"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-			return nil, fmt.Errorf("failed to decode response: %v", err)
-		}
-		return parsed, nil
-	})
-
-	if err != nil {
-		log.Printf("Task service unavailable or error: %v", err)
-		// Konzervativan fallback: ne dodaj članove ako ne znaš da li ima zadatke
-		return fmt.Errorf("could not verify if project has unfinished tasks")
-	}
-
-	result := resultAny.(struct{ HasUnfinishedTasks bool })
-	if !result.HasUnfinishedTasks {
-		log.Println("Cannot add members: project has no unfinished tasks")
-		return fmt.Errorf("cannot add members to a finished project")
-	}
-
-	if !result.HasUnfinishedTasks {
-		log.Println("Cannot add members: project has no unfinished tasks")
-		return fmt.Errorf("cannot add members to a finished project")
-	}
-
 	// Provera maksimalnog broja članova
 	if len(project.Members)+len(usernames) > project.MaxMembers {
 		log.Println("Maximum number of members reached for the project")
@@ -206,31 +155,55 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, usern
 		url := fmt.Sprintf("%s/api/users/member/%s", usersServiceURL, username)
 		log.Printf("Fetching user data from: %s\n", url)
 
-		req, err := http.NewRequest("GET", url, nil)
+		userData, err := s.UsersBreaker.Execute(func() (interface{}, error) {
+			req, err := http.NewRequest("GET", url, nil)
+			if err != nil {
+				log.Printf("Error creating request for user %s: %v\n", username, err)
+				return nil, err
+			}
+
+			resp, err := s.HTTPClient.Do(req)
+			if err != nil {
+				log.Printf("Failed to fetch member %s: %v\n", username, err)
+				return nil, err
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				log.Printf("Failed to fetch member %s, status code: %d\n", username, resp.StatusCode)
+				return nil, fmt.Errorf("failed to fetch member %s", username)
+			}
+
+			var user models.Member
+			if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+				log.Printf("Failed to decode member %s: %v\n", username, err)
+				return nil, err
+			}
+
+			return user, nil
+		})
+
 		if err != nil {
-			log.Printf("Error creating request for user %s: %v\n", username, err)
-			return err
+			log.Printf("User service unavailable or failed for %s: %v\n", username, err)
+			return fmt.Errorf("failed to fetch user data for %s: fallback activated", username)
 		}
 
-		resp, err := s.HTTPClient.Do(req)
-		if err != nil {
-			log.Printf("Failed to fetch member %s: %v\n", username, err)
-			return err
-		}
-		defer resp.Body.Close()
+		members = append(members, userData.(models.Member))
 
-		if resp.StatusCode != http.StatusOK {
-			log.Printf("Failed to fetch member %s, status code: %d\n", username, resp.StatusCode)
-			return fmt.Errorf("failed to fetch member %s", username)
-		}
+		/*
+			// Alternativa: blaži fallback - dodaj sve koje možeš, preskoči ostale
+			if err != nil {
+				log.Printf("Skipping user %s due to user service error: %v\n", username, err)
+				continue
+			}
+			members = append(members, userData.(models.Member))
+		*/
+	}
 
-		var user models.Member
-		if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
-			log.Printf("Failed to decode member %s: %v\n", username, err)
-			return err
-		}
-
-		members = append(members, user)
+	// Ako niko nije uspešno dodat (korisno u fallback varijanti)
+	if len(members) == 0 {
+		log.Println("No new members were added due to user service failures.")
+		return fmt.Errorf("no new members were added")
 	}
 
 	// Ažuriranje baze sa novim članovima
@@ -243,22 +216,6 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, usern
 	}
 
 	log.Println("Members successfully added to the project.")
-	// Slanje notifikacija novim članovima asinhrono sa Circuit Breaker zaštitom
-	for _, member := range members {
-		message := fmt.Sprintf("You have been added to the project: %s!", project.Name)
-
-		// Pokrećemo go rutinu za svaku notifikaciju
-		go func(mem models.Member, msg string) {
-			_, err := s.NotificationsBreaker.Execute(func() (interface{}, error) {
-				return nil, s.sendNotification(mem, msg)
-			})
-
-			if err != nil {
-				log.Printf("Failed to send notification to member %s: %v", mem.Username, err)
-			}
-		}(member, message)
-	}
-
 	return nil
 }
 

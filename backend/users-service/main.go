@@ -15,6 +15,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
+	"github.com/sony/gobreaker"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -116,13 +117,34 @@ func main() {
 
 	userCollection := clientUsers.Database(mongoUsersDB).Collection(mongoUsersCollection)
 
-	projectCollection := clientProjects.Database("mongo-projects").Collection("projects")
-	taskCollection := clientTasks.Database("mongo-tasks").Collection("tasks")
-
 	jwtService := services.NewJWTService(secretKey)
 	httpClient := http_client.NewHTTPClient()
 
-	userService := services.NewUserService(userCollection, projectCollection, taskCollection, jwtService, blackList, httpClient)
+	projectsBreaker := gobreaker.NewCircuitBreaker(gobreaker.Settings{
+		Name:        "ProjectsServiceCB",
+		MaxRequests: 1,
+		Timeout:     2 * time.Second,
+		ReadyToTrip: func(counts gobreaker.Counts) bool {
+			return counts.ConsecutiveFailures > 3
+		},
+		OnStateChange: func(name string, from, to gobreaker.State) {
+			log.Printf("Circuit Breaker '%s' changed from '%s' to '%s'\n", name, from.String(), to.String())
+		},
+	})
+
+	tasksBreaker := gobreaker.NewCircuitBreaker(gobreaker.Settings{
+		Name:        "TasksServiceCB",
+		MaxRequests: 1,
+		Timeout:     2 * time.Second,
+		ReadyToTrip: func(counts gobreaker.Counts) bool {
+			return counts.ConsecutiveFailures > 3
+		},
+		OnStateChange: func(name string, from, to gobreaker.State) {
+			log.Printf("Circuit Breaker '%s' changed from '%s' to '%s'\n", name, from.String(), to.String())
+		},
+	})
+
+	userService := services.NewUserService(userCollection, jwtService, blackList, httpClient, projectsBreaker, tasksBreaker)
 
 	userHandler := handlers.UserHandler{UserService: userService, JWTService: jwtService, BlackList: blackList}
 	loginHandler := handlers.LoginHandler{UserService: userService}

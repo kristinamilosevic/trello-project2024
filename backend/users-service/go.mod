@@ -22,6 +22,9 @@ require (
 	golang.org/x/text v0.20.0 // indirect
 )
 
-require trello-project/backend/utils v0.0.0
+require (
+	github.com/sony/gobreaker v1.0.0
+	trello-project/backend/utils v0.0.0
+)
 
 replace trello-project/backend/utils => ../utils

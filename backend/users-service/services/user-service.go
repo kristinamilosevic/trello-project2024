@@ -16,6 +16,7 @@ import (
 	"trello-project/microservices/users-service/utils"
 
 	"github.com/gorilla/mux"
+	"github.com/sony/gobreaker"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -25,29 +26,31 @@ import (
 
 // UserService struktura
 type UserService struct {
-	UserCollection    *mongo.Collection
-	TokenCache        map[string]string
-	JWTService        *JWTService
-	ProjectCollection *mongo.Collection
-	TaskCollection    *mongo.Collection
-	BlackList         map[string]bool
-	HTTPClient        *http.Client
+	UserCollection  *mongo.Collection
+	TokenCache      map[string]string
+	JWTService      *JWTService
+	BlackList       map[string]bool
+	HTTPClient      *http.Client
+	TasksBreaker    *gobreaker.CircuitBreaker
+	ProjectsBreaker *gobreaker.CircuitBreaker
 }
 
 func NewUserService(
-	userCollection, projectCollection, taskCollection *mongo.Collection,
+	userCollection *mongo.Collection,
 	jwtService *JWTService,
 	blackList map[string]bool,
 	httpClient *http.Client,
+	tasksBreaker *gobreaker.CircuitBreaker,
+	projectsBreaker *gobreaker.CircuitBreaker,
 ) *UserService {
 	return &UserService{
-		UserCollection:    userCollection,
-		TokenCache:        make(map[string]string),
-		JWTService:        jwtService,
-		ProjectCollection: projectCollection,
-		TaskCollection:    taskCollection,
-		BlackList:         blackList,
-		HTTPClient:        httpClient,
+		UserCollection:  userCollection,
+		TokenCache:      make(map[string]string),
+		JWTService:      jwtService,
+		BlackList:       blackList,
+		HTTPClient:      httpClient,
+		TasksBreaker:    tasksBreaker,
+		ProjectsBreaker: projectsBreaker,
 	}
 }
 
