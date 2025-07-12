@@ -472,51 +472,63 @@ func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.
 	fmt.Printf("Task '%s' current status: %s\n", task.Title, task.Status)
 	fmt.Printf("Attempting to change status to: %s\n", status)
 
-	// Proveri da li je korisnik zadužen za zadatak
-	var isAuthorized bool
-	for _, member := range task.Members {
+	// Proveri da li je korisnik zadužen (Member ili Assignee)
+	isAuthorized := false
+	for _, member := range append(task.Members, task.Assignees...) {
 		if member.Username == username {
 			isAuthorized = true
 			break
 		}
 	}
-
 	if !isAuthorized {
-		return nil, fmt.Errorf("user '%s' is not authorized to change the status of this task because they are not assigned to it", username)
+		return nil, fmt.Errorf("user '%s' is not authorized to change the status of this task", username)
 	}
 
-	// Ako postoji zavisni zadatak, proveri njegov status
-	// if task.DependsOn != nil {
-	// 	var dependentTask models.Task
-	// 	if err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": task.DependsOn}).Decode(&dependentTask); err != nil {
-	// 		return nil, fmt.Errorf("dependent task not found: %v", err)
-	// 	}
+	// 🔸 Ako želimo da pokrenemo ili završimo task, proveri sve njegove zavisnosti
+	if status == models.StatusInProgress || status == models.StatusCompleted {
+		dependencyIDs, err := s.getDependenciesFromWorkflow(task.ID.Hex())
+		if err != nil {
+			return nil, fmt.Errorf("failed to get dependencies from workflow service: %v", err)
+		}
 
-	// 	if dependentTask.Status == models.StatusPending {
-	// 		return nil, fmt.Errorf("cannot change status because dependent task '%s' is still pending", dependentTask.Title)
-	// 	}
-	// }
+		for _, depIDStr := range dependencyIDs {
+			depID, err := primitive.ObjectIDFromHex(depIDStr)
+			if err != nil {
+				continue // ignoriši loš ID
+			}
 
-	// Ažuriraj status trenutnog zadatka
+			var depTask models.Task
+			err = s.tasksCollection.FindOne(context.Background(), bson.M{"_id": depID}).Decode(&depTask)
+			if err != nil {
+				return nil, fmt.Errorf("dependent task not found: %v", err)
+			}
+
+			if depTask.Status != models.StatusInProgress && depTask.Status != models.StatusCompleted {
+				return nil, fmt.Errorf("cannot change status: dependent task '%s' is neither in progress nor completed", depTask.Title)
+			}
+		}
+	}
+
+	// Ažuriraj status
 	update := bson.M{"$set": bson.M{"status": status}}
 	_, err := s.tasksCollection.UpdateOne(context.Background(), bson.M{"_id": taskID}, update)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update task status: %v", err)
 	}
 
-	// Osveži podatke zadatka nakon promene statusa
+	// Refetch updated task
 	if err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskID}).Decode(&task); err != nil {
-		return nil, fmt.Errorf("failed to retrieve updated task: %v", err)
+		return nil, fmt.Errorf("failed to fetch updated task: %v", err)
 	}
 
-	fmt.Printf("Status of task '%s' successfully updated to: %s\n", task.Title, status)
+	fmt.Printf("Successfully updated task '%s' to status: %s\n", task.Title, task.Status)
 
-	// Pošalji notifikacije svim članovima zadatka
-	message := fmt.Sprintf("The status of the task '%s' has been changed to: %s", task.Title, status)
-	for _, member := range task.Members {
+	// Notifikacije
+	message := fmt.Sprintf("The status of task '%s' has been changed to: %s", task.Title, status)
+	for _, member := range append(task.Members, task.Assignees...) {
 		err := s.sendNotification(member, message)
 		if err != nil {
-			log.Printf("Failed to send notification to member %s: %v", member.Username, err)
+			log.Printf("Failed to notify user %s: %v", member.Username, err)
 		}
 	}
 
@@ -607,4 +619,36 @@ func (s *TaskService) RemoveUserFromAllTasksByUsername(username string) error {
 	}
 
 	return nil
+}
+
+func (s *TaskService) getDependenciesFromWorkflow(taskID string) ([]string, error) {
+	baseURL := os.Getenv("WORKFLOW_SERVICE_URL")
+	if baseURL == "" {
+		return nil, fmt.Errorf("WORKFLOW_SERVICE_URL not set in environment")
+	}
+
+	url := fmt.Sprintf("%s/api/workflow/dependencies/%s", baseURL, taskID)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to contact workflow-service: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("workflow-service returned status: %d", resp.StatusCode)
+	}
+
+	var dependencies []struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&dependencies); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	var ids []string
+	for _, dep := range dependencies {
+		ids = append(ids, dep.ID)
+	}
+	return ids, nil
 }

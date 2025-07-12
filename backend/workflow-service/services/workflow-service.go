@@ -53,6 +53,7 @@ func (s *WorkflowService) AddDependency(ctx context.Context, rel models.TaskDepe
 		query := `
 			MATCH (from:Task {id: $fromId}), (to:Task {id: $toId})
 			MERGE (to)-[:DEPENDS_ON]->(from)
+			SET to.blocked = true
 		`
 		_, err := tx.Run(ctx, query, map[string]any{
 			"fromId": rel.FromTaskID,
@@ -237,4 +238,44 @@ func (s *WorkflowService) DependencyExists(ctx context.Context, fromID, toID str
 		return false, err
 	}
 	return result.(bool), nil
+}
+
+func (s *WorkflowService) UpdateBlockedStatus(ctx context.Context, taskID string) error {
+	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(ctx)
+
+	// 1. Dohvati sve zavisnosti (taskovi od kojih zavisi ovaj task)
+	dependencies, err := s.GetDependencies(ctx, taskID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch dependencies: %v", err)
+	}
+
+	// 2. Ako nema zavisnosti — nije blokiran
+	isBlocked := false
+	for _, dep := range dependencies {
+		if dep.Status != "In progress" && dep.Status != "Completed" {
+			isBlocked = true
+			break
+		}
+	}
+
+	// 3. Ažuriraj blokiran status u grafu
+	_, err = session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		query := `
+			MATCH (t:Task {id: $taskId})
+			SET t.blocked = $isBlocked
+		`
+		_, err := tx.Run(ctx, query, map[string]any{
+			"taskId":    taskID,
+			"isBlocked": isBlocked,
+		})
+		return nil, err
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to update blocked status: %v", err)
+	}
+
+	log.Printf("Blocked status for task %s updated to %v", taskID, isBlocked)
+	return nil
 }

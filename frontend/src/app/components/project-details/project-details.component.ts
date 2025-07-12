@@ -145,31 +145,38 @@ export class ProjectDetailsComponent implements OnInit, OnDestroy {
     if (!task || !task.id || !task.status) {
       this.errorMessage = 'Cannot update task status. Task data is invalid.';
       setTimeout(() => { this.errorMessage = ''; }, 5000);
+      task.status = task.previousStatus;  // ⬅ vraćanje starog statusa
       return;
     }
-
+  
     if (task.dependsOn) {
       const dependentTask = this.tasks.find(t => t.id === task.dependsOn);
       if (dependentTask && dependentTask.status === 'Pending' && task.status !== 'Pending') {
         this.errorMessage = `Cannot change status to "${task.status}" because dependent task "${dependentTask.title}" is still Pending.`;
+        task.status = task.previousStatus;  // ⬅ vraćanje starog statusa
         setTimeout(() => { this.errorMessage = ''; }, 5000);
         return;
       }
     }
-
+  
     this.taskService.updateTaskStatus(task.id, task.status).subscribe({
       next: () => {
         this.successMessage = `Status for task "${task.title}" successfully updated to "${task.status}".`;
+        task.previousStatus = task.status;
         setTimeout(() => { this.successMessage = ''; }, 5000);
         this.getTasks(this.project?.id!);
       },
       error: (err: any) => {
         console.error('Error updating task status:', err);
         this.errorMessage = `Failed to update status for task "${task.title}". Please try again later.`;
+  
+        task.status = task.previousStatus;  
+  
         setTimeout(() => { this.errorMessage = ''; }, 5000);
       }
     });
   }
+  
 
   setDependency(toTaskId: string, fromTaskId: string | null): void {
     console.log('Setting dependency:', { toTaskId, fromTaskId });
@@ -261,6 +268,10 @@ export class ProjectDetailsComponent implements OnInit, OnDestroy {
     this.showDeleteConfirmation = false;
   }
 
+  onStatusChangeStart(task: any): void {
+    task.previousStatus = task.status;
+  }
+  
   deleteProject(): void {
     if (!this.project) {
       console.error('No project to delete');
@@ -287,3 +298,4 @@ export class ProjectDetailsComponent implements OnInit, OnDestroy {
     this.subscription.unsubscribe();
   }
 }
+

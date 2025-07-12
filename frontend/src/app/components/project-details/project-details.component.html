@@ -38,7 +38,13 @@
             <!-- Dropdown za promenu statusa -->
             <div class="status-container" *ngIf="isMember">
               <label for="statusDropdown" class="status-label">Change Status:</label>
-              <select id="statusDropdown" [(ngModel)]="task.status" (change)="updateTaskStatus(task)" class="status-dropdown">
+              <select
+                id="statusDropdown"
+                class="status-dropdown"
+                [(ngModel)]="task.status"
+                (focus)="onStatusChangeStart(task)"
+                (change)="updateTaskStatus(task)"
+              >
                 <option value="Pending">Pending</option>
                 <option value="In progress">In progress</option>
                 <option value="Completed">Completed</option>
