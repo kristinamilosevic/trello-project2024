@@ -11,12 +11,11 @@ const (
 )
 
 type Task struct {
-	ID          primitive.ObjectID  `json:"id" bson:"_id,omitempty"`
-	ProjectID   string              `json:"projectId" bson:"projectId"`
-	Title       string              `json:"title" bson:"title"`
-	Description string              `json:"description" bson:"description"`
-	Status      TaskStatus          `json:"status" bson:"status"`
-	Members     []Member            `json:"members" bson:"members"`
-	Assignees   []Member            `bson:"assignees" json:"assignees"`
-	DependsOn   *primitive.ObjectID `json:"dependsOn,omitempty" bson:"dependsOn,omitempty"`
+	ID          primitive.ObjectID `json:"id" bson:"_id,omitempty"`
+	ProjectID   string             `json:"projectId" bson:"projectId"`
+	Title       string             `json:"title" bson:"title"`
+	Description string             `json:"description" bson:"description"`
+	Status      TaskStatus         `json:"status" bson:"status"`
+	Members     []Member           `json:"members" bson:"members"`
+	Assignees   []Member           `bson:"assignees" json:"assignees"`
 }

@@ -44,6 +44,30 @@
                 <option value="Completed">Completed</option>
               </select>
             </div>
+
+          <div *ngIf="isManager" class="dependency-dropdown">
+          <label for="dependencySelect-{{ task.id }}">Depends on:</label>
+          <select
+            id="dependencySelect-{{ task.id }}"
+            [(ngModel)]="task.dependsOn"
+            (change)="setDependency(task.id, task.dependsOn)"
+          >
+            <option [ngValue]="null">-- Select task --</option>
+            <option
+              *ngFor="let otherTask of tasks"
+              [ngValue]="otherTask.id"
+              [disabled]="otherTask.id === task.id"
+            >
+              {{ otherTask.title }}
+            </option>
+          </select>
+          </div>
+          <div *ngIf="task.dependencies?.length > 0" class="task-dependencies">
+            <p><strong>Depends on:</strong></p>
+            <ul>
+              <li *ngFor="let dep of task.dependencies">{{ dep.name }}</li>
+            </ul>
+          </div>          
           </div>
         </li>
       </ul>

@@ -42,6 +42,9 @@ func main() {
 	mux.Handle("/api/notifications/read", authMiddleware(reverseProxyURL("http://notifications-service:8004"), []string{"member"}))
 	mux.Handle("/api/notifications/delete", authMiddleware(reverseProxyURL("http://notifications-service:8004"), []string{"member"}))
 
+	// Rute za Workflow Service
+	mux.Handle("/api/workflow/dependency", authMiddleware(reverseProxyURL("http://workflow-service:8005"), []string{"manager"}))
+
 	// Pokretanje servera
 	http.ListenAndServe(":8000", enableCORS(mux))
 }

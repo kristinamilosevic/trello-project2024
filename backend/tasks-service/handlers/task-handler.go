@@ -52,7 +52,7 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Sada prosleđujemo status prilikom kreiranja taska
-	createdTask, err := h.service.CreateTask(task.ProjectID, task.Title, task.Description, task.DependsOn, task.Status)
+	createdTask, err := h.service.CreateTask(task.ProjectID, task.Title, task.Description, task.Status)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
