@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"trello-project/microservices/workflow-service/models"
 	"trello-project/microservices/workflow-service/services"
@@ -87,4 +88,28 @@ func (h *WorkflowHandler) GetDependencies(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(deps)
+}
+
+func (h *WorkflowHandler) UpdateBlockedStatus(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	taskId := vars["taskId"]
+
+	var req struct {
+		Blocked bool `json:"blocked"`
+	}
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	err = h.WorkflowService.SetBlockedStatus(taskId, req.Blocked)
+	if err != nil {
+		log.Printf("Failed to update blocked status for task %s: %v", taskId, err)
+		http.Error(w, "Failed to update blocked status", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Blocked status updated successfully"))
 }

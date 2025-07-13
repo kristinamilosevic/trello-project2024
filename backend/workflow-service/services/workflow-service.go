@@ -21,7 +21,6 @@ func (s *WorkflowService) AddDependency(ctx context.Context, rel models.TaskDepe
 	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 
-	// Prvo proverimo da li oba taska postoje u grafu
 	exist, err := s.TasksExist(ctx, rel.FromTaskID, rel.ToTaskID)
 	if err != nil {
 		return fmt.Errorf("failed to check task existence: %v", err)
@@ -30,7 +29,6 @@ func (s *WorkflowService) AddDependency(ctx context.Context, rel models.TaskDepe
 		return fmt.Errorf("one or both tasks do not exist")
 	}
 
-	// 🔸 Proveri da li veza već postoji
 	exists, err := s.DependencyExists(ctx, rel.FromTaskID, rel.ToTaskID)
 	if err != nil {
 		return fmt.Errorf("failed to check if dependency exists: %v", err)
@@ -39,7 +37,6 @@ func (s *WorkflowService) AddDependency(ctx context.Context, rel models.TaskDepe
 		return fmt.Errorf("dependency already exists")
 	}
 
-	// Proveri da li bi novo povezivanje uzrokovalo ciklus
 	hasCycle, err := s.CreatesCycle(ctx, rel.FromTaskID, rel.ToTaskID)
 	if err != nil {
 		return fmt.Errorf("failed to check cycle: %v", err)
@@ -48,7 +45,6 @@ func (s *WorkflowService) AddDependency(ctx context.Context, rel models.TaskDepe
 		return fmt.Errorf("cannot add dependency: cycle detected")
 	}
 
-	// Dodavanje relacije ako je sve prošlo
 	_, err = session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 		query := `
 			MATCH (from:Task {id: $fromId}), (to:Task {id: $toId})
@@ -244,13 +240,11 @@ func (s *WorkflowService) UpdateBlockedStatus(ctx context.Context, taskID string
 	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 
-	// 1. Dohvati sve zavisnosti (taskovi od kojih zavisi ovaj task)
 	dependencies, err := s.GetDependencies(ctx, taskID)
 	if err != nil {
 		return fmt.Errorf("failed to fetch dependencies: %v", err)
 	}
 
-	// 2. Ako nema zavisnosti — nije blokiran
 	isBlocked := false
 	for _, dep := range dependencies {
 		if dep.Status != "In progress" && dep.Status != "Completed" {
@@ -259,7 +253,6 @@ func (s *WorkflowService) UpdateBlockedStatus(ctx context.Context, taskID string
 		}
 	}
 
-	// 3. Ažuriraj blokiran status u grafu
 	_, err = session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 		query := `
 			MATCH (t:Task {id: $taskId})
@@ -277,5 +270,31 @@ func (s *WorkflowService) UpdateBlockedStatus(ctx context.Context, taskID string
 	}
 
 	log.Printf("Blocked status for task %s updated to %v", taskID, isBlocked)
+	return nil
+}
+
+func (s *WorkflowService) SetBlockedStatus(taskID string, blocked bool) error {
+	session := s.Driver.NewSession(context.Background(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(context.Background())
+
+	query := `
+        MATCH (t:Task {id: $taskID})
+        SET t.blocked = $blocked
+    `
+
+	params := map[string]interface{}{
+		"taskID":  taskID,
+		"blocked": blocked,
+	}
+
+	_, err := session.ExecuteWrite(context.Background(), func(tx neo4j.ManagedTransaction) (interface{}, error) {
+		_, err := tx.Run(context.Background(), query, params)
+		return nil, err
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to set blocked status in db: %w", err)
+	}
+
 	return nil
 }
