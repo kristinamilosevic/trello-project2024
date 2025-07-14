@@ -143,7 +143,6 @@ func (s *WorkflowService) EnsureTaskNode(ctx context.Context, task models.TaskNo
 				t.projectId = $projectId,
 				t.name = $name,
 				t.description = $description,
-				t.status = $status,
 				t.blocked = $blocked
 		`
 		params := map[string]any{
@@ -151,7 +150,6 @@ func (s *WorkflowService) EnsureTaskNode(ctx context.Context, task models.TaskNo
 			"projectId":   task.ProjectID,
 			"name":        task.Name,
 			"description": task.Description,
-			"status":      task.Status,
 			"blocked":     task.Blocked,
 		}
 		_, err := tx.Run(ctx, query, params)
@@ -169,7 +167,7 @@ func (s *WorkflowService) GetDependencies(ctx context.Context, taskId string) ([
 		query := `
 			MATCH (to:Task {id: $taskId})-[:DEPENDS_ON]->(from:Task)
 			RETURN from.id AS id, from.projectId AS projectId, from.name AS name,
-			       from.description AS description, from.status AS status, from.blocked AS blocked
+			       from.description AS description, from.blocked AS blocked
 		`
 		res, err := tx.Run(ctx, query, map[string]any{"taskId": taskId})
 		if err != nil {
@@ -184,7 +182,6 @@ func (s *WorkflowService) GetDependencies(ctx context.Context, taskId string) ([
 			projectId, _ := record.Get("projectId")
 			name, _ := record.Get("name")
 			description, _ := record.Get("description")
-			status, _ := record.Get("status")
 			blocked, _ := record.Get("blocked")
 
 			task := models.TaskNode{
@@ -192,7 +189,6 @@ func (s *WorkflowService) GetDependencies(ctx context.Context, taskId string) ([
 				ProjectID:   projectId.(string),
 				Name:        name.(string),
 				Description: description.(string),
-				Status:      status.(string),
 				Blocked:     blocked.(bool),
 			}
 			dependencies = append(dependencies, task)
@@ -245,13 +241,9 @@ func (s *WorkflowService) UpdateBlockedStatus(ctx context.Context, taskID string
 		return fmt.Errorf("failed to fetch dependencies: %v", err)
 	}
 
-	isBlocked := false
-	for _, dep := range dependencies {
-		if dep.Status != "In progress" && dep.Status != "Completed" {
-			isBlocked = true
-			break
-		}
-	}
+	// Ovaj deo je ranije proveravao status, sada to preskačemo
+	// pa pretpostavljamo da je svaki dependency koji postoji razlog za blokadu
+	isBlocked := len(dependencies) > 0
 
 	_, err = session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 		query := `

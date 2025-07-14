@@ -5,6 +5,5 @@ type TaskNode struct {
 	ProjectID   string `json:"projectId"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	Status      string `json:"status"`
 	Blocked     bool   `json:"blocked"`
 }
