@@ -84,10 +84,8 @@ export class TaskService {
 
   setTaskDependency(dependency: { fromTaskId: string; toTaskId: string }) {
     return this.http.post('http://localhost:8000/api/workflow/dependency', dependency, {
-      headers: this.getAuthHeaders(),
-      observe: 'response',
-      responseType: 'text' 
-    });
+      headers: this.getAuthHeaders()
+    });    
   }
   
 getTaskDependencies(taskId: string): Observable<any[]> {

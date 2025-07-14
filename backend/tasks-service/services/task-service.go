@@ -606,24 +606,33 @@ func HasUnfinishedTasks(tasks []models.Task) bool {
 }
 
 func (s *TaskService) RemoveUserFromAllTasksByUsername(username string) error {
-	// Pronađi sve taskove gde se korisnik pojavljuje kao member
-	filter := bson.M{
-		"$or": []bson.M{
-			{"assignees": username},
-			{"members.username": username},
+	filterMembers := bson.M{
+		"members.username": username,
+	}
+	updateMembers := bson.M{
+		"$pull": bson.M{
+			"members": bson.M{"username": username},
 		},
 	}
+	_, err := s.tasksCollection.UpdateMany(context.Background(), filterMembers, updateMembers)
+	if err != nil {
+		return fmt.Errorf("failed to remove user from members: %v", err)
+	}
 
-	update := bson.M{
+	filterAssignees := bson.M{
+		"$and": []bson.M{
+			{"assignees": bson.M{"$type": "array"}},
+			{"assignees": username},
+		},
+	}
+	updateAssignees := bson.M{
 		"$pull": bson.M{
 			"assignees": username,
-			"members":   bson.M{"username": username},
 		},
 	}
-
-	_, err := s.tasksCollection.UpdateMany(context.Background(), filter, update)
+	_, err = s.tasksCollection.UpdateMany(context.Background(), filterAssignees, updateAssignees)
 	if err != nil {
-		return fmt.Errorf("failed to remove user from tasks by username: %v", err)
+		return fmt.Errorf("failed to remove user from assignees: %v", err)
 	}
 
 	return nil
