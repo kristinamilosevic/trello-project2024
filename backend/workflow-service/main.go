@@ -37,7 +37,6 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
-	// Neo4j connection
 	neo4jUri := os.Getenv("NEO4J_URI")
 	neo4jUser := os.Getenv("NEO4J_USERNAME")
 	neo4jPassword := os.Getenv("NEO4J_PASSWORD")
@@ -57,17 +56,15 @@ func main() {
 
 	router := mux.NewRouter()
 
-	// Register routes
 	router.HandleFunc("/api/workflow/dependency", workflowHandler.AddDependency).Methods("POST")
 	router.HandleFunc("/api/workflow/task-node", workflowHandler.EnsureTaskNode).Methods("POST")
 	router.HandleFunc("/api/workflow/dependencies/{taskId}", workflowHandler.GetDependencies).Methods("GET")
 	router.HandleFunc("/api/workflow/task-node/{taskId}/blocked", workflowHandler.UpdateBlockedStatus).Methods("PUT")
-
-	// Dodaj više ruta po potrebi
+	router.HandleFunc("/api/workflow/graph/{projectId}", workflowHandler.GetWorkflowGraph).Methods("GET")
 
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {
-		port = ":8005" // fallback port
+		port = ":8005"
 	}
 
 	srv := &http.Server{

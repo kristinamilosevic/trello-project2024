@@ -143,7 +143,6 @@ func (s *WorkflowService) EnsureTaskNode(ctx context.Context, task models.TaskNo
 				t.projectId = $projectId,
 				t.name = $name,
 				t.description = $description,
-				t.status = $status,
 				t.blocked = $blocked
 		`
 		params := map[string]any{
@@ -151,7 +150,6 @@ func (s *WorkflowService) EnsureTaskNode(ctx context.Context, task models.TaskNo
 			"projectId":   task.ProjectID,
 			"name":        task.Name,
 			"description": task.Description,
-			"status":      task.Status,
 			"blocked":     task.Blocked,
 		}
 		_, err := tx.Run(ctx, query, params)
@@ -169,7 +167,7 @@ func (s *WorkflowService) GetDependencies(ctx context.Context, taskId string) ([
 		query := `
 			MATCH (to:Task {id: $taskId})-[:DEPENDS_ON]->(from:Task)
 			RETURN from.id AS id, from.projectId AS projectId, from.name AS name,
-			       from.description AS description, from.status AS status, from.blocked AS blocked
+			       from.description AS description, from.blocked AS blocked
 		`
 		res, err := tx.Run(ctx, query, map[string]any{"taskId": taskId})
 		if err != nil {
@@ -184,7 +182,6 @@ func (s *WorkflowService) GetDependencies(ctx context.Context, taskId string) ([
 			projectId, _ := record.Get("projectId")
 			name, _ := record.Get("name")
 			description, _ := record.Get("description")
-			status, _ := record.Get("status")
 			blocked, _ := record.Get("blocked")
 
 			task := models.TaskNode{
@@ -192,7 +189,6 @@ func (s *WorkflowService) GetDependencies(ctx context.Context, taskId string) ([
 				ProjectID:   projectId.(string),
 				Name:        name.(string),
 				Description: description.(string),
-				Status:      status.(string),
 				Blocked:     blocked.(bool),
 			}
 			dependencies = append(dependencies, task)
@@ -245,13 +241,7 @@ func (s *WorkflowService) UpdateBlockedStatus(ctx context.Context, taskID string
 		return fmt.Errorf("failed to fetch dependencies: %v", err)
 	}
 
-	isBlocked := false
-	for _, dep := range dependencies {
-		if dep.Status != "In progress" && dep.Status != "Completed" {
-			isBlocked = true
-			break
-		}
-	}
+	isBlocked := len(dependencies) > 0
 
 	_, err = session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 		query := `
@@ -297,4 +287,76 @@ func (s *WorkflowService) SetBlockedStatus(taskID string, blocked bool) error {
 	}
 
 	return nil
+}
+
+func (s *WorkflowService) GetWorkflowByProject(ctx context.Context, projectID string) ([]models.TaskNode, []models.TaskDependencyRelation, error) {
+	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(ctx)
+
+	nodes, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		query := `
+			MATCH (t:Task {projectId: $projectId})
+			RETURN t.id AS id, t.projectId AS projectId, t.name AS name,
+			       t.description AS description, t.blocked AS blocked
+		`
+		res, err := tx.Run(ctx, query, map[string]any{"projectId": projectID})
+		if err != nil {
+			return nil, err
+		}
+
+		var taskNodes []models.TaskNode
+		for res.Next(ctx) {
+			record := res.Record()
+
+			id, _ := record.Get("id")
+			projectId, _ := record.Get("projectId")
+			name, _ := record.Get("name")
+			description, _ := record.Get("description")
+			blocked, _ := record.Get("blocked")
+
+			taskNodes = append(taskNodes, models.TaskNode{
+				ID:          id.(string),
+				ProjectID:   projectId.(string),
+				Name:        name.(string),
+				Description: description.(string),
+				Blocked:     blocked.(bool),
+			})
+		}
+
+		return taskNodes, nil
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to fetch task nodes: %w", err)
+	}
+
+	dependencies, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		query := `
+			MATCH (to:Task {projectId: $projectId})-[:DEPENDS_ON]->(from:Task)
+			RETURN from.id AS fromId, to.id AS toId
+		`
+		res, err := tx.Run(ctx, query, map[string]any{"projectId": projectID})
+		if err != nil {
+			return nil, err
+		}
+
+		var relations []models.TaskDependencyRelation
+		for res.Next(ctx) {
+			record := res.Record()
+
+			fromID, _ := record.Get("fromId")
+			toID, _ := record.Get("toId")
+
+			relations = append(relations, models.TaskDependencyRelation{
+				FromTaskID: fromID.(string),
+				ToTaskID:   toID.(string),
+			})
+		}
+
+		return relations, nil
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to fetch dependency relations: %w", err)
+	}
+
+	return nodes.([]models.TaskNode), dependencies.([]models.TaskDependencyRelation), nil
 }
