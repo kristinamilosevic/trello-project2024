@@ -81,4 +81,17 @@ export class TaskService {
     const apiUrl = `http://localhost:8002/api/tasks/${taskId}/members/${memberId}`;
     return this.http.delete(apiUrl, { headers });
   }
+
+  setTaskDependency(dependency: { fromTaskId: string; toTaskId: string }) {
+    return this.http.post('http://localhost:8000/api/workflow/dependency', dependency, {
+      headers: this.getAuthHeaders()
+    });    
+  }
+  
+getTaskDependencies(taskId: string): Observable<any[]> {
+  const headers = this.getAuthHeaders();
+  return this.http.get<any[]>(`http://localhost:8000/api/workflow/dependencies/${taskId}`, { headers });
+}
+ 
+  
 }

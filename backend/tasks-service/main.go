@@ -22,7 +22,7 @@ import (
 
 func enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", os.Getenv("CORS_ORIGIN"))
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Role, Manager-ID")
 
@@ -104,6 +104,8 @@ func main() {
 	r.HandleFunc("/api/tasks/project/{projectId}/has-unfinished", taskHandler.HasUnfinishedTasksHandler).Methods("GET")
 	r.HandleFunc("/api/tasks/remove-user/by-username/{username}", taskHandler.RemoveUserFromAllTasksByUsername).Methods("PATCH")
 
+	corsRouter := enableCORS(r)
+
 	// Svi ostali taskovi .
 	r.HandleFunc("/api/tasks", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -122,6 +124,9 @@ func main() {
 	}
 
 	serverAddress := fmt.Sprintf(":%s", serverPort)
+
+	fmt.Println("Projects service server running on", serverAddress)
+	log.Fatal(http.ListenAndServe(serverAddress, corsRouter))
 
 	log.Printf("Server running on http://localhost%s", serverAddress)
 	if err := http.ListenAndServe(serverAddress, enableCORS(r)); err != nil {

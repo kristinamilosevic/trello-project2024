@@ -58,6 +58,7 @@ services:
       - "${TASKS_SERVICE_PORT}:${TASKS_SERVICE_INTERNAL_PORT}"
     environment:
       - MONGO_TASKS_URI=${MONGO_TASKS_URI}
+      - WORKFLOW_SERVICE_URL=${WORKFLOW_SERVICE_URL}
     depends_on:
       - mongo-tasks
     networks:
@@ -95,6 +96,23 @@ services:
     networks:
       - app-network
 
+  workflow-service:
+    build:
+      context: ./backend
+      dockerfile: workflow-service/Dockerfile
+    hostname: ${WORKFLOW_SERVICE_NAME}
+    ports:
+      - "${WORKFLOW_SERVICE_PORT}:${WORKFLOW_SERVICE_INTERNAL_PORT}"
+    environment:
+      - NEO4J_URI=${NEO4J_URI}
+      - NEO4J_USERNAME=${NEO4J_USERNAME}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+    depends_on:
+      - neo4j
+    networks:
+      - app-network
+    restart: on-failure
+
   api_gateway:
     build:
       context: ${GATEWAY_PATH}
@@ -107,6 +125,19 @@ services:
     #   - tasks-service
     #   - projects-service
     #   - users-service
+    networks:
+      - app-network
+
+  neo4j:
+    image: neo4j:5
+    container_name: neo4j
+    ports:
+      - "7474:7474"   
+      - "7687:7687"   
+    environment:
+      - NEO4J_AUTH=${NEO4J_USERNAME}/${NEO4J_PASSWORD}
+    volumes:
+      - neo4j-data:/data
     networks:
       - app-network
 
@@ -150,6 +181,9 @@ volumes:
     driver: local
   mongo-users-data:
     driver: local
+  neo4j-data:
+    driver: local
+
 
 networks:
   app-network:
