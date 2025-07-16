@@ -16,20 +16,20 @@ import (
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
 
-// func enableCORS(next http.Handler) http.Handler {
-// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 		w.Header().Set("Access-Control-Allow-Origin", os.Getenv("CORS_ORIGIN"))
-// 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-// 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+func enableCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", os.Getenv("CORS_ORIGIN"))
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
-// 		if r.Method == http.MethodOptions {
-// 			w.WriteHeader(http.StatusOK)
-// 			return
-// 		}
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 
-// 		next.ServeHTTP(w, r)
-// 	})
-// }
+		next.ServeHTTP(w, r)
+	})
+}
 
 func main() {
 	err := godotenv.Load(".env")

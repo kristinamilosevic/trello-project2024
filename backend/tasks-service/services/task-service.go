@@ -6,25 +6,38 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"trello-project/microservices/tasks-service/models"
 
+	"github.com/sony/gobreaker"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type TaskService struct {
-	tasksCollection *mongo.Collection
-	httpClient      *http.Client
+	tasksCollection      *mongo.Collection
+	httpClient           *http.Client
+	ProjectsBreaker      *gobreaker.CircuitBreaker
+	NotificationsBreaker *gobreaker.CircuitBreaker
 }
 
-func NewTaskService(tasksCollection *mongo.Collection, httpClient *http.Client) *TaskService {
+func NewTaskService(
+	tasksCollection *mongo.Collection,
+	httpClient *http.Client,
+	projectsBreaker *gobreaker.CircuitBreaker,
+	notificationsBreaker *gobreaker.CircuitBreaker,
+
+) *TaskService {
 	return &TaskService{
-		tasksCollection: tasksCollection,
-		httpClient:      httpClient,
+		tasksCollection:      tasksCollection,
+		httpClient:           httpClient,
+		ProjectsBreaker:      projectsBreaker,
+		NotificationsBreaker: notificationsBreaker,
 	}
 }
 
@@ -54,26 +67,33 @@ func (s *TaskService) GetAvailableMembersForTask(r *http.Request, projectID, tas
 	req.Header.Set("Authorization", authToken)
 	req.Header.Set("Role", userRole)
 
-	// Pošalji zahtev
-	resp, err := s.httpClient.Do(req)
+	result, err := s.ProjectsBreaker.Execute(func() (interface{}, error) {
+		resp, err := s.httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("request to projects-service failed: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("projects-service returned status %d: %s", resp.StatusCode, string(body))
+		}
+
+		var rawProjectMembers []map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&rawProjectMembers); err != nil {
+			return nil, fmt.Errorf("failed to decode response: %w", err)
+		}
+
+		return rawProjectMembers, nil
+	})
 	if err != nil {
-		log.Printf("Failed to fetch project members from projects-service: %v", err)
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	// Proveri statusni kod odgovora
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("projects-service returned status: %d", resp.StatusCode)
-		return nil, fmt.Errorf("failed to fetch project members, status: %d", resp.StatusCode)
+		log.Printf("Circuit breaker triggered or request to projects-service failed: %v", err)
+		log.Println("Returning empty list of available members as fallback")
+		return []models.Member{}, nil
 	}
 
-	// Dekodiraj JSON odgovor u listu članova
-	var rawProjectMembers []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&rawProjectMembers); err != nil {
-		log.Printf("Failed to decode response from projects-service: %v", err)
-		return nil, err
-	}
+	// assertuj tip rezultata
+	rawProjectMembers := result.([]map[string]interface{})
 
 	// Konvertuj listu članova u models.Member sa ispravnim ID-jem
 	var projectMembers []models.Member
@@ -196,11 +216,15 @@ func (s *TaskService) AddMembersToTask(taskID string, membersToAdd []models.Memb
 		// Slanje notifikacija za nove članove
 		for _, member := range newMembers {
 			message := fmt.Sprintf("You have been added to the task: %s!", task.Title)
-			err = s.sendNotification(member, message)
-			if err != nil {
-				log.Printf("Failed to send notification to member %s: %v", member.Username, err)
-				// Log greške, ali ne prekidaj proces
-			}
+			go func(member models.Member, message string) {
+				_, err := s.NotificationsBreaker.Execute(func() (interface{}, error) {
+					return nil, s.sendNotification(member, message)
+				})
+				if err != nil {
+					log.Printf("⚠️ Failed to send notification to member %s: %v", member.Username, err)
+				}
+			}(member, message)
+
 		}
 	}
 
@@ -266,14 +290,18 @@ func (s *TaskService) GetMembersForTask(taskID primitive.ObjectID) ([]models.Mem
 }
 
 func (s *TaskService) CreateTask(projectID string, title, description string, status models.TaskStatus) (*models.Task, error) {
+	log.Println("⏳ Starting CreateTask...")
+
 	// Provera validnosti projectID
 	_, err := primitive.ObjectIDFromHex(projectID)
 	if err != nil {
+		log.Printf("❌ Invalid project ID: %v\n", err)
 		return nil, fmt.Errorf("invalid project ID format: %v", err)
 	}
 
 	// Ako status nije prosleđen, postavljamo podrazumevanu vrednost
 	if status == "" {
+		log.Println("ℹ️ Status not provided, setting to default (pending)")
 		status = models.StatusPending
 	}
 
@@ -291,30 +319,35 @@ func (s *TaskService) CreateTask(projectID string, title, description string, st
 	}
 
 	// Unos zadatka u MongoDB
+	log.Println("📦 Inserting task into MongoDB...")
 	result, err := s.tasksCollection.InsertOne(context.Background(), task)
 	if err != nil {
+		log.Printf("❌ Failed to insert task: %v\n", err)
 		return nil, fmt.Errorf("failed to create task: %v", err)
 	}
 	task.ID = result.InsertedID.(primitive.ObjectID)
+	log.Printf("✅ Task inserted with ID: %s\n", task.ID.Hex())
 
 	// === Projekti servis: dodavanje task-a u projekat ===
 	projectsServiceURL := os.Getenv("PROJECTS_SERVICE_URL")
 	if projectsServiceURL == "" {
-		log.Println("PROJECTS_SERVICE_URL is not set in .env file")
+		log.Println("⚠️ PROJECTS_SERVICE_URL is not set in .env file")
 		return nil, fmt.Errorf("projects-service URL is not configured")
 	}
 
 	projectURL := fmt.Sprintf("%s/api/projects/%s/add-task", projectsServiceURL, projectID)
 	requestBody, err := json.Marshal(map[string]string{"taskID": task.ID.Hex()})
 	if err != nil {
+		log.Printf("❌ Failed to marshal project-service request body: %v\n", err)
 		return nil, fmt.Errorf("failed to marshal request body: %v", err)
 	}
 
-	log.Printf("Sending request to projects-service: %s", projectURL)
-	log.Printf("Request body: %s", string(requestBody))
+	log.Printf("📤 Sending request to projects-service: %s\n", projectURL)
+	log.Printf("📄 Request body: %s\n", string(requestBody))
 
 	req, err := http.NewRequest("POST", projectURL, bytes.NewBuffer(requestBody))
 	if err != nil {
+		log.Printf("❌ Failed to create request to projects-service: %v\n", err)
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -322,55 +355,66 @@ func (s *TaskService) CreateTask(projectID string, title, description string, st
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		log.Printf("Warning: Task was created, but failed to notify projects-service: %v", err)
+		log.Printf("⚠️ Task was created, but failed to notify projects-service: %v\n", err)
 	} else {
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			log.Printf("Warning: projects-service returned status %d when adding task %s to project %s", resp.StatusCode, task.ID.Hex(), projectID)
+			log.Printf("⚠️ projects-service returned status %d when adding task %s to project %s", resp.StatusCode, task.ID.Hex(), projectID)
+			body, _ := io.ReadAll(resp.Body)
+			log.Printf("📄 projects-service response body: %s", string(body))
 		} else {
-			log.Printf("Successfully notified projects-service about new task %s", task.ID.Hex())
+			log.Printf("✅ Successfully notified projects-service about new task %s\n", task.ID.Hex())
 		}
 	}
 
 	// === Workflow servis: kreiranje task noda u grafu ===
 	workflowServiceURL := os.Getenv("WORKFLOW_SERVICE_URL")
 	if workflowServiceURL == "" {
-		log.Println("WORKFLOW_SERVICE_URL is not set in .env file")
+		log.Println("⚠️ WORKFLOW_SERVICE_URL is not set in .env file")
 	} else {
-		workflowURL := fmt.Sprintf("%s/api/workflow/task-node", workflowServiceURL)
+		log.Println("🚀 Preparing to notify workflow-service...")
+
+		workflowURL := fmt.Sprintf("%s/api/workflow/task-node", strings.TrimRight(workflowServiceURL, "/"))
+
 		taskNodePayload := map[string]any{
 			"id":          task.ID.Hex(),
 			"projectId":   task.ProjectID,
 			"name":        task.Title,
 			"description": task.Description,
-			"status":      task.Status,
-			"blocked":     false, // ako budeš imala zavisnosti, ovo može biti dinamičko
+			"blocked":     false,
 		}
 
 		payloadBytes, err := json.Marshal(taskNodePayload)
 		if err != nil {
-			log.Printf("Failed to marshal taskNode for workflow: %v", err)
+			log.Printf("❌ Failed to marshal taskNode payload: %v\n", err)
 		} else {
+			log.Printf("📤 Sending request to workflow-service: %s\n", workflowURL)
+			log.Printf("📄 Payload: %s\n", string(payloadBytes))
+
 			req, err := http.NewRequest("POST", workflowURL, bytes.NewBuffer(payloadBytes))
 			if err != nil {
-				log.Printf("Failed to create request to workflow-service: %v", err)
+				log.Printf("❌ Failed to create request to workflow-service: %v\n", err)
 			} else {
 				req.Header.Set("Content-Type", "application/json")
 				resp, err := s.httpClient.Do(req)
 				if err != nil {
-					log.Printf("Failed to notify workflow-service: %v", err)
+					log.Printf("❌ Failed to notify workflow-service: %v\n", err)
 				} else {
 					defer resp.Body.Close()
+					body, _ := io.ReadAll(resp.Body)
+
 					if resp.StatusCode != http.StatusCreated {
-						log.Printf("Warning: workflow-service returned status %d for task %s", resp.StatusCode, task.ID.Hex())
+						log.Printf("⚠️ workflow-service returned status %d for task %s\n", resp.StatusCode, task.ID.Hex())
+						log.Printf("📄 workflow-service response body: %s\n", string(body))
 					} else {
-						log.Printf("Successfully notified workflow-service about task %s", task.ID.Hex())
+						log.Printf("✅ Successfully notified workflow-service about task %s\n", task.ID.Hex())
 					}
 				}
 			}
 		}
 	}
 
+	log.Println("✅ Task creation process completed.")
 	return task, nil
 }
 
@@ -443,12 +487,16 @@ func (s *TaskService) RemoveMemberFromTask(taskID string, memberID primitive.Obj
 		return fmt.Errorf("failed to update task: %v", err)
 	}
 
-	// Slanje notifikacije uklonjenom članu
+	// Asinhrono slanje notifikacije preko Circuit Breaker-a
 	message := fmt.Sprintf("You have been removed from the task: %s", task.Title)
-	err = s.sendNotification(removedMember, message)
-	if err != nil {
-		log.Printf("Failed to send notification to member %s: %v", removedMember.Username, err)
-	}
+	go func(member models.Member, message string) {
+		_, err := s.NotificationsBreaker.Execute(func() (interface{}, error) {
+			return nil, s.sendNotification(member, message)
+		})
+		if err != nil {
+			log.Printf("⚠️ Failed to send notification to member %s: %v", member.Username, err)
+		}
+	}(removedMember, message)
 
 	return nil
 }

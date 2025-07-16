@@ -281,8 +281,11 @@ export class ProjectDetailsComponent implements OnInit, OnDestroy {
     this.projectService.deleteProject(this.project.id).subscribe({
       next: () => {
         this.successMessage = 'Project deleted successfully!';
-        setTimeout(() => { this.successMessage = ''; }, 5000);
-        this.router.navigate(['/projects-list']);
+        setTimeout(() => {
+          this.successMessage = '';
+        }, 5000);
+
+        this.router.navigate(['/users-projects']); 
       },
       error: (err) => {
         console.error('Failed to delete project:', err);

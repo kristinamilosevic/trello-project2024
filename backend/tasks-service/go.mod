@@ -9,7 +9,6 @@ require (
 
 require (
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/gorilla/mux v1.8.1
 	github.com/joho/godotenv v1.5.1
 	github.com/klauspost/compress v1.13.6 // indirect
 	github.com/montanaflynn/stats v0.7.1 // indirect
@@ -23,5 +22,7 @@ require (
 )
 
 require trello-project/backend/utils v0.0.0
+
+require github.com/sony/gobreaker v1.0.0 // indirect
 
 replace trello-project/backend/utils => ../utils

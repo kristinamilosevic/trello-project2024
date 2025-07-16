@@ -15,6 +15,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
+	"github.com/sony/gobreaker"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -60,7 +61,30 @@ func main() {
 
 	httpClient := http_client.NewHTTPClient()
 
-	taskService := services.NewTaskService(tasksCollection, httpClient)
+	projectsBreaker := gobreaker.NewCircuitBreaker(gobreaker.Settings{
+		Name:        "ProjectsServiceCB",
+		MaxRequests: 1,
+		Timeout:     2 * time.Second,
+		ReadyToTrip: func(counts gobreaker.Counts) bool {
+			return counts.ConsecutiveFailures > 3
+		},
+		OnStateChange: func(name string, from, to gobreaker.State) {
+			log.Printf("Circuit Breaker '%s' changed from '%s' to '%s'\n", name, from.String(), to.String())
+		},
+	})
+	notificationsbreaker := gobreaker.NewCircuitBreaker(gobreaker.Settings{
+		Name:        "notifications-cb",
+		MaxRequests: 1,
+		Timeout:     5 * time.Second,
+		ReadyToTrip: func(counts gobreaker.Counts) bool {
+			return counts.ConsecutiveFailures > 3
+		},
+		OnStateChange: func(name string, from, to gobreaker.State) {
+			log.Printf("Circuit Breaker '%s' state changed from %s to %s", name, from.String(), to.String())
+		},
+	})
+
+	taskService := services.NewTaskService(tasksCollection, httpClient, projectsBreaker, notificationsbreaker)
 	taskHandler := handlers.NewTaskHandler(taskService)
 
 	// Kreiranje mux routera
@@ -80,6 +104,8 @@ func main() {
 	r.HandleFunc("/api/tasks/project/{projectId}/has-unfinished", taskHandler.HasUnfinishedTasksHandler).Methods("GET")
 	r.HandleFunc("/api/tasks/remove-user/by-username/{username}", taskHandler.RemoveUserFromAllTasksByUsername).Methods("PATCH")
 
+	corsRouter := enableCORS(r)
+
 	// Svi ostali taskovi .
 	r.HandleFunc("/api/tasks", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -98,6 +124,9 @@ func main() {
 	}
 
 	serverAddress := fmt.Sprintf(":%s", serverPort)
+
+	fmt.Println("Projects service server running on", serverAddress)
+	log.Fatal(http.ListenAndServe(serverAddress, corsRouter))
 
 	log.Printf("Server running on http://localhost%s", serverAddress)
 	if err := http.ListenAndServe(serverAddress, enableCORS(r)); err != nil {

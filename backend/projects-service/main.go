@@ -15,6 +15,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
+	"github.com/sony/gobreaker"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -60,10 +61,50 @@ func main() {
 
 	httpClient := http_client.NewHTTPClient()
 
-	projectService := &services.ProjectService{
-		ProjectsCollection: projectsDB.Collection(mongoCollectionName),
-		HTTPClient:         httpClient,
-	}
+	tasksBreaker := gobreaker.NewCircuitBreaker(gobreaker.Settings{
+		Name:        "TasksServiceCB",
+		MaxRequests: 1,
+		Timeout:     2 * time.Second,
+		ReadyToTrip: func(counts gobreaker.Counts) bool {
+			return counts.ConsecutiveFailures > 3
+		},
+		OnStateChange: func(name string, from, to gobreaker.State) {
+			log.Printf("Circuit Breaker '%s' changed from '%s' to '%s'\n", name, from.String(), to.String())
+		},
+	})
+
+	usersBreaker := gobreaker.NewCircuitBreaker(gobreaker.Settings{
+		Name:        "UsersServiceCB",
+		MaxRequests: 1,
+		Timeout:     2 * time.Second,
+		ReadyToTrip: func(counts gobreaker.Counts) bool {
+			return counts.ConsecutiveFailures > 3
+		},
+		OnStateChange: func(name string, from, to gobreaker.State) {
+			log.Printf("Circuit Breaker '%s' changed from '%s' to '%s'\n", name, from.String(), to.String())
+		},
+	})
+	notificationsBreaker := gobreaker.NewCircuitBreaker(gobreaker.Settings{
+		Name:        "NotificationsServiceCB",
+		MaxRequests: 1,
+		Timeout:     5 * time.Second,
+		ReadyToTrip: func(counts gobreaker.Counts) bool {
+			return counts.ConsecutiveFailures > 3
+		},
+		OnStateChange: func(name string, from, to gobreaker.State) {
+			log.Printf("Circuit Breaker '%s' state changed from %s to %s", name, from.String(), to.String())
+		},
+	})
+
+	projectService := services.NewProjectService(
+		projectsDB.Collection(mongoCollectionName),
+		httpClient,
+		tasksBreaker,
+		usersBreaker,
+		notificationsBreaker,
+	)
+
+	//projectService := services.NewProjectService(projectsDB.Collection(mongoCollectionName), httpClient)
 
 	if err := createProjectNameIndex(projectsDB.Collection(mongoCollectionName)); err != nil {
 		log.Fatal(err)

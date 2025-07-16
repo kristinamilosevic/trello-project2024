@@ -14,27 +14,62 @@ import (
 	"time"
 	"trello-project/microservices/projects-service/models"
 
+	"github.com/sony/gobreaker"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type ProjectService struct {
-	ProjectsCollection *mongo.Collection
-	TasksCollection    *mongo.Collection
-	UsersCollection    *mongo.Collection
-	HTTPClient         *http.Client
+	ProjectsCollection   *mongo.Collection
+	HTTPClient           *http.Client
+	TasksBreaker         *gobreaker.CircuitBreaker
+	UsersBreaker         *gobreaker.CircuitBreaker
+	NotificationsBreaker *gobreaker.CircuitBreaker
 }
 
 // NewProjectService initializes a new ProjectService with the necessary MongoDB collections.
-func NewProjectService(projectsCollection, usersCollection, tasksCollection *mongo.Collection, httpClient *http.Client) *ProjectService {
+// .
+//
+//	func NewProjectService(projectsCollection *mongo.Collection, httpClient *http.Client) *ProjectService {
+//		return &ProjectService{
+//			ProjectsCollection: projectsCollection,
+//			HTTPClient:         httpClient,
+//			ProjectsBreaker:    newBreaker("ProjectsServiceCB"),
+//			TasksBreaker:       newBreaker("TasksServiceCB"),
+//			UsersBreaker:       newBreaker("UsersServiceCB"),
+//		}
+//	}
+func NewProjectService(
+	projectsCollection *mongo.Collection,
+	httpClient *http.Client,
+	tasksBreaker *gobreaker.CircuitBreaker,
+	usersBreaker *gobreaker.CircuitBreaker,
+	notificationsBreaker *gobreaker.CircuitBreaker,
+
+) *ProjectService {
 	return &ProjectService{
-		ProjectsCollection: projectsCollection,
-		UsersCollection:    usersCollection,
-		TasksCollection:    tasksCollection,
-		HTTPClient:         httpClient,
+		ProjectsCollection:   projectsCollection,
+		HTTPClient:           httpClient,
+		TasksBreaker:         tasksBreaker,
+		UsersBreaker:         usersBreaker,
+		NotificationsBreaker: notificationsBreaker,
 	}
 }
+
+// func newBreaker(name string) *gobreaker.CircuitBreaker {
+// 	return gobreaker.NewCircuitBreaker(gobreaker.Settings{
+// 		Name:        name,
+// 		MaxRequests: 1,
+// 		Timeout:     2 * time.Second,
+// 		ReadyToTrip: func(counts gobreaker.Counts) bool {
+// 			return counts.ConsecutiveFailures > 3
+// 		},
+// 		OnStateChange: func(name string, from, to gobreaker.State) {
+// 			log.Printf("Circuit Breaker '%s' changed from '%s' to '%s'\n", name, from.String(), to.String())
+// 		},
+// 	})
+// }
 
 // CreateProject creates a new project with the specified parameters.
 func (s *ProjectService) CreateProject(name string, description string, expectedEndDate time.Time, minMembers, maxMembers int, managerID primitive.ObjectID) (*models.Project, error) {
@@ -120,31 +155,55 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, usern
 		url := fmt.Sprintf("%s/api/users/member/%s", usersServiceURL, username)
 		log.Printf("Fetching user data from: %s\n", url)
 
-		req, err := http.NewRequest("GET", url, nil)
+		userData, err := s.UsersBreaker.Execute(func() (interface{}, error) {
+			req, err := http.NewRequest("GET", url, nil)
+			if err != nil {
+				log.Printf("Error creating request for user %s: %v\n", username, err)
+				return nil, err
+			}
+
+			resp, err := s.HTTPClient.Do(req)
+			if err != nil {
+				log.Printf("Failed to fetch member %s: %v\n", username, err)
+				return nil, err
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				log.Printf("Failed to fetch member %s, status code: %d\n", username, resp.StatusCode)
+				return nil, fmt.Errorf("failed to fetch member %s", username)
+			}
+
+			var user models.Member
+			if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+				log.Printf("Failed to decode member %s: %v\n", username, err)
+				return nil, err
+			}
+
+			return user, nil
+		})
+
 		if err != nil {
-			log.Printf("Error creating request for user %s: %v\n", username, err)
-			return err
+			log.Printf("User service unavailable or failed for %s: %v\n", username, err)
+			return fmt.Errorf("failed to fetch user data for %s: fallback activated", username)
 		}
 
-		resp, err := s.HTTPClient.Do(req)
-		if err != nil {
-			log.Printf("Failed to fetch member %s: %v\n", username, err)
-			return err
-		}
-		defer resp.Body.Close()
+		members = append(members, userData.(models.Member))
 
-		if resp.StatusCode != http.StatusOK {
-			log.Printf("Failed to fetch member %s, status code: %d\n", username, resp.StatusCode)
-			return fmt.Errorf("failed to fetch member %s", username)
-		}
+		/*
+			// Alternativa: blaži fallback - dodaj sve koje možeš, preskoči ostale
+			if err != nil {
+				log.Printf("Skipping user %s due to user service error: %v\n", username, err)
+				continue
+			}
+			members = append(members, userData.(models.Member))
+		*/
+	}
 
-		var user models.Member
-		if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
-			log.Printf("Failed to decode member %s: %v\n", username, err)
-			return err
-		}
-
-		members = append(members, user)
+	// Ako niko nije uspešno dodat (korisno u fallback varijanti)
+	if len(members) == 0 {
+		log.Println("No new members were added due to user service failures.")
+		return fmt.Errorf("no new members were added")
 	}
 
 	// Ažuriranje baze sa novim članovima
@@ -230,27 +289,38 @@ func (s *ProjectService) GetAllUsers() ([]models.Member, error) {
 	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
 	url := fmt.Sprintf("%s/api/users/members", usersServiceURL)
 
-	req, err := http.NewRequest("GET", url, nil)
+	// Circuit breaker execution
+	result, err := s.UsersBreaker.Execute(func() (interface{}, error) {
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %v", err)
+		}
+
+		resp, err := s.HTTPClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch users from users-service: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("users-service returned status: %d", resp.StatusCode)
+		}
+
+		var users []models.Member
+		if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
+			return nil, fmt.Errorf("failed to decode response from users-service: %v", err)
+		}
+
+		return users, nil
+	})
+
+	// Fallback ako je circuit breaker otvoren ili poziv nije uspeo
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
+		log.Println("[Fallback] Returning empty user list due to error:", err)
+		return []models.Member{}, nil // ili eventualno nil, err ako želiš da to propagiraš
 	}
 
-	resp, err := s.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch users from users-service: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("users-service returned status: %d", resp.StatusCode)
-	}
-
-	var users []models.Member
-	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
-		return nil, fmt.Errorf("failed to decode response from users-service: %v", err)
-	}
-
-	return users, nil
+	return result.([]models.Member), nil
 }
 
 // RemoveMemberFromProject removes a member from a project if they are not assigned to an in-progress task.
@@ -275,53 +345,98 @@ func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID,
 
 	checkURL := fmt.Sprintf("%s/api/tasks/has-active?projectId=%s&memberId=%s", taskServiceURL, projectID, memberID)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", checkURL, nil)
+	// Circuit Breaker za task servis
+	result, err := s.TasksBreaker.Execute(func() (interface{}, error) {
+		req, err := http.NewRequestWithContext(ctx, "GET", checkURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create HTTP request: %v", err)
+		}
+
+		resp, err := s.HTTPClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to task service: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("task service returned status %d: %s", resp.StatusCode, string(body))
+		}
+
+		var r struct {
+			HasActiveTasks bool `json:"hasActiveTasks"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+			return nil, fmt.Errorf("failed to decode task service response: %v", err)
+		}
+
+		return r.HasActiveTasks, nil
+	})
 	if err != nil {
-		log.Printf("Failed to create HTTP request: %v\n", err)
-		return fmt.Errorf("failed to create HTTP request")
+		log.Printf("Circuit breaker error or fallback triggered: %v", err)
+		return fmt.Errorf("could not verify task assignment: %v", err)
 	}
 
-	resp, err := s.HTTPClient.Do(req)
-	if err != nil {
-		log.Printf("Failed to reach task service: %v\n", err)
-		return fmt.Errorf("failed to connect to task service")
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		log.Printf("Task service returned status %d: %s\n", resp.StatusCode, string(body))
-		return fmt.Errorf("task service returned error %d", resp.StatusCode)
-	}
-
-	var response struct {
-		HasActiveTasks bool `json:"hasActiveTasks"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		log.Printf("Failed to decode task service response: %v\n", err)
-		return fmt.Errorf("failed to decode task service response")
-	}
-
-	if response.HasActiveTasks {
+	if result.(bool) {
 		log.Println("Cannot remove member assigned to an active task")
 		return fmt.Errorf("cannot remove member assigned to an active task")
 	}
 
+	// Ako nema aktivnih zadataka, ukloni člana iz projekta
 	filter := bson.M{"_id": projectObjectID}
 	update := bson.M{"$pull": bson.M{"members": bson.M{"_id": memberObjectID}}}
 
-	result, err := s.ProjectsCollection.UpdateOne(ctx, filter, update)
+	resultUpdate, err := s.ProjectsCollection.UpdateOne(ctx, filter, update)
 	if err != nil {
 		log.Println("Failed to remove member from project")
 		return fmt.Errorf("failed to remove member from project")
 	}
 
-	if result.ModifiedCount == 0 {
+	if resultUpdate.ModifiedCount == 0 {
 		log.Println("Member not found in project or already removed")
 		return fmt.Errorf("member not found in project or already removed")
 	}
 
 	log.Println("Member successfully removed from project.")
+	// ✅ Dohvatanje Member objekta iz user servisa
+	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
+	if usersServiceURL == "" {
+		log.Println("USERS_SERVICE_URL is not set")
+	} else {
+		memberURL := fmt.Sprintf("%s/api/users/member/id/%s", usersServiceURL, memberID)
+
+		req, err := http.NewRequestWithContext(ctx, "GET", memberURL, nil)
+		if err == nil {
+			resp, err := s.HTTPClient.Do(req)
+			if err == nil {
+				defer resp.Body.Close()
+
+				if resp.StatusCode == http.StatusOK {
+					var member models.Member
+					if err := json.NewDecoder(resp.Body).Decode(&member); err == nil {
+						go func() {
+							message := "You have been removed from a project."
+							_, err := s.NotificationsBreaker.Execute(func() (interface{}, error) {
+								return nil, s.sendNotification(member, message)
+							})
+							if err != nil {
+								log.Printf("Failed to send removal notification to %s: %v", member.Username, err)
+							}
+						}()
+					} else {
+						log.Printf("Failed to decode member response: %v", err)
+					}
+				} else {
+					log.Printf("User service returned status %d when fetching member info", resp.StatusCode)
+				}
+			} else {
+				log.Printf("Failed to fetch member from user service: %v", err)
+			}
+		} else {
+			log.Printf("Failed to create request to user service: %v", err)
+		}
+	}
+
 	return nil
 }
 
@@ -360,130 +475,193 @@ func (s *ProjectService) GetProjectByID(projectID string) (*models.Project, erro
 }
 
 func (s *ProjectService) GetTasksForProject(projectID string, role string, authToken string) ([]map[string]interface{}, error) {
+	// Uzimamo URL za tasks servis iz okruženja
 	tasksServiceURL := os.Getenv("TASKS_SERVICE_URL")
 	if tasksServiceURL == "" {
 		return nil, fmt.Errorf("TASKS_SERVICE_URL not set")
 	}
 
+	// Formiramo pun URL za API poziv
 	url := fmt.Sprintf("%s/api/tasks/project/%s", tasksServiceURL, projectID)
 	fmt.Printf("Fetching tasks from: %s\n", url)
 
-	req, err := http.NewRequest("GET", url, nil)
+	// Pozivamo HTTP zahtev unutar circuit breaker-a
+	result, err := s.TasksBreaker.Execute(func() (interface{}, error) {
+		// Kreiramo novi HTTP GET zahtev
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %v", err)
+		}
+
+		// Postavljamo potrebne header-e, kao što su Role i Authorization token
+		req.Header.Set("Role", role)
+		req.Header.Set("Authorization", authToken)
+
+		// Šaljemo HTTP zahtev koristeći HTTP klijent iz servisa
+		resp, err := s.HTTPClient.Do(req)
+		if err != nil {
+			log.Printf("Failed to fetch tasks for project %s: %v\n", projectID, err)
+			return nil, fmt.Errorf("failed to fetch tasks: %v", err)
+		}
+		// Obezbeđujemo zatvaranje response body-a nakon što završi obrada
+		defer resp.Body.Close()
+
+		// Proveravamo da li je statusni kod 200 OK
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("Failed to fetch tasks for project %s, status code: %d\n", projectID, resp.StatusCode)
+			return nil, fmt.Errorf("failed to fetch tasks, status code: %d", resp.StatusCode)
+		}
+
+		// Dekodiramo JSON odgovor u slice mapa (lista zadataka)
+		var tasks []map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&tasks); err != nil {
+			log.Printf("Failed to decode tasks response: %v\n", err)
+			return nil, fmt.Errorf("failed to decode tasks: %v", err)
+		}
+
+		// Vraćamo uspešan rezultat kao interface{}
+		return tasks, nil
+	})
+
+	// Ako je došlo do greške unutar circuit breaker-a (npr. servis ne radi ili je breaker otvoren)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
+		log.Printf("[Fallback] Returning empty tasks list due to error: %v\n", err)
+		// Vraćamo fallback vrednost - praznu listu zadataka i bez greške (ili možeš i grešku ako želiš da propagiraš)
+		return []map[string]interface{}{}, nil
 	}
 
-	req.Header.Set("Role", role)
-	req.Header.Set("Authorization", authToken)
-
-	resp, err := s.HTTPClient.Do(req)
-	if err != nil {
-		log.Printf("Failed to fetch tasks for project %s: %v\n", projectID, err)
-		return nil, fmt.Errorf("failed to fetch tasks: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("Failed to fetch tasks for project %s, status code: %d\n", projectID, resp.StatusCode)
-		return nil, fmt.Errorf("failed to fetch tasks, status code: %d", resp.StatusCode)
-	}
-
-	var tasks []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&tasks); err != nil {
-		log.Printf("Failed to decode tasks response: %v\n", err)
-		return nil, fmt.Errorf("failed to decode tasks: %v", err)
-	}
-
-	return tasks, nil
+	// Uspešan slučaj: konvertujemo interface{} nazad u []map[string]interface{} i vraćamo
+	return result.([]map[string]interface{}), nil
 }
 
 func (s *ProjectService) getUserIDByUsername(username string) (primitive.ObjectID, error) {
+	// Uzimamo URL users servisa iz okruženja
 	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
 	if usersServiceURL == "" {
 		return primitive.NilObjectID, fmt.Errorf("USERS_SERVICE_URL not set")
 	}
 
+	// Formiramo URL za dohvat ID-a na osnovu korisničkog imena
 	url := fmt.Sprintf("%s/api/users/id/%s", usersServiceURL, username)
 
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	// Circuit breaker: pokušavamo poziv
+	result, err := s.UsersBreaker.Execute(func() (interface{}, error) {
+		// Kreiramo GET zahtev
+		req, err := http.NewRequest(http.MethodGet, url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %v", err)
+		}
+
+		// Šaljemo zahtev
+		resp, err := s.HTTPClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to contact users-service: %v", err)
+		}
+		defer resp.Body.Close()
+
+		// Proveravamo statusni kod
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("users-service returned status: %v", resp.Status)
+		}
+
+		// Struktura za parsiranje odgovora
+		var data struct {
+			ID string `json:"id"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			return nil, fmt.Errorf("failed to decode user ID response: %v", err)
+		}
+
+		// Konvertujemo ID iz stringa u ObjectID
+		userID, err := primitive.ObjectIDFromHex(data.ID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid user ID format: %v", err)
+		}
+
+		// Vraćamo ObjectID kao rezultat
+		return userID, nil
+	})
+
+	// Ako breaker ne uspe, vraćamo prazni ID i grešku
 	if err != nil {
-		return primitive.NilObjectID, fmt.Errorf("failed to create request: %v", err)
+		log.Printf("[Fallback] Could not fetch user ID for '%s': %v\n", username, err)
+		return primitive.NilObjectID, err
 	}
 
-	resp, err := s.HTTPClient.Do(req)
-	if err != nil {
-		return primitive.NilObjectID, fmt.Errorf("failed to contact users-service: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return primitive.NilObjectID, fmt.Errorf("users-service returned status: %v", resp.Status)
-	}
-
-	var data struct {
-		ID string `json:"id"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return primitive.NilObjectID, fmt.Errorf("failed to decode user ID response: %v", err)
-	}
-
-	userID, err := primitive.ObjectIDFromHex(data.ID)
-	if err != nil {
-		return primitive.NilObjectID, fmt.Errorf("invalid user ID format: %v", err)
-	}
-
-	return userID, nil
+	// Uspesan rezultat se type-assert-uje i vraća
+	return result.(primitive.ObjectID), nil
 }
 
 func (s *ProjectService) getUserRoleByUsername(username string) (string, error) {
+	// Dohvatanje baze URL-a users servisa iz okruženja
 	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
 	if usersServiceURL == "" {
 		return "", fmt.Errorf("USERS_SERVICE_URL not set")
 	}
 
+	// Formiranje kompletnog URL-a za poziv ka users servisu
 	url := fmt.Sprintf("%s/api/users/role/%s", usersServiceURL, username)
 
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	// Poziv users servisa unutar circuit breakera
+	result, err := s.UsersBreaker.Execute(func() (interface{}, error) {
+		// Kreiranje HTTP GET zahteva
+		req, err := http.NewRequest(http.MethodGet, url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %v", err)
+		}
+
+		// Slanje zahteva
+		resp, err := s.HTTPClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to contact users-service: %v", err)
+		}
+		defer resp.Body.Close()
+
+		// Provera statusnog koda
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("users-service returned status: %v", resp.Status)
+		}
+
+		// Parsiranje JSON odgovora u strukturu
+		var data struct {
+			Role string `json:"role"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			return nil, fmt.Errorf("failed to decode role response: %v", err)
+		}
+
+		// Vraćamo korisničku rolu
+		return data.Role, nil
+	})
+
+	// Ako je došlo do greške (npr. breaker otvoren), logujemo i vraćamo prazan string i grešku
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %v", err)
+		log.Printf("[Fallback] Could not fetch role for user '%s': %v\n", username, err)
+		return "", err
 	}
 
-	resp, err := s.HTTPClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to contact users-service: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("users-service returned status: %v", resp.Status)
-	}
-
-	var data struct {
-		Role string `json:"role"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return "", fmt.Errorf("failed to decode role response: %v", err)
-	}
-
-	return data.Role, nil
+	// Uspešno dobijena rola (type assertion iz interface{})
+	return result.(string), nil
 }
 
 func (s *ProjectService) GetProjectsByUsername(username string) ([]models.Project, error) {
 	var projects []models.Project
 
-	// Dobavi userID iz username
+	// ✅ Pokušaj da dobaviš userID, u slučaju greške vrati prazan niz
 	userID, err := s.getUserIDByUsername(username)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user ID: %v", err)
+		log.Printf("[Fallback] Failed to get user ID for '%s': %v\n", username, err)
+		return []models.Project{}, nil
 	}
 
-	// Dobavi role korisnika
+	// ✅ Pokušaj da dobaviš user rolu, fallback na prazan niz ako ne uspe
 	role, err := s.getUserRoleByUsername(username)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user role: %v", err)
+		log.Printf("[Fallback] Failed to get user role for '%s': %v\n", username, err)
+		return []models.Project{}, nil
 	}
 
-	// Formiraj filter na osnovu role
+	// ✅ Formiraj MongoDB filter na osnovu role
 	var filter bson.M
 	if role == "manager" {
 		filter = bson.M{"manager_id": userID}
@@ -493,25 +671,28 @@ func (s *ProjectService) GetProjectsByUsername(username string) ([]models.Projec
 
 	log.Printf("Executing MongoDB query with filter: %v", filter)
 
+	// ✅ Pokreni MongoDB query
 	cursor, err := s.ProjectsCollection.Find(context.Background(), filter)
 	if err != nil {
 		log.Printf("Error fetching projects from MongoDB: %v", err)
-		return nil, fmt.Errorf("error fetching projects: %v", err)
+		return []models.Project{}, nil // fallback ako padne upit
 	}
 	defer cursor.Close(context.Background())
 
+	// ✅ Prođi kroz rezultate kursora
 	for cursor.Next(context.Background()) {
 		var project models.Project
 		if err := cursor.Decode(&project); err != nil {
 			log.Printf("Error decoding project document: %v", err)
-			return nil, fmt.Errorf("error decoding project: %v", err)
+			return []models.Project{}, nil // fallback na grešku dekodiranja
 		}
 		projects = append(projects, project)
 	}
 
+	// ✅ Proveri greške kursora
 	if err := cursor.Err(); err != nil {
 		log.Printf("Cursor error: %v", err)
-		return nil, fmt.Errorf("cursor error: %v", err)
+		return []models.Project{}, nil
 	}
 
 	log.Printf("Found %d projects for username %s", len(projects), username)
@@ -519,14 +700,14 @@ func (s *ProjectService) GetProjectsByUsername(username string) ([]models.Projec
 }
 
 func (s *ProjectService) DeleteProjectAndTasks(ctx context.Context, projectID string, r *http.Request) error {
-	// Konverzija projectID u ObjectID
+	// 1. Validacija i konverzija projectID
 	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
 	if err != nil {
 		log.Printf("Invalid project ID format: %v", projectID)
 		return fmt.Errorf("invalid project ID format")
 	}
 
-	// Provera postojanja projekta
+	// 2. Provera postojanja projekta u bazi
 	filter := bson.M{"_id": projectObjectID}
 	var project bson.M
 	err = s.ProjectsCollection.FindOne(ctx, filter).Decode(&project)
@@ -539,76 +720,109 @@ func (s *ProjectService) DeleteProjectAndTasks(ctx context.Context, projectID st
 		return fmt.Errorf("failed to fetch project: %v", err)
 	}
 
-	// Priprema zahteva za tasks-service
+	// 3. Priprema URL-a za tasks-service
 	taskServiceURL := os.Getenv("TASKS_SERVICE_URL")
-	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/api/tasks/project/%s", taskServiceURL, projectID), nil)
+	if taskServiceURL == "" {
+		return fmt.Errorf("TASKS_SERVICE_URL not set")
+	}
+	url := fmt.Sprintf("%s/api/tasks/project/%s", taskServiceURL, projectID)
+
+	// 4. Circuit breaker za tasks-service DELETE
+	_, err = s.TasksBreaker.Execute(func() (interface{}, error) {
+		// Kreiranje HTTP DELETE zahteva
+		req, err := http.NewRequest(http.MethodDelete, url, nil)
+		if err != nil {
+			log.Printf("Failed to create request to tasks-service: %v", err)
+			return nil, fmt.Errorf("failed to create request: %v", err)
+		}
+
+		// Prosleđivanje zaglavlja iz originalnog requesta
+		req.Header.Set("Authorization", r.Header.Get("Authorization"))
+		req.Header.Set("Role", r.Header.Get("Role"))
+
+		// Slanje HTTP zahteva
+		resp, err := s.HTTPClient.Do(req)
+		if err != nil {
+			log.Printf("Failed to contact tasks-service: %v", err)
+			return nil, fmt.Errorf("failed to contact tasks-service: %v", err)
+		}
+		defer resp.Body.Close()
+
+		// Provera statusnog koda
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("Tasks-service returned non-OK status: %v", resp.Status)
+			return nil, fmt.Errorf("task service returned error: %v", resp.Status)
+		}
+
+		return nil, nil
+	})
+
+	// 5. Fallback ako breaker odbije ili task servis padne
 	if err != nil {
-		log.Printf("Failed to create request to tasks-service: %v", err)
-		return fmt.Errorf("failed to create request to task service: %v", err)
+		log.Printf("[Fallback] Tasks were not deleted due to error: %v", err)
+		// Možemo odlučiti da prekinemo ceo proces ili samo logujemo
+		// return fmt.Errorf("failed to delete tasks: %v", err)
 	}
 
-	// Prosleđivanje zaglavlja
-	req.Header.Set("Authorization", r.Header.Get("Authorization"))
-	req.Header.Set("Role", r.Header.Get("Role"))
-
-	resp, err := s.HTTPClient.Do(req)
-	if err != nil {
-		log.Printf("Failed to send request to tasks-service: %v", err)
-		return fmt.Errorf("failed to send request to task service: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("Tasks-service returned non-OK status: %v", resp.Status)
-		return fmt.Errorf("task service returned an error: %v", resp.Status)
-	}
-
-	// Brisanje projekta iz baze
+	// 6. Brisanje projekta iz baze
 	_, err = s.ProjectsCollection.DeleteOne(ctx, filter)
 	if err != nil {
 		log.Printf("Failed to delete project: %v", err)
 		return fmt.Errorf("failed to delete project: %v", err)
 	}
 
-	log.Printf("Successfully deleted project and related tasks for ID: %s", projectID)
+	log.Printf("Successfully deleted project and (if possible) related tasks for ID: %s", projectID)
 	return nil
 }
 
 func (s *ProjectService) GetAllMembers() ([]models.Member, error) {
-	// Učitaj URL `users-service` iz .env fajla
+	// 1. Učitaj URL users-servisa iz .env fajla
 	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
 	if usersServiceURL == "" {
 		log.Println("USERS_SERVICE_URL is not set in .env file")
 		return nil, fmt.Errorf("users-service URL is not configured")
 	}
 
-	// Priprema HTTP GET zahteva
-	req, err := http.NewRequest("GET", usersServiceURL+"/api/users/members", nil)
+	// 2. Formiraj URL za zahtev
+	url := fmt.Sprintf("%s/api/users/members", usersServiceURL)
+
+	// 3. Poziv kroz circuit breaker
+	result, err := s.UsersBreaker.Execute(func() (interface{}, error) {
+		// 3.1 Kreiraj GET zahtev
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request for users-service: %v", err)
+		}
+
+		// 3.2 Pošalji zahtev
+		resp, err := s.HTTPClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch members from users-service: %v", err)
+		}
+		defer resp.Body.Close()
+
+		// 3.3 Proveri HTTP status
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("users-service returned non-200 status: %d", resp.StatusCode)
+		}
+
+		// 3.4 Dekodiraj odgovor
+		var members []models.Member
+		if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
+			return nil, fmt.Errorf("failed to decode members response: %v", err)
+		}
+
+		return members, nil
+	})
+
+	// 4. Fallback ako je circuit otvoren ili došlo do greške
 	if err != nil {
-		log.Printf("Failed to create request for users-service: %v", err)
-		return nil, err
+		log.Printf("[Fallback] Returning empty member list due to error: %v", err)
+		return []models.Member{}, nil // ili: return nil, err ako želiš da propagiraš grešku
 	}
 
-	resp, err := s.HTTPClient.Do(req)
-	if err != nil {
-		log.Printf("Failed to fetch members from users-service: %v", err)
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("users-service returned non-200 status: %d", resp.StatusCode)
-		return nil, fmt.Errorf("failed to get members, status: %d", resp.StatusCode)
-	}
-
-	// Dekodiraj odgovor
-	var members []models.Member
-	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
-		log.Printf("Failed to decode members response: %v", err)
-		return nil, err
-	}
-
-	return members, nil
+	// 5. Konverzija rezultata u očekivani tip
+	return result.([]models.Member), nil
 }
 
 func (s *ProjectService) AddTaskToProject(projectID string, taskID string) error {
@@ -669,37 +883,48 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string, auth
 			}
 
 			url := fmt.Sprintf("%s/api/tasks/project/%s/has-unfinished", tasksServiceURL, project.ID.Hex())
-			req, err := http.NewRequest("GET", url, nil)
+			result, err := s.TasksBreaker.Execute(func() (interface{}, error) {
+				req, err := http.NewRequest("GET", url, nil)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create request: %v", err)
+				}
+				req.Header.Set("Authorization", "Bearer "+authToken)
+
+				resp, err := s.HTTPClient.Do(req)
+				if err != nil {
+					return nil, fmt.Errorf("failed to contact task service: %v", err)
+				}
+				defer resp.Body.Close()
+
+				if resp.StatusCode != http.StatusOK {
+					return nil, fmt.Errorf("task service returned non-OK status for project %s: %s", project.ID.Hex(), resp.Status)
+				}
+
+				var r struct {
+					HasUnfinishedTasks bool `json:"hasUnfinishedTasks"`
+				}
+				if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+					return nil, fmt.Errorf("failed to decode task service response: %v", err)
+				}
+
+				return r, nil
+			})
+
 			if err != nil {
-				log.Printf("Failed to create request: %v", err)
-				continue
-			}
-			req.Header.Set("Authorization", "Bearer "+authToken)
-
-			resp, err := s.HTTPClient.Do(req)
-			if err != nil {
-				log.Printf("Failed to contact task service: %v\n", err)
-				continue
-			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode != http.StatusOK {
-				log.Printf("Task service returned non-OK status for project %s: %s\n", project.ID.Hex(), resp.Status)
-				continue
+				log.Printf("Circuit breaker error or fallback triggered for task service: %v", err)
+				// Fallback ponašanje: ne dozvoli uklanjanje ako ne može da proveri zadatke
+				return fmt.Errorf("failed to check tasks for project %s", project.ID.Hex())
 			}
 
-			var result struct {
-				HasUnfinishedTasks bool `json:"hasUnfinishedTasks"`
+			r, ok := result.(struct{ HasUnfinishedTasks bool })
+			if !ok {
+				return fmt.Errorf("unexpected result type from circuit breaker")
 			}
-			if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-				log.Printf("Failed to decode task service response: %v\n", err)
-				continue
-			}
-
-			if result.HasUnfinishedTasks {
+			if r.HasUnfinishedTasks {
 				log.Printf("Cannot remove manager %s: unfinished tasks in project %s\n", userID, project.ID.Hex())
 				return fmt.Errorf("manager cannot be removed from project %s due to unfinished tasks", project.ID.Hex())
 			}
+
 		}
 
 		update := bson.M{"$unset": bson.M{"manager_id": ""}}
@@ -708,19 +933,65 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string, auth
 			log.Printf("Failed to remove manager %s from projects: %v\n", userID, err)
 			return fmt.Errorf("failed to update projects")
 		}
+
 	}
 
 	if role == "member" {
-		filter := bson.M{"members._id": userID}
-		update := bson.M{"$pull": bson.M{"members": bson.M{"_id": userID}}}
-		_, err := s.ProjectsCollection.UpdateMany(context.Background(), filter, update)
+		// Fetch member details from users-service
+		usersServiceURL := os.Getenv("USERS_SERVICE_URL")
+		getMemberURL := fmt.Sprintf("%s/api/users/member/id/%s", usersServiceURL, userID)
+
+		req, err := http.NewRequest("GET", getMemberURL, nil)
+		if err != nil {
+			log.Printf("Error creating request to users-service: %v", err)
+			return fmt.Errorf("failed to fetch user data")
+		}
+		req.Header.Set("Authorization", "Bearer "+authToken)
+
+		resp, err := s.HTTPClient.Do(req)
+		if err != nil {
+			log.Printf("Error contacting users-service: %v", err)
+			return fmt.Errorf("failed to fetch user data")
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("users-service returned status %d", resp.StatusCode)
+			return fmt.Errorf("failed to fetch user data")
+		}
+
+		var member models.Member
+		if err := json.NewDecoder(resp.Body).Decode(&member); err != nil {
+			log.Printf("Failed to decode user data: %v", err)
+			return fmt.Errorf("invalid user data from users-service")
+		}
+
+		objectID, err := primitive.ObjectIDFromHex(userID)
+		if err != nil {
+			log.Printf("Invalid userID format: %v", err)
+			return fmt.Errorf("invalid user ID format")
+		}
+
+		filter := bson.M{"members._id": objectID}
+		update := bson.M{"$pull": bson.M{"members": bson.M{"_id": objectID}}}
+
+		_, err = s.ProjectsCollection.UpdateMany(context.Background(), filter, update)
 		if err != nil {
 			log.Printf("Failed to remove user %s from projects: %v\n", userID, err)
 			return fmt.Errorf("failed to update projects")
 		}
+
+		log.Printf("User %s successfully removed from all projects", userID)
+
+		message := "You have been removed from one or more projects."
+		_, err = s.NotificationsBreaker.Execute(func() (interface{}, error) {
+			return nil, s.sendNotification(member, message)
+		})
+		if err != nil {
+			log.Printf("Failed to send notification to member %s: %v", member.Username, err)
+		}
 	}
 
-	log.Printf("User %s successfully removed from all projects", userID)
 	return nil
 }
 
@@ -730,62 +1001,89 @@ func (s *ProjectService) GetUserProjects(username string) ([]map[string]interfac
 		return nil, fmt.Errorf("USERS_SERVICE_URL not set")
 	}
 
-	// Prvo dohvati ID korisnika
+	// ➤ 1. Dohvati korisnikov ID kroz circuit breaker.
 	idURL := fmt.Sprintf("%s/api/users/id/%s", usersServiceURL, username)
-	idReq, err := http.NewRequest(http.MethodGet, idURL, nil)
+
+	idResult, err := s.UsersBreaker.Execute(func() (interface{}, error) {
+		req, err := http.NewRequest(http.MethodGet, idURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create ID request: %v", err)
+		}
+
+		resp, err := s.HTTPClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to contact users-service: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("failed to fetch user ID: %v", resp.Status)
+		}
+
+		var data struct {
+			ID string `json:"id"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			return nil, fmt.Errorf("failed to decode user ID response: %v", err)
+		}
+
+		return data.ID, nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create ID request: %v", err)
+		log.Printf("UsersBreaker error while fetching ID: %v", err)
+		return nil, fmt.Errorf("could not fetch user ID: %v", err)
 	}
 
-	resp, err := s.HTTPClient.Do(idReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to contact users-service: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch user ID: %v", resp.Status)
-	}
-
-	var data struct {
-		ID string `json:"id"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return nil, fmt.Errorf("failed to decode user ID response: %v", err)
-	}
-
-	userID, err := primitive.ObjectIDFromHex(data.ID)
+	userIDHex := idResult.(string)
+	userID, err := primitive.ObjectIDFromHex(userIDHex)
 	if err != nil {
 		return nil, fmt.Errorf("invalid user ID format: %v", err)
 	}
 
-	// Dohvati ulogu korisnika
+	// ➤ 2. Dohvati korisnikovu rolu kroz circuit breaker
 	roleURL := fmt.Sprintf("%s/api/users/role/%s", usersServiceURL, username)
-	roleReq, err := http.NewRequest(http.MethodGet, roleURL, nil)
+
+	roleResult, err := s.UsersBreaker.Execute(func() (interface{}, error) {
+		req, err := http.NewRequest(http.MethodGet, roleURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create role request: %v", err)
+		}
+
+		resp, err := s.HTTPClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get user role: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("failed to fetch role: %v", resp.Status)
+		}
+
+		var data struct {
+			Role string `json:"role"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			return nil, fmt.Errorf("failed to decode role: %v", err)
+		}
+
+		return data.Role, nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create role request: %v", err)
+		log.Printf("UsersBreaker error while fetching role: %v", err)
+		return nil, fmt.Errorf("could not fetch user role: %v", err)
 	}
 
-	roleResp, err := s.HTTPClient.Do(roleReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user role: %v", err)
-	}
-	defer roleResp.Body.Close()
+	role := roleResult.(string)
 
-	var roleData struct {
-		Role string `json:"role"`
-	}
-	if err := json.NewDecoder(roleResp.Body).Decode(&roleData); err != nil {
-		return nil, fmt.Errorf("failed to decode role: %v", err)
-	}
-
+	// ➤ 3. Formiraj filter po roli
 	var filter bson.M
-	if roleData.Role == "manager" {
+	if role == "manager" {
 		filter = bson.M{"manager_id": userID}
 	} else {
 		filter = bson.M{"members._id": userID}
 	}
 
+	// ➤ 4. Nađi projekte
 	cursor, err := s.ProjectsCollection.Find(context.Background(), filter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch projects: %v", err)
