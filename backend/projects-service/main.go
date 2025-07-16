@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"trello-project/microservices/projects-service/handlers"
+	"trello-project/microservices/projects-service/logging"
 	"trello-project/microservices/projects-service/services"
 
 	http_client "trello-project/backend/utils"
@@ -30,18 +31,21 @@ func createProjectNameIndex(collection *mongo.Collection) error {
 	if err != nil {
 		return fmt.Errorf("failed to create unique index on project name: %v", err)
 	}
-	fmt.Println("Unique index on project name created successfully")
+	logging.Logger.Info("Unique index on project name created successfully")
 	return nil
 }
 
 func main() {
+	logging.InitLogger() // Inicijalizacija logovanja
+
+	logging.Logger.Info("Starting Projects Service...")
 	if err := godotenv.Load(".env"); err != nil {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 
 	mongoURI, mongoDBName, mongoCollectionName := os.Getenv("MONGO_URI"), os.Getenv("MONGO_DB_NAME"), os.Getenv("MONGO_COLLECTION")
 	if mongoURI == "" || mongoDBName == "" || mongoCollectionName == "" {
-		log.Fatal("Missing required environment variables for MongoDB")
+		logging.Logger.Fatal("Missing required environment variables for MongoDB")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -49,12 +53,12 @@ func main() {
 
 	projectsClient, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
 	if err != nil {
-		log.Fatalf("Database connection for mongo-projects failed: %v", err)
+		logging.Logger.Fatalf("Database connection for mongo-projects failed: %v", err)
 	}
 	defer projectsClient.Disconnect(ctx)
 
 	if err := projectsClient.Ping(ctx, nil); err != nil {
-		log.Fatalf("MongoDB connection error for mongo-projects: %v", err)
+		logging.Logger.Fatalf("MongoDB connection error for mongo-projects: %v", err)
 	}
 
 	projectsDB := projectsClient.Database(mongoDBName)
@@ -69,7 +73,7 @@ func main() {
 			return counts.ConsecutiveFailures > 3
 		},
 		OnStateChange: func(name string, from, to gobreaker.State) {
-			log.Printf("Circuit Breaker '%s' changed from '%s' to '%s'\n", name, from.String(), to.String())
+			logging.Logger.Infof("Circuit Breaker '%s' changed from '%s' to '%s'", name, from.String(), to.String())
 		},
 	})
 
@@ -81,7 +85,7 @@ func main() {
 			return counts.ConsecutiveFailures > 3
 		},
 		OnStateChange: func(name string, from, to gobreaker.State) {
-			log.Printf("Circuit Breaker '%s' changed from '%s' to '%s'\n", name, from.String(), to.String())
+			logging.Logger.Infof("Circuit Breaker '%s' changed from '%s' to '%s'", name, from.String(), to.String())
 		},
 	})
 	notificationsBreaker := gobreaker.NewCircuitBreaker(gobreaker.Settings{
@@ -92,7 +96,7 @@ func main() {
 			return counts.ConsecutiveFailures > 3
 		},
 		OnStateChange: func(name string, from, to gobreaker.State) {
-			log.Printf("Circuit Breaker '%s' state changed from %s to %s", name, from.String(), to.String())
+			logging.Logger.Infof("Circuit Breaker '%s' changed from '%s' to '%s'", name, from.String(), to.String())
 		},
 	})
 
@@ -107,7 +111,7 @@ func main() {
 	//projectService := services.NewProjectService(projectsDB.Collection(mongoCollectionName), httpClient)
 
 	if err := createProjectNameIndex(projectsDB.Collection(mongoCollectionName)); err != nil {
-		log.Fatal(err)
+		logging.Logger.Fatal(err)
 	}
 
 	projectHandler := handlers.NewProjectHandler(projectService)
@@ -132,13 +136,13 @@ func main() {
 
 	serverPort := os.Getenv("SERVER_PORT")
 	if serverPort == "" {
-		log.Fatal("SERVER_PORT is not set in the environment variables")
+		logging.Logger.Fatal("SERVER_PORT is not set in the environment variables")
 	}
 
 	serverAddress := fmt.Sprintf(":%s", serverPort)
 
-	fmt.Println("Projects service server running on", serverAddress)
-	log.Fatal(http.ListenAndServe(serverAddress, corsRouter))
+	logging.Logger.Infof("Projects service server running on %s", serverAddress)
+	logging.Logger.Fatal(http.ListenAndServe(serverAddress, corsRouter))
 }
 
 func enableCORS(next http.Handler) http.Handler {

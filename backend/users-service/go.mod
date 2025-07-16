@@ -23,8 +23,15 @@ require (
 )
 
 require (
+	github.com/google/uuid v1.6.0
+	github.com/sirupsen/logrus v1.9.3
 	github.com/sony/gobreaker v1.0.0
 	trello-project/backend/utils v0.0.0
+)
+
+require (
+	golang.org/x/sys v0.27.0 // indirect
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
 replace trello-project/backend/utils => ../utils

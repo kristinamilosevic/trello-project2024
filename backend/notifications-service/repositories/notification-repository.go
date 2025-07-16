@@ -1,21 +1,21 @@
 package repositories
 
 import (
-	"log"
 	"notifications-service/models"
 	"os"
 	"time"
 
 	"github.com/gocql/gocql"
+	"github.com/sirupsen/logrus"
 )
 
 type NotificationRepo struct {
 	session *gocql.Session
-	logger  *log.Logger
+	logger  *logrus.Logger
 }
 
 // Konstruktor za povezivanje na Cassandra bazu
-func NewNotificationRepo(logger *log.Logger) (*NotificationRepo, error) {
+func NewNotificationRepo(logger *logrus.Logger) (*NotificationRepo, error) {
 	db := os.Getenv("CASS_DB") // Preuzimanje konfiguracije iz okruženja
 	if db == "" {
 		db = "127.0.0.1" // Podrazumevana vrednost za lokalnu Cassandru
@@ -25,7 +25,7 @@ func NewNotificationRepo(logger *log.Logger) (*NotificationRepo, error) {
 	cluster.Keyspace = "system"
 	session, err := cluster.CreateSession()
 	if err != nil {
-		logger.Println(err)
+		logger.Errorf("Failed to create Cassandra session: %v", err)
 		return nil, err
 	}
 
@@ -37,7 +37,7 @@ func NewNotificationRepo(logger *log.Logger) (*NotificationRepo, error) {
              'replication_factor': 1
          }`).Exec()
 	if err != nil {
-		logger.Println("Failed to create keyspace:", err)
+		logger.Errorf("Failed to create keyspace: %v", err)
 		return nil, err
 	}
 	session.Close()
@@ -47,11 +47,11 @@ func NewNotificationRepo(logger *log.Logger) (*NotificationRepo, error) {
 	cluster.Consistency = gocql.One
 	session, err = cluster.CreateSession()
 	if err != nil {
-		logger.Println("Failed to connect to notifications keyspace:", err)
+		logger.Errorf("Failed to connect to notifications keyspace: %v", err)
 		return nil, err
 	}
 
-	logger.Println("Connected to Cassandra notifications keyspace.")
+	logger.Info("Connected to Cassandra notifications keyspace.")
 	return &NotificationRepo{
 		session: session,
 		logger:  logger,
@@ -61,7 +61,7 @@ func NewNotificationRepo(logger *log.Logger) (*NotificationRepo, error) {
 // Funkcija za zatvaranje sesije
 func (nr *NotificationRepo) CloseSession() {
 	nr.session.Close()
-	nr.logger.Println("Cassandra session closed.")
+	nr.logger.Infof("Cassandra session closed.")
 }
 
 // Kreiranje tabele za notifikacije
@@ -77,9 +77,9 @@ func (nr *NotificationRepo) CreateTable() {
 			PRIMARY KEY ((username), created_at, id)
 		) WITH CLUSTERING ORDER BY (created_at DESC, id ASC)`).Exec()
 	if err != nil {
-		nr.logger.Println("Failed to create notifications table:", err)
+		nr.logger.Errorf("Failed to create notifications table: %v", err)
 	} else {
-		nr.logger.Println("Notifications table created successfully!")
+		nr.logger.Info("Notifications table created successfully!")
 	}
 }
 
@@ -94,11 +94,11 @@ func (nr *NotificationRepo) CreateNotification(notification *models.Notification
 		notification.ID, notification.Username, notification.UserID, notification.Message, notification.CreatedAt, notification.IsRead,
 	).Exec()
 	if err != nil {
-		nr.logger.Println("Greška prilikom kreiranja notifikacije:", err)
+		nr.logger.Errorf("Error creating notification: %v", err)
 		return err
 	}
 
-	nr.logger.Println("Notifikacija uspešno kreirana!")
+	nr.logger.Infof("Notification successfully created for user %s (ID: %s)!", notification.Username, notification.ID)
 	return nil
 }
 
@@ -111,16 +111,18 @@ func (nr *NotificationRepo) GetNotificationsByUsername(username string) ([]model
 	var notifications []models.Notification
 	var notification models.Notification
 
+	nr.logger.Infof("Fetching notifications for username: %s", username)
+
 	for iter.Scan(&notification.ID, &notification.UserID, &notification.Username,
 		&notification.Message, &notification.CreatedAt, &notification.IsRead) {
 		notifications = append(notifications, notification)
 	}
 
 	if err := iter.Close(); err != nil {
-		nr.logger.Println("Greška prilikom preuzimanja notifikacija po username-u:", err)
+		nr.logger.Errorf("Error fetching notifications by username %s: %v", username, err)
 		return nil, err
 	}
-
+	nr.logger.Infof("Successfully fetched %d notifications for username: %s", len(notifications), username)
 	return notifications, nil
 }
 
@@ -128,57 +130,55 @@ func (nr *NotificationRepo) MarkNotificationAsRead(username, notificationID, cre
 	// Parsiranje UUID-a za `id`
 	uuid, err := gocql.ParseUUID(notificationID)
 	if err != nil {
-		nr.logger.Println("Invalid UUID format:", err)
+		nr.logger.Errorf("Invalid UUID format for notification ID %s: %v", notificationID, err)
 		return err
 	}
 
 	// Parsiranje vremena za `created_at`
 	parsedCreatedAt, err := time.Parse(time.RFC3339, createdAt)
 	if err != nil {
-		nr.logger.Println("Invalid created_at format:", err)
+		nr.logger.Errorf("Invalid created_at format %s: %v", createdAt, err)
 		return err
 	}
+	nr.logger.Infof("Attempting to mark notification ID %s as read for user %s", notificationID, username)
 
 	// Ažuriranje u Cassandri
 	query := `UPDATE notifications SET is_read = true WHERE username = ? AND id = ? AND created_at = ?`
 	err = nr.session.Query(query, username, uuid, parsedCreatedAt).Exec()
 	if err != nil {
-		nr.logger.Println("Greška prilikom ažuriranja notifikacije:", err)
+		nr.logger.Errorf("Error updating notification ID %s to read status: %v", notificationID, err)
 		return err
 	}
 
-	nr.logger.Println("Notifikacija uspešno označena kao pročitana!")
+	nr.logger.Infof("Notification ID %s successfully marked as read for user %s!", notificationID, username)
 	return nil
 }
 
 func (nr *NotificationRepo) DeleteNotification(username, notificationID, createdAt string) error {
 	// Provera ulaznih podataka
-	nr.logger.Printf("Received for deletion: username=%s, id=%s, created_at=%s\n", username, notificationID, createdAt)
-
-	// Konverzija UUID iz stringa
+	nr.logger.Debugf("Received for deletion: username=%s, id=%s, created_at=%s", username, notificationID, createdAt)
 	uuid, err := gocql.ParseUUID(notificationID)
 	if err != nil {
-		nr.logger.Println("Invalid UUID format:", err)
+		nr.logger.Errorf("Invalid UUID format for deletion, ID %s: %v", notificationID, err)
 		return err
 	}
-	nr.logger.Printf("Parsed UUID: %s\n", uuid)
-
+	nr.logger.Debugf("Parsed UUID for deletion: %s", uuid)
 	// Konverzija vremena
 	parsedCreatedAt, err := time.Parse(time.RFC3339, createdAt)
 	if err != nil {
-		nr.logger.Println("Invalid created_at format:", err)
+		nr.logger.Errorf("Invalid created_at format for deletion %s: %v", createdAt, err)
 		return err
 	}
-	nr.logger.Printf("Parsed CreatedAt: %s\n", parsedCreatedAt)
+	nr.logger.Debugf("Parsed CreatedAt for deletion: %s", parsedCreatedAt)
 
 	// Izvršavanje upita
 	query := `DELETE FROM notifications WHERE username = ? AND id = ? AND created_at = ?`
 	err = nr.session.Query(query, username, uuid, parsedCreatedAt).Exec()
 	if err != nil {
-		nr.logger.Println("Greška prilikom brisanja notifikacije:", err)
+		nr.logger.Errorf("Error deleting notification ID %s: %v", notificationID, err)
 		return err
 	}
 
-	nr.logger.Println("Notifikacija uspešno obrisana!")
+	nr.logger.Infof("Notification ID %s successfully deleted!", notificationID)
 	return nil
 }

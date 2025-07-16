@@ -16,6 +16,8 @@ RUN cd users-service && go mod download
 # Build aplikacije
 RUN cd users-service && go build -o ../users-service .
 
+RUN mkdir -p /app/logs && chmod 700 /app/logs
+
 FROM alpine
 RUN apk add --no-cache ca-certificates && update-ca-certificates
 

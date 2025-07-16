@@ -7,11 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"io"
-	"log"
-	"net/http"
+	"io"       // Keep this import for now, but ensure all custom logging uses logging.Logger
+	"net/http" // Add this import if not already present
 	"os"
 	"time"
+
+	"trello-project/microservices/projects-service/logging" // Assuming this is your custom logger
 	"trello-project/microservices/projects-service/models"
 
 	"github.com/sony/gobreaker"
@@ -29,17 +30,6 @@ type ProjectService struct {
 }
 
 // NewProjectService initializes a new ProjectService with the necessary MongoDB collections.
-// .
-//
-//	func NewProjectService(projectsCollection *mongo.Collection, httpClient *http.Client) *ProjectService {
-//		return &ProjectService{
-//			ProjectsCollection: projectsCollection,
-//			HTTPClient:         httpClient,
-//			ProjectsBreaker:    newBreaker("ProjectsServiceCB"),
-//			TasksBreaker:       newBreaker("TasksServiceCB"),
-//			UsersBreaker:       newBreaker("UsersServiceCB"),
-//		}
-//	}
 func NewProjectService(
 	projectsCollection *mongo.Collection,
 	httpClient *http.Client,
@@ -57,35 +47,25 @@ func NewProjectService(
 	}
 }
 
-// func newBreaker(name string) *gobreaker.CircuitBreaker {
-// 	return gobreaker.NewCircuitBreaker(gobreaker.Settings{
-// 		Name:        name,
-// 		MaxRequests: 1,
-// 		Timeout:     2 * time.Second,
-// 		ReadyToTrip: func(counts gobreaker.Counts) bool {
-// 			return counts.ConsecutiveFailures > 3
-// 		},
-// 		OnStateChange: func(name string, from, to gobreaker.State) {
-// 			log.Printf("Circuit Breaker '%s' changed from '%s' to '%s'\n", name, from.String(), to.String())
-// 		},
-// 	})
-// }
-
 // CreateProject creates a new project with the specified parameters.
 func (s *ProjectService) CreateProject(name string, description string, expectedEndDate time.Time, minMembers, maxMembers int, managerID primitive.ObjectID) (*models.Project, error) {
 	var existingProject models.Project
 	err := s.ProjectsCollection.FindOne(context.Background(), bson.M{"name": name}).Decode(&existingProject)
 	if err == nil {
+		logging.Logger.Warnf("Attempted to create project with existing name: %s", name)
 		return nil, errors.New("project with the same name already exists")
 	}
 
 	if err != mongo.ErrNoDocuments {
+		logging.Logger.Errorf("Database error when checking for existing project '%s': %v", name, err)
 		return nil, fmt.Errorf("database error: %v", err)
 	}
 	if minMembers < 1 || maxMembers < minMembers {
+		logging.Logger.Warnf("Invalid member constraints for new project '%s': minMembers=%d, maxMembers=%d", name, minMembers, maxMembers)
 		return nil, fmt.Errorf("invalid member constraints: minMembers=%d, maxMembers=%d", minMembers, maxMembers)
 	}
 	if expectedEndDate.Before(time.Now()) {
+		logging.Logger.Warnf("Invalid expected end date for new project '%s': %v (before now)", name, expectedEndDate)
 		return nil, fmt.Errorf("expected end date must be in the future")
 	}
 
@@ -106,10 +86,12 @@ func (s *ProjectService) CreateProject(name string, description string, expected
 
 	result, err := s.ProjectsCollection.InsertOne(context.Background(), project)
 	if err != nil {
+		logging.Logger.Errorf("Failed to insert new project '%s' into database: %v", name, err)
 		return nil, fmt.Errorf("failed to create project: %v", err)
 	}
 
 	project.ID = result.InsertedID.(primitive.ObjectID)
+	logging.Logger.Infof("New project '%s' created successfully with ID: %s", project.Name, project.ID.Hex())
 	return project, nil
 }
 
@@ -118,13 +100,13 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, usern
 	var project models.Project
 	err := s.ProjectsCollection.FindOne(context.Background(), bson.M{"_id": projectID}).Decode(&project)
 	if err != nil {
-		log.Printf("Error finding project: %v\n", err)
+		logging.Logger.Errorf("Error finding project %s: %v", projectID.Hex(), err)
 		return fmt.Errorf("project not found: %v", err)
 	}
+	logging.Logger.Infof("Attempting to add members %v to project %s", usernames, projectID.Hex())
 
-	// Provera maksimalnog broja članova
 	if len(project.Members)+len(usernames) > project.MaxMembers {
-		log.Println("Maximum number of members reached for the project")
+		logging.Logger.Warnf("Maximum number of members reached for project %s. Current members: %d, trying to add: %d, max: %d", projectID.Hex(), len(project.Members), len(usernames), project.MaxMembers)
 		return fmt.Errorf("maximum number of members reached for the project")
 	}
 
@@ -139,12 +121,12 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, usern
 		if !existingMemberUsernames[username] {
 			newUsernames = append(newUsernames, username)
 		} else {
-			log.Printf("Member %s is already in the project, skipping.\n", username)
+			logging.Logger.Infof("Member %s is already in the project, skipping.", username)
 		}
 	}
 
 	if len(newUsernames) == 0 {
-		log.Println("No new members to add.")
+		logging.Logger.Info("No new members to add.")
 		return fmt.Errorf("all provided members are already part of the project")
 	}
 
@@ -153,30 +135,30 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, usern
 
 	for _, username := range newUsernames {
 		url := fmt.Sprintf("%s/api/users/member/%s", usersServiceURL, username)
-		log.Printf("Fetching user data from: %s\n", url)
+		logging.Logger.Infof("Fetching user data from: %s", url)
 
 		userData, err := s.UsersBreaker.Execute(func() (interface{}, error) {
 			req, err := http.NewRequest("GET", url, nil)
 			if err != nil {
-				log.Printf("Error creating request for user %s: %v\n", username, err)
+				logging.Logger.Errorf("Error creating request for user %s: %v", username, err)
 				return nil, err
 			}
 
 			resp, err := s.HTTPClient.Do(req)
 			if err != nil {
-				log.Printf("Failed to fetch member %s: %v\n", username, err)
+				logging.Logger.Errorf("Failed to fetch member %s: %v", username, err)
 				return nil, err
 			}
 			defer resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
-				log.Printf("Failed to fetch member %s, status code: %d\n", username, resp.StatusCode)
+				logging.Logger.Errorf("Failed to fetch member %s, status code: %d", username, resp.StatusCode)
 				return nil, fmt.Errorf("failed to fetch member %s", username)
 			}
 
 			var user models.Member
 			if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
-				log.Printf("Failed to decode member %s: %v\n", username, err)
+				logging.Logger.Errorf("Failed to decode member %s: %v", username, err)
 				return nil, err
 			}
 
@@ -184,38 +166,27 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, usern
 		})
 
 		if err != nil {
-			log.Printf("User service unavailable or failed for %s: %v\n", username, err)
+			logging.Logger.Errorf("User service unavailable or failed for %s: %v", username, err)
 			return fmt.Errorf("failed to fetch user data for %s: fallback activated", username)
 		}
 
 		members = append(members, userData.(models.Member))
-
-		/*
-			// Alternativa: blaži fallback - dodaj sve koje možeš, preskoči ostale
-			if err != nil {
-				log.Printf("Skipping user %s due to user service error: %v\n", username, err)
-				continue
-			}
-			members = append(members, userData.(models.Member))
-		*/
 	}
 
-	// Ako niko nije uspešno dodat (korisno u fallback varijanti)
 	if len(members) == 0 {
-		log.Println("No new members were added due to user service failures.")
+		logging.Logger.Info("No new members were added due to user service failures.")
 		return fmt.Errorf("no new members were added")
 	}
 
-	// Ažuriranje baze sa novim članovima
 	filter := bson.M{"_id": projectID}
 	update := bson.M{"$push": bson.M{"members": bson.M{"$each": members}}}
 	_, err = s.ProjectsCollection.UpdateOne(context.Background(), filter, update)
 	if err != nil {
-		log.Printf("Error updating project members: %v\n", err)
+		logging.Logger.Errorf("Error updating project members: %v", err)
 		return err
 	}
 
-	log.Println("Members successfully added to the project.")
+	logging.Logger.Info("Members successfully added to the project.")
 	return nil
 }
 
@@ -228,20 +199,19 @@ func (s *ProjectService) sendNotification(member models.Member, message string) 
 
 	notificationData, err := json.Marshal(notification)
 	if err != nil {
-		fmt.Printf("Error marshaling notification data: %v\n", err)
+		logging.Logger.Errorf("Error marshaling notification data: %v", err)
 		return nil
 	}
 
-	// Učitaj URL iz .env fajla
 	notificationURL := os.Getenv("NOTIFICATIONS_SERVICE_URL")
 	if notificationURL == "" {
-		fmt.Println("Notification service URL is not set in .env")
+		logging.Logger.Errorf("Notification service URL is not set in .env")
 		return fmt.Errorf("notification service URL is not configured")
 	}
 
 	req, err := http.NewRequest("POST", notificationURL, bytes.NewBuffer(notificationData))
 	if err != nil {
-		fmt.Printf("Error creating new request: %v\n", err)
+		logging.Logger.Errorf("Error creating new request: %v", err)
 		return nil
 	}
 
@@ -250,17 +220,17 @@ func (s *ProjectService) sendNotification(member models.Member, message string) 
 
 	resp, err := s.HTTPClient.Do(req)
 	if err != nil {
-		fmt.Printf("Error sending HTTP request: %v\n", err)
+		logging.Logger.Errorf("Error sending HTTP request: %v", err)
 		return nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
-		fmt.Printf("Failed to create notification, status code: %d\n", resp.StatusCode)
+		logging.Logger.Errorf("Failed to create notification, status code: %d", resp.StatusCode)
 		return nil
 	}
 
-	fmt.Printf("Notification successfully sent for member: %s\n", member.Username)
+	logging.Logger.Infof("Notification successfully sent for member: %s", member.Username)
 	return nil
 }
 
@@ -268,7 +238,7 @@ func (s *ProjectService) sendNotification(member models.Member, message string) 
 func (s *ProjectService) GetProjectMembers(ctx context.Context, projectID string) ([]bson.M, error) {
 	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
 	if err != nil {
-		fmt.Println("Invalid project ID format:", err)
+		logging.Logger.Errorf("Invalid project ID format: %v", err)
 		return nil, err
 	}
 
@@ -278,7 +248,7 @@ func (s *ProjectService) GetProjectMembers(ctx context.Context, projectID string
 
 	err = s.ProjectsCollection.FindOne(ctx, bson.M{"_id": projectObjectID}).Decode(&project)
 	if err != nil {
-		fmt.Println("Error fetching project members from database:", err)
+		logging.Logger.Errorf("Error fetching project members from database: %v", err)
 		return nil, err
 	}
 
@@ -316,8 +286,8 @@ func (s *ProjectService) GetAllUsers() ([]models.Member, error) {
 
 	// Fallback ako je circuit breaker otvoren ili poziv nije uspeo
 	if err != nil {
-		log.Println("[Fallback] Returning empty user list due to error:", err)
-		return []models.Member{}, nil // ili eventualno nil, err ako želiš da to propagiraš
+		logging.Logger.Warnf("[Fallback] Returning empty user list due to error: %v", err)
+		return []models.Member{}, nil
 	}
 
 	return result.([]models.Member), nil
@@ -327,19 +297,19 @@ func (s *ProjectService) GetAllUsers() ([]models.Member, error) {
 func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID, memberID string) error {
 	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
 	if err != nil {
-		log.Println("Invalid project ID format")
+		logging.Logger.Warnf("Invalid project ID format: %v", err)
 		return fmt.Errorf("invalid project ID format")
 	}
 
 	memberObjectID, err := primitive.ObjectIDFromHex(memberID)
 	if err != nil {
-		log.Println("Invalid member ID format")
+		logging.Logger.Warnf("Invalid member ID format: %v", err)
 		return fmt.Errorf("invalid member ID format")
 	}
 
 	taskServiceURL := os.Getenv("TASKS_SERVICE_URL")
 	if taskServiceURL == "" {
-		log.Println("TASKS_SERVICE_URL is not set")
+		logging.Logger.Warnf("TASKS_SERVICE_URL is not set")
 		return fmt.Errorf("task service URL is not configured")
 	}
 
@@ -373,12 +343,12 @@ func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID,
 		return r.HasActiveTasks, nil
 	})
 	if err != nil {
-		log.Printf("Circuit breaker error or fallback triggered: %v", err)
+		logging.Logger.Warnf("Circuit breaker error or fallback triggered: %v", err)
 		return fmt.Errorf("could not verify task assignment: %v", err)
 	}
 
 	if result.(bool) {
-		log.Println("Cannot remove member assigned to an active task")
+		logging.Logger.Warnf("Cannot remove member assigned to an active task")
 		return fmt.Errorf("cannot remove member assigned to an active task")
 	}
 
@@ -388,20 +358,20 @@ func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID,
 
 	resultUpdate, err := s.ProjectsCollection.UpdateOne(ctx, filter, update)
 	if err != nil {
-		log.Println("Failed to remove member from project")
+		logging.Logger.Errorf("Failed to remove member from project: %v", err)
 		return fmt.Errorf("failed to remove member from project")
 	}
 
 	if resultUpdate.ModifiedCount == 0 {
-		log.Println("Member not found in project or already removed")
+		logging.Logger.Warnf("Member not found in project or already removed")
 		return fmt.Errorf("member not found in project or already removed")
 	}
 
-	log.Println("Member successfully removed from project.")
+	logging.Logger.Infof("Member successfully removed from project.")
 	// ✅ Dohvatanje Member objekta iz user servisa
 	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
 	if usersServiceURL == "" {
-		log.Println("USERS_SERVICE_URL is not set")
+		logging.Logger.Warnf("USERS_SERVICE_URL is not set")
 	} else {
 		memberURL := fmt.Sprintf("%s/api/users/member/id/%s", usersServiceURL, memberID)
 
@@ -420,20 +390,20 @@ func (s *ProjectService) RemoveMemberFromProject(ctx context.Context, projectID,
 								return nil, s.sendNotification(member, message)
 							})
 							if err != nil {
-								log.Printf("Failed to send removal notification to %s: %v", member.Username, err)
+								logging.Logger.Errorf("Failed to send removal notification to %s: %v", member.Username, err)
 							}
 						}()
 					} else {
-						log.Printf("Failed to decode member response: %v", err)
+						logging.Logger.Errorf("Failed to decode member response: %v", err)
 					}
 				} else {
-					log.Printf("User service returned status %d when fetching member info", resp.StatusCode)
+					logging.Logger.Warnf("User service returned status %d when fetching member info", resp.StatusCode)
 				}
 			} else {
-				log.Printf("Failed to fetch member from user service: %v", err)
+				logging.Logger.Errorf("Failed to fetch member from user service: %v", err)
 			}
 		} else {
-			log.Printf("Failed to create request to user service: %v", err)
+			logging.Logger.Errorf("Failed to create request to user service: %v", err)
 		}
 	}
 
@@ -445,11 +415,13 @@ func (s *ProjectService) GetAllProjects() ([]models.Project, error) {
 	var projects []models.Project
 	cursor, err := s.ProjectsCollection.Find(context.Background(), bson.M{})
 	if err != nil {
+		logging.Logger.Errorf("Unsuccessful procurement of projects: %v", err)
 		return nil, fmt.Errorf("unsuccessful procurement of projects: %v", err)
 	}
 	defer cursor.Close(context.Background())
 
 	if err = cursor.All(context.Background(), &projects); err != nil {
+		logging.Logger.Errorf("Unsuccessful decoding of projects: %v", err)
 		return nil, fmt.Errorf("unsuccessful decoding of projects: %v", err)
 	}
 
@@ -459,7 +431,7 @@ func (s *ProjectService) GetAllProjects() ([]models.Project, error) {
 func (s *ProjectService) GetProjectByID(projectID string) (*models.Project, error) {
 	objectId, err := primitive.ObjectIDFromHex(projectID)
 	if err != nil {
-		fmt.Println("Invalid project ID format:", projectID)
+		logging.Logger.Errorf("Invalid project ID format: %s: %v", projectID, err)
 		return nil, fmt.Errorf("invalid project ID format")
 	}
 
@@ -467,8 +439,10 @@ func (s *ProjectService) GetProjectByID(projectID string) (*models.Project, erro
 	err = s.ProjectsCollection.FindOne(context.Background(), bson.M{"_id": objectId}).Decode(&project)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
+			logging.Logger.Warnf("Project not found: %s", projectID)
 			return nil, fmt.Errorf("project not found")
 		}
+		logging.Logger.Errorf("Error fetching project: %v", err)
 		return nil, fmt.Errorf("error fetching project: %v", err)
 	}
 	return &project, nil
@@ -478,12 +452,13 @@ func (s *ProjectService) GetTasksForProject(projectID string, role string, authT
 	// Uzimamo URL za tasks servis iz okruženja
 	tasksServiceURL := os.Getenv("TASKS_SERVICE_URL")
 	if tasksServiceURL == "" {
+		logging.Logger.Errorf("TASKS_SERVICE_URL not set")
 		return nil, fmt.Errorf("TASKS_SERVICE_URL not set")
 	}
 
 	// Formiramo pun URL za API poziv
 	url := fmt.Sprintf("%s/api/tasks/project/%s", tasksServiceURL, projectID)
-	fmt.Printf("Fetching tasks from: %s\n", url)
+	logging.Logger.Infof("Fetching tasks from: %s", url)
 
 	// Pozivamo HTTP zahtev unutar circuit breaker-a
 	result, err := s.TasksBreaker.Execute(func() (interface{}, error) {
@@ -500,22 +475,21 @@ func (s *ProjectService) GetTasksForProject(projectID string, role string, authT
 		// Šaljemo HTTP zahtev koristeći HTTP klijent iz servisa
 		resp, err := s.HTTPClient.Do(req)
 		if err != nil {
-			log.Printf("Failed to fetch tasks for project %s: %v\n", projectID, err)
+			logging.Logger.Errorf("Failed to fetch tasks for project %s: %v", projectID, err)
 			return nil, fmt.Errorf("failed to fetch tasks: %v", err)
 		}
 		// Obezbeđujemo zatvaranje response body-a nakon što završi obrada
 		defer resp.Body.Close()
 
-		// Proveravamo da li je statusni kod 200 OK
 		if resp.StatusCode != http.StatusOK {
-			log.Printf("Failed to fetch tasks for project %s, status code: %d\n", projectID, resp.StatusCode)
+			logging.Logger.Errorf("Failed to fetch tasks for project %s, status code: %d", projectID, resp.StatusCode)
 			return nil, fmt.Errorf("failed to fetch tasks, status code: %d", resp.StatusCode)
 		}
 
 		// Dekodiramo JSON odgovor u slice mapa (lista zadataka)
 		var tasks []map[string]interface{}
 		if err := json.NewDecoder(resp.Body).Decode(&tasks); err != nil {
-			log.Printf("Failed to decode tasks response: %v\n", err)
+			logging.Logger.Errorf("Failed to decode tasks response: %v", err)
 			return nil, fmt.Errorf("failed to decode tasks: %v", err)
 		}
 
@@ -525,8 +499,7 @@ func (s *ProjectService) GetTasksForProject(projectID string, role string, authT
 
 	// Ako je došlo do greške unutar circuit breaker-a (npr. servis ne radi ili je breaker otvoren)
 	if err != nil {
-		log.Printf("[Fallback] Returning empty tasks list due to error: %v\n", err)
-		// Vraćamo fallback vrednost - praznu listu zadataka i bez greške (ili možeš i grešku ako želiš da propagiraš)
+		logging.Logger.Warnf("[Fallback] Returning empty tasks list due to error: %v", err)
 		return []map[string]interface{}{}, nil
 	}
 
@@ -538,6 +511,7 @@ func (s *ProjectService) getUserIDByUsername(username string) (primitive.ObjectI
 	// Uzimamo URL users servisa iz okruženja
 	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
 	if usersServiceURL == "" {
+		logging.Logger.Errorf("USERS_SERVICE_URL not set")
 		return primitive.NilObjectID, fmt.Errorf("USERS_SERVICE_URL not set")
 	}
 
@@ -584,7 +558,7 @@ func (s *ProjectService) getUserIDByUsername(username string) (primitive.ObjectI
 
 	// Ako breaker ne uspe, vraćamo prazni ID i grešku
 	if err != nil {
-		log.Printf("[Fallback] Could not fetch user ID for '%s': %v\n", username, err)
+		logging.Logger.Warnf("[Fallback] Could not fetch user ID for '%s': %v", username, err)
 		return primitive.NilObjectID, err
 	}
 
@@ -596,6 +570,7 @@ func (s *ProjectService) getUserRoleByUsername(username string) (string, error) 
 	// Dohvatanje baze URL-a users servisa iz okruženja
 	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
 	if usersServiceURL == "" {
+		logging.Logger.Errorf("USERS_SERVICE_URL not set")
 		return "", fmt.Errorf("USERS_SERVICE_URL not set")
 	}
 
@@ -636,7 +611,7 @@ func (s *ProjectService) getUserRoleByUsername(username string) (string, error) 
 
 	// Ako je došlo do greške (npr. breaker otvoren), logujemo i vraćamo prazan string i grešku
 	if err != nil {
-		log.Printf("[Fallback] Could not fetch role for user '%s': %v\n", username, err)
+		logging.Logger.Warnf("[Fallback] Could not fetch role for user '%s': %v", username, err)
 		return "", err
 	}
 
@@ -650,14 +625,14 @@ func (s *ProjectService) GetProjectsByUsername(username string) ([]models.Projec
 	// ✅ Pokušaj da dobaviš userID, u slučaju greške vrati prazan niz
 	userID, err := s.getUserIDByUsername(username)
 	if err != nil {
-		log.Printf("[Fallback] Failed to get user ID for '%s': %v\n", username, err)
+		logging.Logger.Warnf("[Fallback] Failed to get user ID for '%s': %v", username, err)
 		return []models.Project{}, nil
 	}
 
 	// ✅ Pokušaj da dobaviš user rolu, fallback na prazan niz ako ne uspe
 	role, err := s.getUserRoleByUsername(username)
 	if err != nil {
-		log.Printf("[Fallback] Failed to get user role for '%s': %v\n", username, err)
+		logging.Logger.Warnf("[Fallback] Failed to get user role for '%s': %v", username, err)
 		return []models.Project{}, nil
 	}
 
@@ -669,12 +644,12 @@ func (s *ProjectService) GetProjectsByUsername(username string) ([]models.Projec
 		filter = bson.M{"members.username": username}
 	}
 
-	log.Printf("Executing MongoDB query with filter: %v", filter)
+	logging.Logger.Infof("Executing MongoDB query with filter: %v", filter)
 
 	// ✅ Pokreni MongoDB query
 	cursor, err := s.ProjectsCollection.Find(context.Background(), filter)
 	if err != nil {
-		log.Printf("Error fetching projects from MongoDB: %v", err)
+		logging.Logger.Errorf("Error fetching projects from MongoDB: %v", err)
 		return []models.Project{}, nil // fallback ako padne upit
 	}
 	defer cursor.Close(context.Background())
@@ -683,7 +658,7 @@ func (s *ProjectService) GetProjectsByUsername(username string) ([]models.Projec
 	for cursor.Next(context.Background()) {
 		var project models.Project
 		if err := cursor.Decode(&project); err != nil {
-			log.Printf("Error decoding project document: %v", err)
+			logging.Logger.Errorf("Error decoding project document: %v", err)
 			return []models.Project{}, nil // fallback na grešku dekodiranja
 		}
 		projects = append(projects, project)
@@ -691,11 +666,11 @@ func (s *ProjectService) GetProjectsByUsername(username string) ([]models.Projec
 
 	// ✅ Proveri greške kursora
 	if err := cursor.Err(); err != nil {
-		log.Printf("Cursor error: %v", err)
+		logging.Logger.Errorf("Cursor error: %v", err)
 		return []models.Project{}, nil
 	}
 
-	log.Printf("Found %d projects for username %s", len(projects), username)
+	logging.Logger.Infof("Found %d projects for username %s", len(projects), username)
 	return projects, nil
 }
 
@@ -703,7 +678,7 @@ func (s *ProjectService) DeleteProjectAndTasks(ctx context.Context, projectID st
 	// 1. Validacija i konverzija projectID
 	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
 	if err != nil {
-		log.Printf("Invalid project ID format: %v", projectID)
+		logging.Logger.Warnf("Invalid project ID format: %v", projectID)
 		return fmt.Errorf("invalid project ID format")
 	}
 
@@ -713,16 +688,17 @@ func (s *ProjectService) DeleteProjectAndTasks(ctx context.Context, projectID st
 	err = s.ProjectsCollection.FindOne(ctx, filter).Decode(&project)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			log.Printf("Project not found: %v", projectID)
+			logging.Logger.Warnf("Project not found: %v", projectID)
 			return fmt.Errorf("project not found")
 		}
-		log.Printf("Failed to fetch project: %v", err)
+		logging.Logger.Errorf("Failed to fetch project: %v", err)
 		return fmt.Errorf("failed to fetch project: %v", err)
 	}
 
 	// 3. Priprema URL-a za tasks-service
 	taskServiceURL := os.Getenv("TASKS_SERVICE_URL")
 	if taskServiceURL == "" {
+		logging.Logger.Errorf("TASKS_SERVICE_URL not set")
 		return fmt.Errorf("TASKS_SERVICE_URL not set")
 	}
 	url := fmt.Sprintf("%s/api/tasks/project/%s", taskServiceURL, projectID)
@@ -732,7 +708,7 @@ func (s *ProjectService) DeleteProjectAndTasks(ctx context.Context, projectID st
 		// Kreiranje HTTP DELETE zahteva
 		req, err := http.NewRequest(http.MethodDelete, url, nil)
 		if err != nil {
-			log.Printf("Failed to create request to tasks-service: %v", err)
+			logging.Logger.Errorf("Failed to create request to tasks-service: %v", err)
 			return nil, fmt.Errorf("failed to create request: %v", err)
 		}
 
@@ -743,14 +719,13 @@ func (s *ProjectService) DeleteProjectAndTasks(ctx context.Context, projectID st
 		// Slanje HTTP zahteva
 		resp, err := s.HTTPClient.Do(req)
 		if err != nil {
-			log.Printf("Failed to contact tasks-service: %v", err)
+			logging.Logger.Errorf("Failed to contact tasks-service: %v", err)
 			return nil, fmt.Errorf("failed to contact tasks-service: %v", err)
 		}
 		defer resp.Body.Close()
 
-		// Provera statusnog koda
 		if resp.StatusCode != http.StatusOK {
-			log.Printf("Tasks-service returned non-OK status: %v", resp.Status)
+			logging.Logger.Errorf("Tasks-service returned non-OK status: %v", resp.Status)
 			return nil, fmt.Errorf("task service returned error: %v", resp.Status)
 		}
 
@@ -759,7 +734,7 @@ func (s *ProjectService) DeleteProjectAndTasks(ctx context.Context, projectID st
 
 	// 5. Fallback ako breaker odbije ili task servis padne
 	if err != nil {
-		log.Printf("[Fallback] Tasks were not deleted due to error: %v", err)
+		logging.Logger.Warnf("[Fallback] Tasks were not deleted due to error: %v", err)
 		// Možemo odlučiti da prekinemo ceo proces ili samo logujemo
 		// return fmt.Errorf("failed to delete tasks: %v", err)
 	}
@@ -767,11 +742,11 @@ func (s *ProjectService) DeleteProjectAndTasks(ctx context.Context, projectID st
 	// 6. Brisanje projekta iz baze
 	_, err = s.ProjectsCollection.DeleteOne(ctx, filter)
 	if err != nil {
-		log.Printf("Failed to delete project: %v", err)
+		logging.Logger.Errorf("Failed to delete project: %v", err)
 		return fmt.Errorf("failed to delete project: %v", err)
 	}
 
-	log.Printf("Successfully deleted project and (if possible) related tasks for ID: %s", projectID)
+	logging.Logger.Infof("Successfully deleted project and (if possible) related tasks for ID: %s", projectID)
 	return nil
 }
 
@@ -779,7 +754,7 @@ func (s *ProjectService) GetAllMembers() ([]models.Member, error) {
 	// 1. Učitaj URL users-servisa iz .env fajla
 	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
 	if usersServiceURL == "" {
-		log.Println("USERS_SERVICE_URL is not set in .env file")
+		logging.Logger.Errorf("USERS_SERVICE_URL is not set in .env file")
 		return nil, fmt.Errorf("users-service URL is not configured")
 	}
 
@@ -817,8 +792,8 @@ func (s *ProjectService) GetAllMembers() ([]models.Member, error) {
 
 	// 4. Fallback ako je circuit otvoren ili došlo do greške
 	if err != nil {
-		log.Printf("[Fallback] Returning empty member list due to error: %v", err)
-		return []models.Member{}, nil // ili: return nil, err ako želiš da propagiraš grešku
+		logging.Logger.Warnf("[Fallback] Returning empty member list due to error: %v", err)
+		return []models.Member{}, nil
 	}
 
 	// 5. Konverzija rezultata u očekivani tip
@@ -828,41 +803,44 @@ func (s *ProjectService) GetAllMembers() ([]models.Member, error) {
 func (s *ProjectService) AddTaskToProject(projectID string, taskID string) error {
 	projectObjectID, err := primitive.ObjectIDFromHex(projectID)
 	if err != nil {
+		logging.Logger.Errorf("Invalid project ID format: %v", err)
 		return fmt.Errorf("invalid project ID format: %v", err)
 	}
 
 	taskObjectID, err := primitive.ObjectIDFromHex(taskID)
 	if err != nil {
+		logging.Logger.Errorf("Invalid task ID format: %v", err)
 		return fmt.Errorf("invalid task ID format: %v", err)
 	}
 
-	log.Printf("Received request to add task %s to project %s", taskID, projectID)
+	logging.Logger.Infof("Received request to add task %s to project %s", taskID, projectID)
 
 	// Ažuriranje projekta dodavanjem ID-ja zadatka
 	filter := bson.M{"_id": projectObjectID}
 	update := bson.M{"$push": bson.M{"taskIDs": taskObjectID}}
 
-	log.Printf("MongoDB filter: %+v", filter)
-	log.Printf("MongoDB update: %+v", update)
+	logging.Logger.Debugf("MongoDB filter: %+v", filter)
+	logging.Logger.Debugf("MongoDB update: %+v", update)
 
 	result, err := s.ProjectsCollection.UpdateOne(context.Background(), filter, update)
 	if err != nil {
-		log.Printf("Failed to update project with task ID: %v", err)
+		logging.Logger.Errorf("Failed to update project with task ID: %v", err)
 		return fmt.Errorf("failed to update project with task ID: %v", err)
 	}
 
 	if result.ModifiedCount == 0 {
-		log.Printf("No project was updated. Possible that project ID %s does not exist.", projectID)
+		logging.Logger.Warnf("No project was updated. Possible that project ID %s does not exist.", projectID)
 		return fmt.Errorf("no project found with ID %s", projectID)
 	}
 
-	log.Printf("Task %s successfully added to project %s", taskID, projectID)
+	logging.Logger.Infof("Task %s successfully added to project %s", taskID, projectID)
 	return nil
 }
 
 func (s *ProjectService) RemoveUserFromProjects(userID string, role string, authToken string) error {
 	tasksServiceURL := os.Getenv("TASKS_SERVICE_URL")
 	if tasksServiceURL == "" {
+		logging.Logger.Errorf("TASKS_SERVICE_URL not set")
 		return fmt.Errorf("TASKS_SERVICE_URL not set")
 	}
 
@@ -870,7 +848,7 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string, auth
 		projectFilter := bson.M{"manager_id": userID}
 		cursor, err := s.ProjectsCollection.Find(context.Background(), projectFilter)
 		if err != nil {
-			log.Printf("Error fetching projects for manager %s: %v\n", userID, err)
+			logging.Logger.Errorf("Error fetching projects for manager %s: %v", userID, err)
 			return fmt.Errorf("failed to fetch projects")
 		}
 		defer cursor.Close(context.Background())
@@ -878,7 +856,7 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string, auth
 		for cursor.Next(context.Background()) {
 			var project models.Project
 			if err := cursor.Decode(&project); err != nil {
-				log.Printf("Error decoding project: %v\n", err)
+				logging.Logger.Errorf("Error decoding project: %v", err)
 				continue
 			}
 
@@ -911,17 +889,18 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string, auth
 			})
 
 			if err != nil {
-				log.Printf("Circuit breaker error or fallback triggered for task service: %v", err)
+				logging.Logger.Warnf("Circuit breaker error or fallback triggered for task service: %v", err)
 				// Fallback ponašanje: ne dozvoli uklanjanje ako ne može da proveri zadatke
 				return fmt.Errorf("failed to check tasks for project %s", project.ID.Hex())
 			}
 
 			r, ok := result.(struct{ HasUnfinishedTasks bool })
 			if !ok {
+				logging.Logger.Errorf("Unexpected result type from circuit breaker: %T", result)
 				return fmt.Errorf("unexpected result type from circuit breaker")
 			}
 			if r.HasUnfinishedTasks {
-				log.Printf("Cannot remove manager %s: unfinished tasks in project %s\n", userID, project.ID.Hex())
+				logging.Logger.Warnf("Cannot remove manager %s: unfinished tasks in project %s", userID, project.ID.Hex())
 				return fmt.Errorf("manager cannot be removed from project %s due to unfinished tasks", project.ID.Hex())
 			}
 
@@ -930,9 +909,10 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string, auth
 		update := bson.M{"$unset": bson.M{"manager_id": ""}}
 		_, err = s.ProjectsCollection.UpdateMany(context.Background(), projectFilter, update)
 		if err != nil {
-			log.Printf("Failed to remove manager %s from projects: %v\n", userID, err)
+			logging.Logger.Errorf("Failed to remove manager %s from projects: %v", userID, err)
 			return fmt.Errorf("failed to update projects")
 		}
+		logging.Logger.Infof("Manager %s successfully removed from all managed projects.", userID)
 
 	}
 
@@ -943,26 +923,26 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string, auth
 
 		req, err := http.NewRequest("GET", getMemberURL, nil)
 		if err != nil {
-			log.Printf("Error creating request to users-service: %v", err)
+			logging.Logger.Errorf("Error creating request to users-service: %v", err)
 			return fmt.Errorf("failed to fetch user data")
 		}
 		req.Header.Set("Authorization", "Bearer "+authToken)
 
 		resp, err := s.HTTPClient.Do(req)
 		if err != nil {
-			log.Printf("Error contacting users-service: %v", err)
+			logging.Logger.Errorf("Error contacting users-service: %v", err)
 			return fmt.Errorf("failed to fetch user data")
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			log.Printf("users-service returned status %d", resp.StatusCode)
+			logging.Logger.Errorf("users-service returned status %d", resp.StatusCode)
 			return fmt.Errorf("failed to fetch user data")
 		}
 
 		var member models.Member
 		if err := json.NewDecoder(resp.Body).Decode(&member); err != nil {
-			log.Printf("Failed to decode user data: %v", err)
+			logging.Logger.Errorf("Failed to decode user data: %v", err)
 			return fmt.Errorf("invalid user data from users-service")
 		}
 
@@ -970,11 +950,11 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string, auth
 		update := bson.M{"$pull": bson.M{"members": bson.M{"_id": userID}}}
 		_, err = s.ProjectsCollection.UpdateMany(context.Background(), filter, update)
 		if err != nil {
-			log.Printf("Failed to remove user %s from projects: %v\n", userID, err)
+			logging.Logger.Errorf("Failed to remove user %s from projects: %v", userID, err)
 			return fmt.Errorf("failed to update projects")
 		}
 
-		log.Printf("User %s successfully removed from all projects", userID)
+		logging.Logger.Infof("User %s successfully removed from all projects", userID)
 
 		// Notifikacija samo za member-e
 		message := "You have been removed from one or more projects."
@@ -982,7 +962,7 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string, auth
 			return nil, s.sendNotification(member, message)
 		})
 		if err != nil {
-			log.Printf("Failed to send notification to member %s: %v", member.Username, err)
+			logging.Logger.Errorf("Failed to send notification to member %s: %v", member.Username, err)
 		}
 	}
 
@@ -992,6 +972,7 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string, auth
 func (s *ProjectService) GetUserProjects(username string) ([]map[string]interface{}, error) {
 	usersServiceURL := os.Getenv("USERS_SERVICE_URL")
 	if usersServiceURL == "" {
+		logging.Logger.Errorf("USERS_SERVICE_URL not set")
 		return nil, fmt.Errorf("USERS_SERVICE_URL not set")
 	}
 
@@ -1024,13 +1005,14 @@ func (s *ProjectService) GetUserProjects(username string) ([]map[string]interfac
 		return data.ID, nil
 	})
 	if err != nil {
-		log.Printf("UsersBreaker error while fetching ID: %v", err)
+		logging.Logger.Warnf("UsersBreaker error while fetching ID: %v", err)
 		return nil, fmt.Errorf("could not fetch user ID: %v", err)
 	}
 
 	userIDHex := idResult.(string)
 	userID, err := primitive.ObjectIDFromHex(userIDHex)
 	if err != nil {
+		logging.Logger.Errorf("Invalid user ID format from service: %v", err)
 		return nil, fmt.Errorf("invalid user ID format: %v", err)
 	}
 
@@ -1063,7 +1045,7 @@ func (s *ProjectService) GetUserProjects(username string) ([]map[string]interfac
 		return data.Role, nil
 	})
 	if err != nil {
-		log.Printf("UsersBreaker error while fetching role: %v", err)
+		logging.Logger.Warnf("UsersBreaker error while fetching role: %v", err)
 		return nil, fmt.Errorf("could not fetch user role: %v", err)
 	}
 
@@ -1080,6 +1062,7 @@ func (s *ProjectService) GetUserProjects(username string) ([]map[string]interfac
 	// ➤ 4. Nađi projekte
 	cursor, err := s.ProjectsCollection.Find(context.Background(), filter)
 	if err != nil {
+		logging.Logger.Errorf("Failed to fetch projects from DB: %v", err)
 		return nil, fmt.Errorf("failed to fetch projects: %v", err)
 	}
 	defer cursor.Close(context.Background())
@@ -1088,6 +1071,7 @@ func (s *ProjectService) GetUserProjects(username string) ([]map[string]interfac
 	for cursor.Next(context.Background()) {
 		var project models.Project
 		if err := cursor.Decode(&project); err != nil {
+			logging.Logger.Errorf("Error decoding project document: %v", err)
 			continue
 		}
 		projects = append(projects, map[string]interface{}{
@@ -1096,6 +1080,7 @@ func (s *ProjectService) GetUserProjects(username string) ([]map[string]interfac
 			"description": project.Description,
 		})
 	}
+	logging.Logger.Infof("Successfully retrieved projects for user %s", username)
 
 	return projects, nil
 }

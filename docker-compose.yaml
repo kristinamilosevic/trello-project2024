@@ -31,6 +31,8 @@ services:
     depends_on:
       - cassandra
     restart: always
+    volumes: 
+      - ./backend/notifications-service/logs:/app/logs
   
   cassandra:
     image: cassandra:4.1
@@ -58,11 +60,17 @@ services:
       - "${TASKS_SERVICE_PORT}:${TASKS_SERVICE_INTERNAL_PORT}"
     environment:
       - MONGO_TASKS_URI=${MONGO_TASKS_URI}
+      - LOG_PATH=/app/logs/tasks.log
+      - LOG_LEVEL=debug 
     depends_on:
       - mongo-tasks
     networks:
       - app-network
     restart: on-failure
+    volumes: 
+      - ./backend/tasks-service/logs:/app/logs
+
+
 
   projects-service:
     build:
@@ -78,6 +86,8 @@ services:
     networks:
       - app-network
     restart: on-failure
+    volumes:
+      - ./backend/projects-service/logs:/app/logs
 
   users-service:
     build:
@@ -92,6 +102,7 @@ services:
       - mongo-users
     volumes:
       - ./backend/blacklist.txt:/app/blacklist.txt
+      - ./backend/users-service/logs:/app/logs
     networks:
       - app-network
 

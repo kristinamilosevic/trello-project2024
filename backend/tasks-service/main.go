@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"os"
 
-	"log"
+	// Ostavljamo ga zasad, ali nećemo ga koristiti za logovanje aplikacije
 	"net/http"
 	"time"
 	"trello-project/microservices/tasks-service/handlers"
+	"trello-project/microservices/tasks-service/logging" // Vaš prilagođeni logger
 	"trello-project/microservices/tasks-service/services"
 
 	http_client "trello-project/backend/utils"
@@ -35,9 +36,12 @@ func enableCORS(next http.Handler) http.Handler {
 	})
 }
 func main() {
+	logging.InitLogger() // Inicijalizacija logovanja
+
+	logging.Logger.Info("Event ID: SERVICE_START, Description: Starting Tasks Service...")
 	err := godotenv.Load(".env")
 	if err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
+		logging.Logger.Fatalf("Event ID: ENV_LOAD_ERROR, Description: Error loading .env file: %v", err)
 	}
 
 	mongoURI := os.Getenv("MONGO_URI")
@@ -49,16 +53,17 @@ func main() {
 
 	tasksClient, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
 	if err != nil {
-		log.Fatal("Database connection failed:", err)
+		logging.Logger.Fatalf("Event ID: DB_CONNECTION_FAILED, Description: Database connection for MongoDB failed: %v", err)
 	}
 	defer tasksClient.Disconnect(ctx)
 
 	if err := tasksClient.Ping(ctx, nil); err != nil {
-		log.Fatal("MongoDB connection error:", err)
+		logging.Logger.Fatalf("Event ID: DB_PING_FAILED, Description: MongoDB connection ping error: %v", err)
 	}
+	logging.Logger.Infof("Event ID: DB_CONNECTED, Description: Successfully connected to MongoDB at %s.", mongoURI)
 
 	tasksCollection := tasksClient.Database(mongoDBName).Collection(mongoCollectionName)
-
+	logging.Logger.Infof("Event ID: DB_COLLECTION_SET, Description: Using MongoDB collection: %s/%s", mongoDBName, mongoCollectionName)
 	httpClient := http_client.NewHTTPClient()
 
 	projectsBreaker := gobreaker.NewCircuitBreaker(gobreaker.Settings{
@@ -69,7 +74,7 @@ func main() {
 			return counts.ConsecutiveFailures > 3
 		},
 		OnStateChange: func(name string, from, to gobreaker.State) {
-			log.Printf("Circuit Breaker '%s' changed from '%s' to '%s'\n", name, from.String(), to.String())
+			logging.Logger.Infof("Event ID: CIRCUIT_BREAKER_STATE_CHANGE, Description: Circuit Breaker '%s' changed from '%s' to '%s'", name, from.String(), to.String())
 		},
 	})
 	notificationsbreaker := gobreaker.NewCircuitBreaker(gobreaker.Settings{
@@ -80,7 +85,7 @@ func main() {
 			return counts.ConsecutiveFailures > 3
 		},
 		OnStateChange: func(name string, from, to gobreaker.State) {
-			log.Printf("Circuit Breaker '%s' state changed from %s to %s", name, from.String(), to.String())
+			logging.Logger.Infof("Event ID: CIRCUIT_BREAKER_STATE_CHANGE, Description: Circuit Breaker '%s' state changed from %s to %s", name, from.String(), to.String())
 		},
 	})
 
@@ -118,14 +123,14 @@ func main() {
 	// Pokretanje servera
 	serverPort := os.Getenv("SERVER_PORT")
 	if serverPort == "" {
-		log.Fatal("SERVER_PORT is not set in the environment variables")
+		logging.Logger.Fatalf("Event ID: CONFIG_ERROR, Description: SERVER_PORT is not set in the environment variables.")
 	}
 
 	serverAddress := fmt.Sprintf(":%s", serverPort)
 
-	log.Printf("Server running on http://localhost%s", serverAddress)
+	logging.Logger.Infof("Event ID: SERVER_START_INFO, Description: Server running on http://localhost%s", serverAddress)
 	if err := http.ListenAndServe(serverAddress, enableCORS(r)); err != nil {
-		log.Fatal(err)
+		logging.Logger.Fatalf("Event ID: SERVER_FATAL_ERROR, Description: Server failed to start: %v", err)
 	}
 
 }
