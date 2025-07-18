@@ -290,3 +290,35 @@ func (s *WorkflowService) SetBlockedStatus(taskID string, blocked bool) error {
 
 	return nil
 }
+
+func (s *WorkflowService) GetProjectDependencies(ctx context.Context, projectID string) ([]models.TaskDependencyRelation, error) {
+	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(ctx)
+
+	result, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (interface{}, error) {
+		query := `
+			MATCH (to:Task {projectId: $projectId})-[:DEPENDS_ON]->(from:Task)
+			RETURN from.id AS fromTaskId, to.id AS toTaskId
+		`
+		res, err := tx.Run(ctx, query, map[string]interface{}{"projectId": projectID})
+		if err != nil {
+			return nil, err
+		}
+
+		var deps []models.TaskDependencyRelation
+		for res.Next(ctx) {
+			record := res.Record()
+			deps = append(deps, models.TaskDependencyRelation{
+				FromTaskID: record.Values[0].(string),
+				ToTaskID:   record.Values[1].(string),
+			})
+		}
+		return deps, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result.([]models.TaskDependencyRelation), nil
+}

@@ -113,3 +113,20 @@ func (h *WorkflowHandler) UpdateBlockedStatus(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Blocked status updated successfully"))
 }
+
+func (h *WorkflowHandler) GetProjectDependencies(w http.ResponseWriter, r *http.Request) {
+	projectId := mux.Vars(r)["projectId"]
+	if projectId == "" {
+		http.Error(w, "Missing projectId", http.StatusBadRequest)
+		return
+	}
+
+	deps, err := h.WorkflowService.GetProjectDependencies(r.Context(), projectId)
+	if err != nil {
+		http.Error(w, "Failed to get dependencies: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(deps)
+}
