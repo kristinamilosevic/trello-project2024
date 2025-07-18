@@ -1,15 +1,15 @@
 import { Component } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { CommonModule } from '@angular/common'; // Dodaj CommonModule za *ngIf
-import { FormsModule } from '@angular/forms';   // Dodaj FormsModule za [(ngModel)]
-import { AuthService } from '../services/user/auth.service';
+import { CommonModule } from '@angular/common'; 
+import { FormsModule } from '@angular/forms';  
+import { AuthService } from '../../services/user/auth.service';
 
 @Component({
   standalone: true,
   selector: 'app-reset-password',
   templateUrl: './reset-password.component.html',
   styleUrls: ['./reset-password.component.scss'],
-  imports: [CommonModule, FormsModule], // Ovde dodaj CommonModule i FormsModule
+  imports: [CommonModule, FormsModule],
 })
 export class ResetPasswordComponent {
   newPassword: string = '';

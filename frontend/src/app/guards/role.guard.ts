@@ -15,7 +15,7 @@ export class RoleGuard implements CanActivate {
       return true;
     } else {
       alert('You do not have the required role to access this page.');
-      return false; // Sprečava aktivaciju rute
+      return false;
     }
   }
 }

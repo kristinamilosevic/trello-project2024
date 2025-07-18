@@ -4,7 +4,7 @@
   justify-content: center;
   align-items: center;
   height: 100vh;
-  background-color: #f4f4f9;
+  background-color: white;
   padding: 20px;
 }
 
@@ -22,14 +22,20 @@
   transition: transform 0.3s, box-shadow 0.3s;
 }
 
-
-
 h2 {
   text-align: center;
   color: #85586F;
   margin-bottom: 25px;
   font-size: 24px;
   font-weight: 600;
+}
+
+h3 {
+  font-weight: bold;
+  color: #2c3e50;  
+  font-size: 14px; 
+  margin-bottom: 10px;
+  text-align: left;
 }
 
 .form-group {

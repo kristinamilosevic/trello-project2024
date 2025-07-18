@@ -1,43 +1,99 @@
 .card {
   max-width: 400px;
-  margin: 20px auto;
+  margin: 50px auto 20px auto;
   padding: 20px;
   border: 1px solid #ddd;
-  border-radius: 8px;
+  border-radius: 10px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   background-color: #F8ECD1;
 }
 
 h3 {
   text-align: center;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  color: #85586F;
 }
 
 .member-list {
   list-style-type: none;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.member-list li {
-  margin-bottom: 8px;
+.member-list li label {
+  display: flex;
+  align-items: center;
+  background-color: #F8ECD1;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid #85586F;
+  transition: background-color 0.3s ease;
+  user-select: none;
+}
+
+.member-list li label:hover {
+  background-color: #DEB6AB;
+}
+
+.member-list li input[type="checkbox"] {
+  margin-right: 10px;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #85586F;
+  border-radius: 4px;
+  appearance: none;
+  background-color: white;
+  cursor: pointer;
+  position: relative;
+  transform: none;
+}
+
+.member-list li input[type="checkbox"]:checked {
+  background-color: #85586F;
+  border: 2px solid #85586F;
+}
+
+.member-list li input[type="checkbox"]:checked::after {
+  content: '\2713';
+  font-size: 14px;
+  color: white;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.member-list li label span {
+  font-size: 16px;
+  color: #333;
+  line-height: 1;
 }
 
 button {
   display: block;
   width: 100%;
-  padding: 10px;
+  padding: 12px;
   margin-top: 16px;
   font-size: 16px;
   font-weight: bold;
   background-color: #85586F;
   color: #F8ECD1;
   border: none;
-  border-radius: 5px;
+  border-radius: 8px;
   cursor: pointer;
   transition: background-color 0.3s ease;
 }
 
-button:hover {
+button:disabled {
+  background-color: #C9B3B8;
+  cursor: not-allowed;
+  color: #6E5D61;
+}
+
+button:hover:not(:disabled) {
   background-color: #DEB6AB;
 }
 
@@ -64,29 +120,13 @@ button:hover {
   100% { opacity: 0; }
 }
 
-input[type="checkbox"] {
-  appearance: none; /* Uklanja defaultni izgled */
-  width: 18px;
-  height: 18px;
-  border: 2px solid #85586F;
-  border-radius: 4px;
-  background-color: white;
-  cursor: pointer;
-  position: relative;
-}
+@media (max-width: 600px) {
+  .card {
+    padding: 15px;
+  }
 
-input[type="checkbox"]:checked {
-  background-color: #85586F;
-  border: 2px solid #85586F;
+  button {
+    font-size: 14px;
+    padding: 10px;
+  }
 }
-
-input[type="checkbox"]:checked::after {
-  content: '\2713'; /* Unicode za čekiran znak */
-  font-size: 14px;
-  color: white;
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}
-

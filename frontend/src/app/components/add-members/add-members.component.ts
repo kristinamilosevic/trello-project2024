@@ -4,8 +4,9 @@ import { Member } from '../../models/member/member.model';
 import { FormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../services/user/auth.service';
+
 @Component({
   selector: 'app-add-members',
   standalone: true,
@@ -23,10 +24,10 @@ export class AddMembersComponent implements OnInit {
   minMembersAllowed: number = 0;
   isManager: boolean = false;
 
-  constructor(private projectMembersService: ProjectMembersService, private route: ActivatedRoute, private authService: AuthService) {}
+  constructor(private projectMembersService: ProjectMembersService, private route: ActivatedRoute, private authService: AuthService, private router: Router) {}
 
   ngOnInit(): void {
-    this.projectId = this.route.snapshot.paramMap.get('id') || ''; // Preuzimamo ID projekta iz parametra rute
+    this.projectId = this.route.snapshot.paramMap.get('id') || '';
     this.isManager = this.authService.getUserRole() === 'manager';
     if (this.isValidObjectId(this.projectId)) {
       this.fetchProjectDetails();
@@ -71,7 +72,7 @@ export class AddMembersComponent implements OnInit {
     this.projectMembersService.getAllUsers().subscribe(
       (allUsers: Member[]) => {
         this.members = allUsers
-          .filter((user: Member) => user.role === 'member') // Filtriraj samo korisnike sa rolom 'member'
+          .filter((user: Member) => user.role === 'member') 
           .map((user: Member) => {
             const userId = user.id.toString();
             const isSelected = this.projectMembers.some((projMember: Member) => projMember.id === userId);
@@ -89,9 +90,9 @@ export class AddMembersComponent implements OnInit {
       this.errorMessage = 'Only managers can add members.';
       return;
     }
-
-    this.errorMessage = ''; // Reset error message
-    
+  
+    this.errorMessage = ''; 
+  
     const newMembersToAdd = this.members
       .filter((member: Member) => member.selected && !this.isMemberAlreadyAdded(member))
       .map((member: Member) => member.username);
@@ -117,10 +118,12 @@ export class AddMembersComponent implements OnInit {
       () => {
         this.errorMessage = '';
         this.successMessage = 'Members added successfully!';
+        
         setTimeout(() => {
-          this.successMessage = ''; // Automatski ukloni poruku posle 3 sekunde
-        }, 3000);
-        this.fetchProjectMembers();
+          this.successMessage = '';
+          this.router.navigate(['/project', this.projectId]);
+        }, 1500);
+        
       },
       (error: any) => {
         console.error('Error adding members:', error);
@@ -137,13 +140,15 @@ export class AddMembersComponent implements OnInit {
           this.errorMessage = 'An unexpected error occurred while adding members.';
         }
         setTimeout(() => {
-          this.errorMessage = ''; // Automatski ukloni poruku posle 3 sekunde
+          this.errorMessage = ''; 
         }, 3000);
       }
     );
   }
+  
 
   isMemberAlreadyAdded(member: Member): boolean {
     return this.projectMembers.some((existingMember: Member) => existingMember.id === member.id);
   }
 }
+

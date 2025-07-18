@@ -69,3 +69,11 @@
 .modal-content h3 {
   margin-top: 0;
 }
+
+.project-card p {
+  margin: 6px 0;
+  font-size: 0.95em;
+  line-height: 1.5;
+  color: #444; 
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}

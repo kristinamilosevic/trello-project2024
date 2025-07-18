@@ -21,7 +21,7 @@ import { AuthGuard } from './guards/auth.guard';
 import { RoleGuard } from './guards/role.guard';
 
 import { NotificationsUserComponent } from './components/notifications-user/notifications-user.component';
-import { ResetPasswordComponent } from './reset-password/reset-password.component';
+import { ResetPasswordComponent } from './components/reset-password/reset-password.component';
 
 
 
@@ -68,7 +68,6 @@ import { ResetPasswordComponent } from './reset-password/reset-password.componen
 // ];
 
 export const routes: Routes = [
- // Stranice dostupne bez autentifikacije
  { path: '', redirectTo: '/login', pathMatch: 'full' },
  { path: 'login', component: LoginComponent },
  { path: 'register', component: RegisterComponent },
@@ -77,7 +76,6 @@ export const routes: Routes = [
  { path: 'reset-password', component: ResetPasswordComponent },
 
 
- // Stranice zaštićene autentifikacijom
  { path: 'projects-list', component: ProjectListComponent, canActivate: [AuthGuard] },
  { path: 'project/:id', component: ProjectDetailsComponent, canActivate: [AuthGuard] },
  { path: 'project/:id/add-members', component: AddMembersComponent, canActivate: [RoleGuard], data: { roles: ['manager'] } },
@@ -94,7 +92,7 @@ export const routes: Routes = [
  { path: 'change-password', component: ChangePasswordComponent, canActivate: [RoleGuard], data: { roles: ['manager', 'member'] } },
  { path: 'notifications-user', component: NotificationsUserComponent },
  { path: 'delete-project/:id', component: ProjectDetailsComponent, canActivate: [RoleGuard], data: { roles: ['manager'] } },
- // Fallback ruta za neprijavljene korisnike
+
  { path: '**', redirectTo: '/login' },
 
   // // Rute za korisnike
