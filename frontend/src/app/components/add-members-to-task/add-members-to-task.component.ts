@@ -9,7 +9,7 @@ import { CommonModule } from '@angular/common';
   templateUrl: './add-members-to-task.component.html',
   styleUrls: ['./add-members-to-task.component.css'],
   standalone: true,
-  imports: [FormsModule, CommonModule] // Dodajte ovde CommonModule
+  imports: [FormsModule, CommonModule] 
 })
 export class AddMembersToTaskComponent implements OnInit {
   projectId: string | null = null;
@@ -72,7 +72,7 @@ export class AddMembersToTaskComponent implements OnInit {
     this.taskService.addMembersToTask(this.taskId, selectedMembers).subscribe(
       () => {
         this.successMessage = 'Members added successfully!';
-        this.loadAvailableMembers(); 
+        this.router.navigate(['/project', this.projectId]);
       },
       (error) => {
         console.error('Error adding members:', error);
