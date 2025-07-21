@@ -8,16 +8,24 @@ import { TaskService } from '../../services/task/task.service';
 import { AuthService } from '../../services/user/auth.service';
 import { Subscription } from 'rxjs';
 import { HttpClientModule } from '@angular/common/http';
+import { GraphService } from '../../services/graph/graph.service';
+import { NgxGraphModule } from '@swimlane/ngx-graph';
+import { NgxChartsModule } from '@swimlane/ngx-charts';
+import * as shape from 'd3-shape';
+
+
+
 
 @Component({
   selector: 'app-project-details',
   standalone: true,
-  imports: [CommonModule, FormsModule, HttpClientModule],
+  imports: [CommonModule, FormsModule, HttpClientModule,NgxGraphModule, NgxChartsModule],
   providers: [DatePipe],
   templateUrl: './project-details.component.html',
   styleUrls: ['./project-details.component.css']
 })
 export class ProjectDetailsComponent implements OnInit, OnDestroy {
+  projectId!: string;
   project: Project | null = null;
   tasks: any[] = [];
   isLoading = false;
@@ -28,6 +36,13 @@ export class ProjectDetailsComponent implements OnInit, OnDestroy {
   errorMessage: string = '';
   successMessage: string = '';
   private subscription: Subscription = new Subscription();
+  graphData: any = null;
+  graphNodes: any[] = [];
+  graphLinks: any[] = [];
+  layout: string = 'dagre';
+  curve = shape.curveLinear;
+
+
 
   constructor(
     private route: ActivatedRoute,
@@ -35,12 +50,16 @@ export class ProjectDetailsComponent implements OnInit, OnDestroy {
     private datePipe: DatePipe,
     private router: Router,
     private taskService: TaskService,
-    private authService: AuthService
+    private authService: AuthService,
+    private graphService: GraphService
   ) {}
 
   ngOnInit(): void {
     this.checkUserRole();
     this.listenToRouterEvents();
+    this.curve = shape.curveLinear;
+
+    
 
     const projectId = this.route.snapshot.paramMap.get('id');
     if (projectId) {
@@ -72,18 +91,54 @@ export class ProjectDetailsComponent implements OnInit, OnDestroy {
   }
 
   loadProjectAndTasks(projectId: string): void {
-    this.isLoading = true;
-    this.projectService.getProjectById(projectId).subscribe(
-      (data) => {
-        this.project = data;
-        this.getTasks(projectId);
-      },
-      (error) => {
-        console.error('Error fetching project details:', error);
-        this.isLoading = false;
+  this.isLoading = true;
+  this.projectId = projectId;
+
+  // Učitavanje projekta
+  this.projectService.getProjectById(projectId).subscribe({
+    next: (data) => {
+      this.project = data;
+      this.getTasks(projectId);
+      this.loadWorkflowGraph(projectId);
+      this.isLoading = false;
+    },
+    error: (error) => {
+      console.error('Error fetching project details:', error);
+      this.isLoading = false;
+    }
+  });
+
+  // Učitavanje grafa
+  this.graphService.getGraph(projectId).subscribe({
+    next: (data) => {
+      // Proveri da li data.nodes i data.edges postoje pre nego što ih mapiraš
+      if (data.nodes) {
+        this.graphNodes = data.nodes.map((n: any) => ({
+          id: n.id,
+          label: n.title,
+          description: n.description
+        }));
+      } else {
+        this.graphNodes = []; // Ako nema nodes, postavi praznu listu
       }
-    );
-  }
+
+      if (data.edges) {
+        this.graphLinks = data.edges.map((e: any) => ({
+          source: e.to,
+          target: e.from
+        }));
+      } else {
+        this.graphLinks = []; // Ako nema edges, postavi praznu listu
+      }
+    },
+    error: (err) => {
+      console.error('Failed to load graph data:', err);
+      this.graphNodes = []; // Postavi praznu listu ako dođe do greške
+      this.graphLinks = [];
+    }
+  });
+}
+
 
   getTasks(projectId: string): void {
     this.projectService.getTasksForProject(projectId).subscribe(
@@ -113,6 +168,19 @@ export class ProjectDetailsComponent implements OnInit, OnDestroy {
       }
     );
   }
+
+  loadWorkflowGraph(projectId: string): void {
+  this.graphService.getGraph(projectId).subscribe({
+    next: (data) => {
+      this.graphData = data;
+      console.log('Graph data loaded:', data);
+    },
+    error: (err) => {
+      console.error('Failed to load graph data:', err);
+    }
+  });
+}
+
   
 
   openAddMembersToTask(taskId: string): void {

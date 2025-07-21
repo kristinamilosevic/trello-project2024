@@ -1,9 +1,9 @@
 package models
 
 type GraphNode struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Status string `json:"status"`
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
 }
 
 type GraphEdge struct {

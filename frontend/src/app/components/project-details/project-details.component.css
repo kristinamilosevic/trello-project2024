@@ -3,10 +3,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100vh;
+  min-height: 100vh;
   padding: 20px;
-  overflow: auto; 
+  overflow: auto;
+  flex-direction: column; 
 }
+
 
 .project-details {
   background-color: #F8ECD1;
@@ -295,4 +297,36 @@
 .dependency-dropdown select option:disabled {
   color: #999999;
   font-style: italic;
+}
+
+.graph-container {
+  height: 1000px;
+  width: 100%;
+  overflow: auto;
+  border: 1px solid #ccc;
+  margin-top: 20px;
+}
+
+.node {
+  fill: rgba(133, 88, 111, 0.6);
+  stroke: #85586F;
+  stroke-width: 2;
+}
+
+.node-label {
+  font-size: 14px;
+  fill: #000;
+}
+
+.edge .line {
+  stroke: #000000;
+  stroke-width: 2;
+  fill: none;
+}
+
+ngx-graph {
+  display: block;
+  max-height: 400px;
+  margin-bottom: 15px;
+  margin-top: 20px;
 }

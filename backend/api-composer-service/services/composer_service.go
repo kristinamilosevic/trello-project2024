@@ -35,9 +35,9 @@ func FetchGraphData(projectID, authHeader, roleHeader string) (models.GraphRespo
 	}
 
 	var tasks []struct {
-		ID     string `json:"id"`
-		Title  string `json:"title"`
-		Status string `json:"status"`
+		ID          string `json:"id"`
+		Title       string `json:"title"`
+		Description string `json:"description"`
 	}
 	if err := json.NewDecoder(tasksResp.Body).Decode(&tasks); err != nil {
 		return models.GraphResponse{}, fmt.Errorf("failed to decode tasks-service response: %v", err)
@@ -79,9 +79,9 @@ func FetchGraphData(projectID, authHeader, roleHeader string) (models.GraphRespo
 	var graph models.GraphResponse
 	for _, t := range tasks {
 		graph.Nodes = append(graph.Nodes, models.GraphNode{
-			ID:     t.ID,
-			Title:  t.Title,
-			Status: t.Status,
+			ID:          t.ID,
+			Title:       t.Title,
+			Description: t.Description,
 		})
 	}
 	for _, e := range edges {
