@@ -61,6 +61,7 @@ func main() {
 	router.HandleFunc("/api/workflow/dependency", workflowHandler.AddDependency).Methods("POST")
 	router.HandleFunc("/api/workflow/task-node", workflowHandler.EnsureTaskNode).Methods("POST")
 	router.HandleFunc("/api/workflow/dependencies/{taskId}", workflowHandler.GetDependencies).Methods("GET")
+	router.HandleFunc("/api/workflow/project/{projectId}/dependencies", workflowHandler.GetProjectDependencies).Methods("GET")
 
 	// Dodaj više ruta po potrebi
 

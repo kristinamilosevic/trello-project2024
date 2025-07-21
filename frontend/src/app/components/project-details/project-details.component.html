@@ -79,6 +79,72 @@
       </ul>
     </div>
 
+    <div *ngIf="graphNodes.length && graphLinks.length">
+      
+  <div *ngIf="isManager">
+  <h3>Workflow Graph</h3>
+  <ngx-graph
+    [links]="graphLinks" 
+    [nodes]="graphNodes" 
+    [layout]="layout" 
+    [curve]="curve" 
+    [enableZoom]="true" 
+    [autoZoom]="true" 
+    [zoomSpeed]="0.1"
+    class="graph-container"
+  >
+    <ng-template #defsTemplate>
+  <svg:defs>
+    <svg:marker
+      id="arrowhead"
+      viewBox="0 0 10 10"
+      refX="10"
+      refY="5"
+      markerWidth="6"
+      markerHeight="6"
+      orient="auto">
+      <svg:path d="M 0 0 L 10 5 L 0 10 z" fill="#85586F"/>
+    </svg:marker>
+  </svg:defs>
+</ng-template>
+
+
+<ng-template #linkTemplate let-link>
+  <svg:g class="edge">
+    <svg:path 
+      class="line" 
+      stroke-width="3" 
+      [attr.d]="link.line" 
+      stroke-width="2"
+      stroke="#000"
+      [attr.marker-end]="'url(#arrowhead)'">
+    </svg:path>
+  </svg:g>
+</ng-template>
+
+    <ng-template #nodeTemplate let-node>
+      <svg:g>
+        <svg:rect
+          [attr.width]="120"
+          [attr.height]="40"
+          x="-60"
+          y="2"
+          rx="30"
+          ry="30"
+          class="node"
+        ></svg:rect>
+        <svg:text class="node-label" text-anchor="middle" y="18" font-size="35" >
+          {{ node.label }}
+        </svg:text>
+        <svg:text class="node-description" text-anchor="middle" y="33" font-size="12" fill="#333">
+      Description: {{ node.description }}
+    </svg:text>     
+      </svg:g>
+    </ng-template>
+  </ngx-graph>
+</div>
+</div>
+
     <div class="action-buttons">
       <button *ngIf="isManager" (click)="addTask()" class="action-button">Add Task</button>
       <button *ngIf="isManager" (click)="viewMembers()" class="action-button">View Members</button>

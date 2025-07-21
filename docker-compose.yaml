@@ -113,6 +113,21 @@ services:
       - app-network
     restart: on-failure
 
+  api-composer-service:
+    build:
+      context: ./backend
+      dockerfile: api-composer-service/Dockerfile
+    hostname: ${COMPOSER_SERVICE_NAME}
+    ports:
+      - "${COMPOSER_SERVICE_PORT}:${COMPOSER_SERVICE_INTERNAL_PORT}"
+    networks:
+      - app-network
+    depends_on:
+      - tasks-service
+      - workflow-service
+    restart: on-failure
+
+
   api_gateway:
     build:
       context: ${GATEWAY_PATH}
