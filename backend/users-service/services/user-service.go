@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -287,8 +288,13 @@ func (s *UserService) DeleteAccount(username string, authToken string) error {
 			return fmt.Errorf("failed to get projects for member: %v", resp.Status)
 		}
 
+		log.Println("[Member] Response status:", resp.Status)
+
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		log.Println("[Member] Response body:", string(bodyBytes))
+
 		var projects []models.Project
-		if err := json.NewDecoder(resp.Body).Decode(&projects); err != nil {
+		if err := json.Unmarshal(bodyBytes, &projects); err != nil {
 			return fmt.Errorf("failed to decode projects: %v", err)
 		}
 

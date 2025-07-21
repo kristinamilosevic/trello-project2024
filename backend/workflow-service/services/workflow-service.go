@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"trello-project/microservices/workflow-service/interfaces"
 	"trello-project/microservices/workflow-service/models"
+	"trello-project/microservices/workflow-service/services/commands"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
@@ -63,6 +65,15 @@ func (s *WorkflowService) AddDependency(ctx context.Context, rel models.TaskDepe
 	}
 
 	log.Printf("Dependency added: %s <- %s", rel.ToTaskID, rel.FromTaskID)
+	// CQRS: Ažuriraj blocked status za task koji je dobio novu zavisnost
+	cmd := commands.UpdateBlockedStatusCommand{
+		TaskID: rel.ToTaskID,
+		Svc:    interfaces.WorkflowCommandContext(s),
+	}
+	if err := cmd.Execute(ctx); err != nil {
+		log.Printf("failed to update blocked status for task %s: %v", rel.ToTaskID, err)
+	}
+
 	return nil
 }
 
@@ -265,9 +276,9 @@ func (s *WorkflowService) UpdateBlockedStatus(ctx context.Context, taskID string
 	return nil
 }
 
-func (s *WorkflowService) SetBlockedStatus(taskID string, blocked bool) error {
-	session := s.Driver.NewSession(context.Background(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
-	defer session.Close(context.Background())
+func (s *WorkflowService) SetBlockedStatus(ctx context.Context, taskID string, blocked bool) error {
+	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(ctx)
 
 	query := `
         MATCH (t:Task {id: $taskID})
@@ -279,8 +290,8 @@ func (s *WorkflowService) SetBlockedStatus(taskID string, blocked bool) error {
 		"blocked": blocked,
 	}
 
-	_, err := session.ExecuteWrite(context.Background(), func(tx neo4j.ManagedTransaction) (interface{}, error) {
-		_, err := tx.Run(context.Background(), query, params)
+	_, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (interface{}, error) {
+		_, err := tx.Run(ctx, query, params)
 		return nil, err
 	})
 
@@ -288,5 +299,29 @@ func (s *WorkflowService) SetBlockedStatus(taskID string, blocked bool) error {
 		return fmt.Errorf("failed to set blocked status in db: %w", err)
 	}
 
+	return nil
+}
+
+func (s *WorkflowService) RemoveDependency(ctx context.Context, fromTaskID, toTaskID string) error {
+	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(ctx)
+
+	_, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		query := `
+			MATCH (to:Task {id: $toId})-[r:DEPENDS_ON]->(from:Task {id: $fromId})
+			DELETE r
+		`
+		_, err := tx.Run(ctx, query, map[string]any{
+			"fromId": fromTaskID,
+			"toId":   toTaskID,
+		})
+		return nil, err
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to remove dependency: %v", err)
+	}
+
+	log.Printf("Dependency removed: %s <- %s", toTaskID, fromTaskID)
 	return nil
 }

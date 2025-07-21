@@ -1,23 +1,27 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
-	"log"
+	"fmt"
 	"net/http"
 	"trello-project/microservices/workflow-service/models"
 	"trello-project/microservices/workflow-service/services"
+	"trello-project/microservices/workflow-service/services/commands"
 
 	"github.com/gorilla/mux"
 )
 
 type WorkflowHandler struct {
-	WorkflowService *services.WorkflowService
+	WorkflowService         *services.WorkflowService
+	RemoveDependencyHandler *commands.RemoveDependencyHandler
 }
 
 func NewWorkflowHandler(service *services.WorkflowService) *WorkflowHandler {
+	removeDepHandler := commands.NewRemoveDependencyHandler(service)
+
 	return &WorkflowHandler{
-		WorkflowService: service,
+		WorkflowService:         service,
+		RemoveDependencyHandler: removeDepHandler,
 	}
 }
 
@@ -35,8 +39,11 @@ func (h *WorkflowHandler) AddDependency(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Poziv servisa za dodavanje zavisnosti
-	err := h.WorkflowService.AddDependency(context.Background(), relation)
+	// CQRS poziv
+	handler := commands.NewAddDependencyHandler(h.WorkflowService)
+	cmd := commands.AddDependencyCommand{Dependency: relation}
+	err := handler.Handle(r.Context(), cmd)
+
 	if err != nil {
 		if err.Error() == "dependency already exists" {
 			http.Error(w, "Dependency already exists", http.StatusConflict) // 409
@@ -90,26 +97,52 @@ func (h *WorkflowHandler) GetDependencies(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(deps)
 }
 
-func (h *WorkflowHandler) UpdateBlockedStatus(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	taskId := vars["taskId"]
+// func (h *WorkflowHandler) UpdateBlockedStatus(w http.ResponseWriter, r *http.Request) {
+// 	vars := mux.Vars(r)
+// 	taskId := vars["taskId"]
 
-	var req struct {
-		Blocked bool `json:"blocked"`
-	}
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+// 	var req struct {
+// 		Blocked bool json:"blocked"
+// 	}
+// 	err := json.NewDecoder(r.Body).Decode(&req)
+// 	if err != nil {
+// 		http.Error(w, "Invalid request body", http.StatusBadRequest)
+// 		return
+// 	}
+
+// 	err = h.WorkflowService.SetBlockedStatus(taskId, req.Blocked)
+// 	if err != nil {
+// 		log.Printf("Failed to update blocked status for task %s: %v", taskId, err)
+// 		http.Error(w, "Failed to update blocked status", http.StatusInternalServerError)
+// 		return
+// 	}
+
+// 	w.WriteHeader(http.StatusOK)
+// 	w.Write([]byte("Blocked status updated successfully"))
+// }
+
+func (h *WorkflowHandler) RemoveDependency(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	fromTaskID := vars["fromTaskID"]
+	toTaskID := vars["toTaskID"]
+
+	if fromTaskID == "" || toTaskID == "" {
+		http.Error(w, "Missing task IDs", http.StatusBadRequest)
 		return
 	}
 
-	err = h.WorkflowService.SetBlockedStatus(taskId, req.Blocked)
+	cmd := commands.RemoveDependencyCommand{
+		FromTaskID: fromTaskID,
+		ToTaskID:   toTaskID,
+	}
+
+	err := h.RemoveDependencyHandler.Handle(r.Context(), cmd)
+
 	if err != nil {
-		log.Printf("Failed to update blocked status for task %s: %v", taskId, err)
-		http.Error(w, "Failed to update blocked status", http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("failed to remove dependency: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Blocked status updated successfully"))
+	w.Write([]byte("Dependency removed"))
 }

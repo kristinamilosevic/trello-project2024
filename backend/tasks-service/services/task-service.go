@@ -578,6 +578,7 @@ func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.
 	}
 
 	err = s.updateBlockedInWorkflow(task.ID.Hex(), isBlocked)
+	//_ = s.triggerWorkflowBlockedStatusRefresh(task.ID.Hex()) umesto ovog iznad ovo
 	if err != nil {
 		log.Printf("Warning: failed to update blocked status in workflow-service: %v", err)
 	}
