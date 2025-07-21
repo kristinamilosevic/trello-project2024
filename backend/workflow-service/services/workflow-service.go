@@ -301,27 +301,3 @@ func (s *WorkflowService) SetBlockedStatus(ctx context.Context, taskID string, b
 
 	return nil
 }
-
-func (s *WorkflowService) RemoveDependency(ctx context.Context, fromTaskID, toTaskID string) error {
-	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
-	defer session.Close(ctx)
-
-	_, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-		query := `
-			MATCH (to:Task {id: $toId})-[r:DEPENDS_ON]->(from:Task {id: $fromId})
-			DELETE r
-		`
-		_, err := tx.Run(ctx, query, map[string]any{
-			"fromId": fromTaskID,
-			"toId":   toTaskID,
-		})
-		return nil, err
-	})
-
-	if err != nil {
-		return fmt.Errorf("failed to remove dependency: %v", err)
-	}
-
-	log.Printf("Dependency removed: %s <- %s", toTaskID, fromTaskID)
-	return nil
-}

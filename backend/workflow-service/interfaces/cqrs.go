@@ -16,7 +16,6 @@ type Query interface {
 type WorkflowCommandContext interface {
 	AddDependency(ctx context.Context, dependency models.TaskDependencyRelation) error
 	UpdateBlockedStatus(ctx context.Context, taskID string) error
-	RemoveDependency(ctx context.Context, fromTaskID, toTaskID string) error
 }
 
 type WorkflowQueryContext interface {
