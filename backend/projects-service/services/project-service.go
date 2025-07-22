@@ -122,12 +122,6 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, usern
 		return fmt.Errorf("project not found: %v", err)
 	}
 
-	// Provera maksimalnog broja članova
-	if len(project.Members)+len(usernames) > project.MaxMembers {
-		log.Println("Maximum number of members reached for the project")
-		return fmt.Errorf("maximum number of members reached for the project")
-	}
-
 	// Filtriranje članova koji su već u projektu
 	existingMemberUsernames := make(map[string]bool)
 	for _, member := range project.Members {
@@ -184,26 +178,22 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, usern
 		})
 
 		if err != nil {
-			log.Printf("User service unavailable or failed for %s: %v\n", username, err)
-			return fmt.Errorf("failed to fetch user data for %s: fallback activated", username)
+			log.Printf("Skipping user %s due to user service error: %v\n", username, err)
+			continue
 		}
 
 		members = append(members, userData.(models.Member))
-
-		/*
-			// Alternativa: blaži fallback - dodaj sve koje možeš, preskoči ostale
-			if err != nil {
-				log.Printf("Skipping user %s due to user service error: %v\n", username, err)
-				continue
-			}
-			members = append(members, userData.(models.Member))
-		*/
 	}
 
-	// Ako niko nije uspešno dodat (korisno u fallback varijanti)
 	if len(members) == 0 {
 		log.Println("No new members were added due to user service failures.")
 		return fmt.Errorf("no new members were added")
+	}
+
+	// Provera da li bi se prešao maksimalan broj članova nakon dodavanja ovih koji su uspešno dohvaćeni
+	if len(project.Members)+len(members) > project.MaxMembers {
+		log.Println("Adding these members would exceed the maximum allowed project members.")
+		return fmt.Errorf("adding these members would exceed the project's member limit")
 	}
 
 	// Ažuriranje baze sa novim članovima
@@ -216,6 +206,20 @@ func (s *ProjectService) AddMembersToProject(projectID primitive.ObjectID, usern
 	}
 
 	log.Println("Members successfully added to the project.")
+	log.Printf("%d new members were added to project '%s'.", len(members), project.Name)
+
+	for _, member := range members {
+		go func(m models.Member) {
+			message := fmt.Sprintf("You have been added to the project: %s", project.Name)
+			_, err := s.NotificationsBreaker.Execute(func() (interface{}, error) {
+				return nil, s.sendNotification(m, message)
+			})
+			if err != nil {
+				log.Printf("Failed to send notification to %s: %v", m.Username, err)
+			}
+		}(member)
+	}
+
 	return nil
 }
 
