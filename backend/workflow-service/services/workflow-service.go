@@ -252,8 +252,6 @@ func (s *WorkflowService) UpdateBlockedStatus(ctx context.Context, taskID string
 		return fmt.Errorf("failed to fetch dependencies: %v", err)
 	}
 
-	// Ovaj deo je ranije proveravao status, sada to preskačemo
-	// pa pretpostavljamo da je svaki dependency koji postoji razlog za blokadu
 	isBlocked := len(dependencies) > 0
 
 	_, err = session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
@@ -301,16 +299,16 @@ func (s *WorkflowService) SetBlockedStatus(ctx context.Context, taskID string, b
 
 	return nil
 }
-
 func (s *WorkflowService) GetProjectDependencies(ctx context.Context, projectID string) ([]models.TaskDependencyRelation, error) {
 	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 
 	result, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (interface{}, error) {
-		query := `
+		query := ` 
 			MATCH (to:Task {projectId: $projectId})-[:DEPENDS_ON]->(from:Task)
-			RETURN from.id AS fromTaskId, to.id AS toTaskId
+            RETURN from.id AS fromTaskId, to.id AS toTaskId
 		`
+
 		res, err := tx.Run(ctx, query, map[string]interface{}{"projectId": projectID})
 		if err != nil {
 			return nil, err
@@ -332,4 +330,76 @@ func (s *WorkflowService) GetProjectDependencies(ctx context.Context, projectID 
 	}
 
 	return result.([]models.TaskDependencyRelation), nil
+}
+
+func (s *WorkflowService) GetWorkflowByProject(ctx context.Context, projectID string) ([]models.TaskNode, []models.TaskDependencyRelation, error) {
+	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(ctx)
+
+	nodes, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		query := `
+			MATCH (t:Task {projectId: $projectId})
+			RETURN t.id AS id, t.projectId AS projectId, t.name AS name,
+			       t.description AS description, t.blocked AS blocked
+		`
+		res, err := tx.Run(ctx, query, map[string]any{"projectId": projectID})
+		if err != nil {
+			return nil, err
+		}
+
+		var taskNodes []models.TaskNode
+		for res.Next(ctx) {
+			record := res.Record()
+
+			id, _ := record.Get("id")
+			projectId, _ := record.Get("projectId")
+			name, _ := record.Get("name")
+			description, _ := record.Get("description")
+			blocked, _ := record.Get("blocked")
+
+			taskNodes = append(taskNodes, models.TaskNode{
+				ID:          id.(string),
+				ProjectID:   projectId.(string),
+				Name:        name.(string),
+				Description: description.(string),
+				Blocked:     blocked.(bool),
+			})
+		}
+
+		return taskNodes, nil
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to fetch task nodes: %w", err)
+	}
+
+	dependencies, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		query := `
+			MATCH (to:Task {projectId: $projectId})-[:DEPENDS_ON]->(from:Task)
+			RETURN from.id AS fromId, to.id AS toId
+		`
+		res, err := tx.Run(ctx, query, map[string]any{"projectId": projectID})
+		if err != nil {
+			return nil, err
+		}
+
+		var relations []models.TaskDependencyRelation
+		for res.Next(ctx) {
+			record := res.Record()
+
+			fromID, _ := record.Get("fromId")
+			toID, _ := record.Get("toId")
+
+			relations = append(relations, models.TaskDependencyRelation{
+				FromTaskID: fromID.(string),
+				ToTaskID:   toID.(string),
+			})
+		}
+
+		return relations, nil
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to fetch dependency relations: %w", err)
+	}
+
+	return nodes.([]models.TaskNode), dependencies.([]models.TaskDependencyRelation), nil
 }

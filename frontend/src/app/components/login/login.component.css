@@ -4,7 +4,7 @@
   justify-content: center;
   align-items: center;
   height: 100vh;
-  background-color: #f4f4f9;
+  background-color: white;
   padding: 20px;
 }
 
@@ -22,14 +22,20 @@
   transition: transform 0.3s, box-shadow 0.3s;
 }
 
-
-
 h2 {
   text-align: center;
   color: #85586F;
   margin-bottom: 25px;
   font-size: 24px;
   font-weight: 600;
+}
+
+h3 {
+  font-weight: bold;
+  color: #2c3e50;  
+  font-size: 14px; 
+  margin-bottom: 10px;
+  text-align: left;
 }
 
 .form-group {
@@ -47,7 +53,7 @@ label {
 input {
   width: 95%;
   padding: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 5px;
   border: 1px solid #b0c5c6;
   border-radius: 6px;
   font-size: 16px;
@@ -61,26 +67,20 @@ input:focus {
 }
 
 button {
-  padding: 12px 20px;
-  border-radius: 6px;
-  font-size: 16px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: background-color 0.3s ease, transform 0.3s ease;
-  border: none;
-  display: block;
-  width: 100%;
-  margin-top: 15px;
-  background-color: #85586F;
-  color: #F8ECD1;
-}
+    width: 100%;
+    padding: 10px;
+    border: none;
+    border-radius: 4px;
+    background-color: #AC7D88;
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+  }
 
 button:hover {
-  background-color: #DEB6AB;
-  transform: scale(1.05);
+  background-color: #85586F;
 }
 
-/* Stil za notifikacije */
 .notification {
   margin: 10px auto;
   font-weight: bold;
@@ -132,4 +132,11 @@ button:hover {
   input, button {
     font-size: 16px;
   }
+}
+
+.captcha-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 20px 0;
 }

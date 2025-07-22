@@ -21,15 +21,12 @@ export class AuthService {
       throw new Error('Token or Role is missing!');
     }
 
-    // Vraća zaglavlje sa tokenom i rodom
     return new HttpHeaders().set('Authorization', `Bearer ${token}`).set('Role', role);
   }
 
-  // Funkcija za prijavljivanje korisnika
   login(credentials: LoginRequest): Observable<LoginResponse> {
     return this.http.post<LoginResponse>(`${this.apiUrl}/login`, credentials).pipe(
       tap((response: LoginResponse) => {
-        // Čuvanje tokena u localStorage
         localStorage.setItem('token', response.token);
         localStorage.setItem('username', response.username);
         localStorage.setItem('role', response.role);
@@ -66,12 +63,10 @@ export class AuthService {
     this.loggedIn.next(false);
   }
 
-  // Dobijanje tokena iz localStorage
   getToken(): string | null {
     return localStorage.getItem('token');
   }
 
-  // Dobijanje uloge korisnika
   getUserRole(): string | null {
     return localStorage.getItem('role');
   }
@@ -81,7 +76,6 @@ export class AuthService {
     return userRole ? roles.includes(userRole) : false;
   }
 
-  // Funkcija za proveru da li postoji token u localStorage
   private hasToken(): boolean {
     return !!localStorage.getItem('token');
   }

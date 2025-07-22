@@ -38,7 +38,6 @@
         <label for="password">Password</label>
         <input type="password" id="password" formControlName="password" placeholder="Enter a password">
         
-        <!-- Prikaz poruka o greškama -->
         <div *ngIf="registerForm.get('password')?.invalid && registerForm.get('password')?.touched" class="error">
           <div *ngIf="registerForm.get('password')?.errors?.['required']">
             Password is required.
@@ -74,11 +73,12 @@
         </div>
       </div>
 
-      <re-captcha
-      (resolved)="onCaptchaResolved($event)"
-      siteKey="6LcJ2YwqAAAAAKDFfflxV4Mo7k1H_lszQ64GN6a3">
-  </re-captcha>
-  
+      <div class="captcha-container">
+        <re-captcha
+          (resolved)="onCaptchaResolved($event)"
+          siteKey="6LcJ2YwqAAAAAKDFfflxV4Mo7k1H_lszQ64GN6a3">
+        </re-captcha>
+      </div>
   
       <button type="submit">Register</button>
       <a class="forgot-link" (click)="openLogin()">Already have an account? Login here.</a>

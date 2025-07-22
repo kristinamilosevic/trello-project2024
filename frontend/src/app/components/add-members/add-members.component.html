@@ -13,7 +13,6 @@
     </li>
   </ul>
 
-  <!-- Dugme je vidljivo samo menadžerima -->
   <button *ngIf="isManager" (click)="addSelectedMembers()">Add Members</button>
   <p *ngIf="!isManager" class="info-text">You must be a manager to add members.</p>
 </div>

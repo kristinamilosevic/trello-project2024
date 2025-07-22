@@ -29,7 +29,6 @@ func (h *WorkflowHandler) AddDependency(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Validacija ID-jeva
 	if relation.FromTaskID == "" || relation.ToTaskID == "" {
 		http.Error(w, "Missing task IDs", http.StatusBadRequest)
 		return
@@ -41,16 +40,18 @@ func (h *WorkflowHandler) AddDependency(w http.ResponseWriter, r *http.Request) 
 	err := handler.Handle(r.Context(), cmd)
 
 	if err != nil {
-		if err.Error() == "dependency already exists" {
-			http.Error(w, "Dependency already exists", http.StatusConflict) // 409
+		msg := err.Error()
+		switch msg {
+		case "dependency already exists":
+			http.Error(w, "Dependency already exists", http.StatusConflict)
+			return
+		case "cannot add dependency: cycle detected":
+			http.Error(w, "Cannot add dependency due to cycle", http.StatusConflict)
+			return
+		default:
+			http.Error(w, msg, http.StatusBadRequest)
 			return
 		}
-		if err.Error() == "cannot add dependency: cycle detected" {
-			http.Error(w, "Cannot add dependency due to cycle", http.StatusConflict) // 409
-			return
-		}
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -108,4 +109,22 @@ func (h *WorkflowHandler) GetProjectDependencies(w http.ResponseWriter, r *http.
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(deps)
+}
+
+func (h *WorkflowHandler) GetWorkflowGraph(w http.ResponseWriter, r *http.Request) {
+	projectID := mux.Vars(r)["projectId"]
+
+	nodes, dependencies, err := h.WorkflowService.GetWorkflowByProject(r.Context(), projectID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"nodes":        nodes,
+		"dependencies": dependencies,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }

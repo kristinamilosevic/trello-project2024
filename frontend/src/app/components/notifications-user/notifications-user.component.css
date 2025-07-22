@@ -1,48 +1,59 @@
 .notifications-container {
-    max-width: 600px;
-    margin: 20px auto;
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    background-color: #f9f9f9;
-  }
-  
-  .notifications-container h2 {
-    text-align: center;
-  }
-  
-  .notifications-container ul {
-    list-style: none;
-    padding: 0;
-  }
-  
-  .notifications-container li {
-    margin-bottom: 10px;
-    padding: 10px;
-    border-bottom: 1px solid #ddd;
-  }
-  
-  .notifications-container li.read {
-    background-color: #e0e0e0;
-  }
-  
-  .notifications-container li button {
-    margin-top: 5px;
-    padding: 5px 10px;
-    border: none;
-    background-color: #007bff;
-    color: white;
-    border-radius: 3px;
-    cursor: pointer;
-  }
-  
-  .notifications-container li button:hover {
-    background-color: #0056b3;
-  }
-  
-  .error-message {
-    color: red;
-    text-align: center;
-    margin-bottom: 10px;
-  }
-  
+  max-width: 600px;
+  margin: 100px auto 20px auto;
+  padding: 15px 20px;
+  border-radius: 12px;
+  background-color: #F8ECD1;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.notifications-container h2 {
+  text-align: center;
+  color: #85586F;
+  margin-bottom: 20px;
+  font-weight: 600;
+}
+
+.notifications-container ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.notifications-container li {
+  background-color: #fff;
+  border-left: 5px solid #AC7D88;
+  padding: 12px 15px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  transition: background-color 0.3s ease;
+  position: relative;
+}
+
+.notifications-container li.read {
+  background-color: #f2e6e6;
+  border-left-color: #9E7676;
+}
+
+.notifications-container li button {
+  margin-top: 10px;
+  padding: 6px 14px;
+  background-color: #AC7D88;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.3s ease;
+}
+
+.notifications-container li button:hover {
+  background-color: #85586F;
+}
+
+.error-message {
+  color: #AC7D88;
+  text-align: center;
+  margin-bottom: 15px;
+  font-weight: 500;
+}

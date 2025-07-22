@@ -7,6 +7,8 @@
   padding: 20px;
   overflow: auto;
   flex-direction: column; 
+  margin: 100px auto 20px auto;
+
 }
 
 
@@ -22,7 +24,7 @@
 }
 
 .project-details h2 {
-  color: #2c3e50;
+  color: #85586F;
   margin-bottom: 20px;
   font-size: 24px;
 }
@@ -141,13 +143,12 @@
 .view-members-btn:hover {
   background-color: #DEB6AB;
 }
-/* Kontejner za status */
+
 .status-container {
   margin-top: 10px;
   text-align: left; 
 }
 
-/* Stil za labelu statusa */
 .status-label {
   font-size: 14px;
   font-weight: bold;
@@ -156,7 +157,6 @@
   margin-bottom: 6px;
 }
 
-/* Dropdown stil */
 .status-dropdown {
   width: 100%;
   background-color: #F8ECD1; 
@@ -170,13 +170,11 @@
   transition: all 0.3s ease; 
 }
 
-/* Hover efekat */
 .status-dropdown:hover {
   background-color: #DEB6AB; 
   border-color: #4d4d4d;
 }
 
-/* Fokus efekat */
 .status-dropdown:focus {
   outline: none;
   box-shadow: 0 0 8px rgba(133, 88, 111, 0.6); 
@@ -329,4 +327,52 @@ ngx-graph {
   max-height: 400px;
   margin-bottom: 15px;
   margin-top: 20px;
+}
+
+.task-list {
+  background-color: #FAF3E0;
+  border-radius: 10px;
+  padding: 24px;
+  margin-top: 24px;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
+  overflow-y: auto;
+  max-height: 320px;
+}
+
+.task-list h3 {
+  font-size: 1.25rem;
+  color: #85586F;
+  font-weight: 600;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #e0d4c0;
+  padding-bottom: 6px;
+}
+
+.task-card {
+  background-color: #ffffff;
+  border-left: 4px solid #85586F;
+  border-radius: 8px;
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+.task-card:hover {
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.1);
+}
+
+.task-card strong {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #85586F;
+  margin-bottom: 6px;
+}
+
+.task-card p {
+  font-size: 0.92rem;
+  color: #555;
+  margin: 3px 0;
+  line-height: 1.4;
 }

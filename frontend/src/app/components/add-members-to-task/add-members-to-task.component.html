@@ -15,7 +15,7 @@
           <span>{{ member.name }} {{ member.lastName }} ({{ member.role }})</span>
         </label>
       </div>
-      <button type="submit" class="btn" [disabled]="!isAnyMemberSelected()">Add Selected Members</button>
+      <button type="submit" class="btn" [disabled]="!isAnyMemberSelected()" (click)="addSelectedMembers()">Add Selected Members</button>
     </form>
   </div>
 
@@ -23,7 +23,6 @@
     <p class="info">No members available to add.</p>
   </ng-template>
 
-  <!-- Prikazivanje poruka o uspehu i grešci -->
   <p *ngIf="successMessage" class="success">{{ successMessage }}</p>
   <p *ngIf="errorMessage" class="error">{{ errorMessage }}</p>
 </div>

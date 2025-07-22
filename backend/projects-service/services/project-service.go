@@ -939,7 +939,7 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string, auth
 	if role == "member" {
 		// Fetch member details from users-service
 		usersServiceURL := os.Getenv("USERS_SERVICE_URL")
-		getMemberURL := fmt.Sprintf("%s/api/users/id/%s", usersServiceURL, userID)
+		getMemberURL := fmt.Sprintf("%s/api/users/member/id/%s", usersServiceURL, userID)
 
 		req, err := http.NewRequest("GET", getMemberURL, nil)
 		if err != nil {
@@ -966,8 +966,15 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string, auth
 			return fmt.Errorf("invalid user data from users-service")
 		}
 
-		filter := bson.M{"members._id": userID}
-		update := bson.M{"$pull": bson.M{"members": bson.M{"_id": userID}}}
+		objectID, err := primitive.ObjectIDFromHex(userID)
+		if err != nil {
+			log.Printf("Invalid userID format: %v", err)
+			return fmt.Errorf("invalid user ID format")
+		}
+
+		filter := bson.M{"members._id": objectID}
+		update := bson.M{"$pull": bson.M{"members": bson.M{"_id": objectID}}}
+
 		_, err = s.ProjectsCollection.UpdateMany(context.Background(), filter, update)
 		if err != nil {
 			log.Printf("Failed to remove user %s from projects: %v\n", userID, err)
@@ -976,7 +983,6 @@ func (s *ProjectService) RemoveUserFromProjects(userID string, role string, auth
 
 		log.Printf("User %s successfully removed from all projects", userID)
 
-		// Notifikacija samo za member-e
 		message := "You have been removed from one or more projects."
 		_, err = s.NotificationsBreaker.Execute(func() (interface{}, error) {
 			return nil, s.sendNotification(member, message)

@@ -10,20 +10,19 @@ export class UserService {
 
   constructor(private http: HttpClient) { }
   private getAuthHeaders(): HttpHeaders {
-    const token = localStorage.getItem('token'); // JWT token iz localStorage
-    const role = localStorage.getItem('role'); // Uloga korisnika iz localStorage
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role'); 
     if (!token || !role) {
       throw new Error('Token or Role is missing!');
     }
 
-    // Vraća zaglavlje sa tokenom i rodom
     return new HttpHeaders()
       .set('Authorization', `Bearer ${token}`)
-      .set('Role', role); // Dodaje role u zaglavlje
+      .set('Role', role); 
   }
 
   changePassword(oldPassword: string, newPassword: string, confirmPassword: string): Observable<any> {
-    const headers = this.getAuthHeaders(); // Koristi token i role za autorizaciju
+    const headers = this.getAuthHeaders(); 
     const body = { oldPassword, newPassword, confirmPassword };
     return this.http.post(this.apiUrl, body, { headers });
   }

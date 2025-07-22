@@ -1,35 +1,61 @@
-.register-card {
-    width: 300px;
-    padding: 20px;
-    margin: 30px auto 0 auto; 
-    border: 1px solid #85586F;
-    border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  .register-card {
     background-color: #F8ECD1;
+    border-radius: 12px;
+    padding: 30px;
+    border: 1px solid #85586F;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+    max-width: 500px;
+    width: 100%;
+    margin: 40px auto;
+    font-family: 'Arial', sans-serif;
+    transition: transform 0.3s, box-shadow 0.3s;
   }
-  
+
+    
   .register-card h2 {
     text-align: center;
-    margin-bottom: 20px;
+    color: #85586F;
+    margin-bottom: 25px;
+    font-size: 24px;
+    font-weight: 600;
   }
   
   .form-group {
-    margin-bottom: 15px;
+    margin-bottom: 20px;
   }
   
-  .form-group label {
+  label {
     display: block;
-    margin-bottom: 5px;
+    margin-bottom: 10px;
     font-weight: bold;
+    color: #2c3e50;
+    font-size: 14px;
+  }
+  
+  input {
+    width: 95%;
+    padding: 12px;
+    margin-bottom: 5px;
+    border: 1px solid #b0c5c6;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+  
+  input:focus {
+    border-color: #85586F;
+    outline: none;
+    box-shadow: 0 0 8px rgba(97, 152, 156, 0.3);
   }
   
   .form-group input,
-  .form-group select {
-    width: 90%;
-    padding: 8px;
-    border: 1px solid #85586F;
-    border-radius: 4px;
-  }
+.form-group select {
+  width: 90%;
+  padding: 8px;
+  border: 1px solid #85586F;
+  border-radius: 4px;
+  font-size: 14px;       
+}
   
   button {
     width: 100%;
@@ -93,4 +119,11 @@
   color: #f44336;
   font-size: 14px;
   margin-top: 5px;
+}
+
+.captcha-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 20px 0;
 }

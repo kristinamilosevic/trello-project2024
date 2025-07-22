@@ -97,7 +97,7 @@ export class ProjectService {
       );
   }
   deleteProject(projectId: string): Observable<any> {
-    const headers = this.getHeadersWithRole(); // Koristi header sa tokenom i ulogom
+    const headers = this.getHeadersWithRole(); 
     return this.http
       .delete(`${this.apiUrl}/${projectId}`, { headers })
       .pipe(
