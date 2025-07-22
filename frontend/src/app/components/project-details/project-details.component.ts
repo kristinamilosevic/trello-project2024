@@ -41,6 +41,7 @@ export class ProjectDetailsComponent implements OnInit, OnDestroy {
   graphLinks: any[] = [];
   layout: string = 'dagre';
   curve = shape.curveLinear;
+  graphVisible: boolean = false;
 
 
 
@@ -73,6 +74,41 @@ export class ProjectDetailsComponent implements OnInit, OnDestroy {
     }
   }
 
+  toggleGraphVisibility(): void {
+  this.graphVisible = !this.graphVisible;
+
+  if (this.graphVisible) {
+    this.loadGraphData(); 
+  }
+}
+
+loadGraphData(): void {
+  if (!this.projectId) return;
+
+  this.graphService.getGraph(this.projectId).subscribe({
+    next: (data) => {
+      this.graphNodes = data.nodes?.map((n: any) => ({
+        id: n.id,
+        label: n.title,
+        description: n.description
+      })) || [];
+
+      this.graphLinks = data.edges?.map((e: any) => ({
+        source: e.to,
+        target: e.from
+      })) || [];
+    },
+    error: (err) => {
+      console.error('Failed to reload graph data:', err);
+      this.graphNodes = [];
+      this.graphLinks = [];
+    }
+  });
+}
+
+
+
+
   checkUserRole(): void {
     const role = this.authService.getUserRole();
     this.isAuthenticated = !!role;
@@ -94,7 +130,6 @@ export class ProjectDetailsComponent implements OnInit, OnDestroy {
   this.isLoading = true;
   this.projectId = projectId;
 
-  // Učitavanje projekta
   this.projectService.getProjectById(projectId).subscribe({
     next: (data) => {
       this.project = data;
@@ -111,7 +146,6 @@ export class ProjectDetailsComponent implements OnInit, OnDestroy {
   // Učitavanje grafa
   this.graphService.getGraph(projectId).subscribe({
     next: (data) => {
-      // Proveri da li data.nodes i data.edges postoje pre nego što ih mapiraš
       if (data.nodes) {
         this.graphNodes = data.nodes.map((n: any) => ({
           id: n.id,
@@ -119,7 +153,7 @@ export class ProjectDetailsComponent implements OnInit, OnDestroy {
           description: n.description
         }));
       } else {
-        this.graphNodes = []; // Ako nema nodes, postavi praznu listu
+        this.graphNodes = []; 
       }
 
       if (data.edges) {
@@ -128,12 +162,12 @@ export class ProjectDetailsComponent implements OnInit, OnDestroy {
           target: e.from
         }));
       } else {
-        this.graphLinks = []; // Ako nema edges, postavi praznu listu
+        this.graphLinks = []; 
       }
     },
     error: (err) => {
       console.error('Failed to load graph data:', err);
-      this.graphNodes = []; // Postavi praznu listu ako dođe do greške
+      this.graphNodes = []; 
       this.graphLinks = [];
     }
   });
