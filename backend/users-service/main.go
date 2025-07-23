@@ -25,6 +25,7 @@ func enableCORS(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", os.Getenv("CORS_ORIGIN"))
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Role, Manager-ID")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
@@ -147,7 +148,7 @@ func main() {
 	userService := services.NewUserService(userCollection, jwtService, blackList, httpClient, projectsBreaker, tasksBreaker)
 
 	userHandler := handlers.UserHandler{UserService: userService, JWTService: jwtService, BlackList: blackList}
-	loginHandler := handlers.LoginHandler{UserService: userService}
+	loginHandler := handlers.LoginHandler{UserService: userService, JWTService: jwtService}
 
 	mux := mux.NewRouter()
 	mux.HandleFunc("/api/users/register", userHandler.Register).Methods("POST")
