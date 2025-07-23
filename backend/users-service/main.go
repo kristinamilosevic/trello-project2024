@@ -160,7 +160,7 @@ func main() {
 	mux.HandleFunc("/api/users/reset-password", loginHandler.ResetPassword).Methods("POST")
 	mux.HandleFunc("/api/users/auth/delete-account/{username}", userHandler.DeleteAccountHandler).Methods("DELETE")
 	mux.HandleFunc("/api/users/magic-link", loginHandler.MagicLink).Methods("POST")
-	mux.HandleFunc("/api/users/magic-login", loginHandler.MagicLogin).Methods("POST")
+	mux.HandleFunc("/api/users/magic-login", loginHandler.MagicLogin).Methods("GET")
 	mux.HandleFunc("/api/users/verify-magic-link", loginHandler.VerifyMagicLink).Methods("POST")
 	mux.HandleFunc("/api/users/users-profile", userHandler.GetUserForCurrentSession).Methods("GET")
 	mux.HandleFunc("/api/users/change-password", userHandler.ChangePassword).Methods("POST")

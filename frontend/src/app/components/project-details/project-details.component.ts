@@ -42,7 +42,7 @@ export class ProjectDetailsComponent implements OnInit, OnDestroy {
   layout: string = 'dagre';
   curve = shape.curveLinear;
   graphVisible: boolean = false;
-
+  showGraphButton: boolean = false;
 
 
   constructor(
@@ -59,8 +59,7 @@ export class ProjectDetailsComponent implements OnInit, OnDestroy {
     this.checkUserRole();
     this.listenToRouterEvents();
     this.curve = shape.curveLinear;
-
-    
+  
 
     const projectId = this.route.snapshot.paramMap.get('id');
     if (projectId) {
@@ -76,37 +75,43 @@ export class ProjectDetailsComponent implements OnInit, OnDestroy {
 
   toggleGraphVisibility(): void {
   this.graphVisible = !this.graphVisible;
-
-  if (this.graphVisible) {
-    this.loadGraphData(); 
-  }
 }
+
 
 loadGraphData(): void {
   if (!this.projectId) return;
 
   this.graphService.getGraph(this.projectId).subscribe({
     next: (data) => {
-      this.graphNodes = data.nodes?.map((n: any) => ({
-        id: n.id,
-        label: n.title,
-        description: n.description
-      })) || [];
+      const linkedTaskIds = new Set<string>();
+      const links = data.edges?.map((e: any) => {
+        linkedTaskIds.add(e.from);
+        linkedTaskIds.add(e.to);
+        return {
+          source: e.to,
+          target: e.from
+        };
+      }) || [];
 
-      this.graphLinks = data.edges?.map((e: any) => ({
-        source: e.to,
-        target: e.from
-      })) || [];
+      const allNodes = this.tasks.map((task: any) => ({
+        id: task.id,
+        label: task.title,
+        description: task.description || ''
+      }));
+
+      this.graphLinks = links;
+      this.graphNodes = allNodes;
+
+      this.showGraphButton = this.graphNodes.length > 0;
     },
     error: (err) => {
       console.error('Failed to reload graph data:', err);
       this.graphNodes = [];
       this.graphLinks = [];
+      this.showGraphButton = false;
     }
   });
 }
-
-
 
 
   checkUserRole(): void {
@@ -133,45 +138,76 @@ loadGraphData(): void {
   this.projectService.getProjectById(projectId).subscribe({
     next: (data) => {
       this.project = data;
-      this.getTasks(projectId);
-      this.loadWorkflowGraph(projectId);
-      this.isLoading = false;
+
+      // 1. Prvo uzmi taskove
+      this.projectService.getTasksForProject(projectId).subscribe(
+        (tasks) => {
+          this.tasks = tasks || [];
+          this.tasks.forEach(task => {
+            task.dependsOn = task.dependsOn || null;
+            task.dependencies = []; 
+          });
+
+          // 2. Poveži ih
+          this.tasks.forEach(task => {
+            this.taskService.getTaskDependencies(task.id).subscribe({
+              next: (deps) => {
+                task.dependencies = deps;
+              },
+              error: (err) => {
+                console.error(`Failed to fetch dependencies for task ${task.id}:`, err);
+              }
+            });
+          });
+
+          // 3. Učitaj graph iz workflow servisa
+          this.graphService.getGraph(projectId).subscribe({
+            next: (data) => {
+              // Povezani čvorovi
+              const links = data.edges?.map((e: any) => ({
+                source: e.to,
+                target: e.from
+              })) || [];
+
+              this.graphLinks = links;
+
+              // Svi taskovi postaju čvorovi, bez obzira da li su povezani
+              this.graphNodes = this.tasks.map((task: any) => ({
+                id: task.id,
+                label: task.title,
+                description: task.description || ''
+              }));
+
+              this.showGraphButton = this.graphNodes.length > 0;
+              this.isLoading = false;
+            },
+            error: (err) => {
+              console.error('Failed to load graph data:', err);
+              this.graphLinks = [];
+              this.graphNodes = this.tasks.map((task: any) => ({
+                id: task.id,
+                label: task.title,
+                description: task.description || ''
+              }));
+              this.showGraphButton = this.graphNodes.length > 0;
+              this.isLoading = false;
+            }
+          });
+
+        },
+        (error) => {
+          console.error('Error fetching tasks:', error);
+          this.isLoading = false;
+        }
+      );
     },
     error: (error) => {
       console.error('Error fetching project details:', error);
       this.isLoading = false;
     }
   });
-
-  // Učitavanje grafa
-  this.graphService.getGraph(projectId).subscribe({
-    next: (data) => {
-      if (data.nodes) {
-        this.graphNodes = data.nodes.map((n: any) => ({
-          id: n.id,
-          label: n.title,
-          description: n.description
-        }));
-      } else {
-        this.graphNodes = []; 
-      }
-
-      if (data.edges) {
-        this.graphLinks = data.edges.map((e: any) => ({
-          source: e.to,
-          target: e.from
-        }));
-      } else {
-        this.graphLinks = []; 
-      }
-    },
-    error: (err) => {
-      console.error('Failed to load graph data:', err);
-      this.graphNodes = []; 
-      this.graphLinks = [];
-    }
-  });
 }
+
 
 
   getTasks(projectId: string): void {
