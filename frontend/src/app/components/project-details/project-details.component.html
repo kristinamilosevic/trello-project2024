@@ -81,9 +81,10 @@
 
 
 
-  <div *ngIf="graphNodes.length && graphLinks.length">
-    <div *ngIf="isManager">
-    <button (click)="toggleGraphVisibility()" class="action-button">{{ graphVisible ? 'Hide' : 'Show' }} Workflow Graph</button> 
+    <div *ngIf="showGraphButton && isManager">
+  <button (click)="toggleGraphVisibility()" class="action-button">
+    {{ graphVisible ? 'Hide' : 'Show' }} Workflow Graph
+  </button>
     <div *ngIf="graphVisible">
   <ngx-graph
     [links]="graphLinks" 
@@ -146,7 +147,8 @@
   </ngx-graph>
 </div>
 </div>
-</div>
+
+
 
 
     <div class="action-buttons">
