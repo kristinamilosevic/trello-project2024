@@ -250,26 +250,7 @@ func (s *UserService) DeleteAccount(username string, authToken string) error {
 		if err != nil {
 			return err
 		}
-		for _, projectID := range projectIDs {
-			deleteProjectURL := fmt.Sprintf("%s/api/projects/%s", strings.TrimRight(projectsServiceURL, "/"), projectID)
-			req, err := http.NewRequest(http.MethodDelete, deleteProjectURL, nil)
-			if err != nil {
-				return fmt.Errorf("failed to create request to delete project: %v", err)
-			}
-			req.Header.Set("Authorization", "Bearer "+authToken)
-			req.Header.Set("Role", role)
-			resp, err := s.HTTPClient.Do(req)
-			if err != nil {
-				return fmt.Errorf("failed to delete project %s: %v", projectID, err)
-			}
-			resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				return fmt.Errorf("failed to delete project %s: status %d", projectID, resp.StatusCode)
-			}
-		}
-	}
-
-	if role == "member" {
+	} else if role == "member" {
 		url := fmt.Sprintf("%s/api/projects/user-projects/%s", strings.TrimRight(projectsServiceURL, "/"), username)
 		projectIDs, err = getProjectIDs(url, role)
 		if err != nil {
@@ -294,6 +275,26 @@ func (s *UserService) DeleteAccount(username string, authToken string) error {
 
 		if result.HasUnfinishedTasks {
 			return fmt.Errorf("cannot delete account: project '%s' has unfinished tasks", projectID)
+		}
+	}
+
+	if role == "manager" {
+		for _, projectID := range projectIDs {
+			deleteProjectURL := fmt.Sprintf("%s/api/projects/%s", strings.TrimRight(projectsServiceURL, "/"), projectID)
+			req, err := http.NewRequest(http.MethodDelete, deleteProjectURL, nil)
+			if err != nil {
+				return fmt.Errorf("failed to create request to delete project: %v", err)
+			}
+			req.Header.Set("Authorization", "Bearer "+authToken)
+			req.Header.Set("Role", role)
+			resp, err := s.HTTPClient.Do(req)
+			if err != nil {
+				return fmt.Errorf("failed to delete project %s: %v", projectID, err)
+			}
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("failed to delete project %s: status %d", projectID, resp.StatusCode)
+			}
 		}
 	}
 
