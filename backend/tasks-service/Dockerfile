@@ -13,6 +13,8 @@ RUN cd tasks-service && go mod download
 
 RUN cd tasks-service && go build -o ../tasks-service .
 
+RUN mkdir -p /app/logs && chmod 700 /app/logs
+
 FROM alpine
 RUN apk add --no-cache ca-certificates && update-ca-certificates
 

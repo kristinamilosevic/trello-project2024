@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"strings"
+
+	"trello-project/microservices/tasks-service/logging"
+
 	"trello-project/microservices/tasks-service/models"
 
 	"github.com/sony/gobreaker"
@@ -44,13 +46,12 @@ func NewTaskService(
 func (s *TaskService) GetAvailableMembersForTask(r *http.Request, projectID, taskID string) ([]models.Member, error) {
 	projectsServiceURL := os.Getenv("PROJECTS_SERVICE_URL")
 	if projectsServiceURL == "" {
-		log.Println("PROJECTS_SERVICE_URL is not set in .env file")
+		logging.Logger.Warnf("Event ID: CONFIG_ERROR, Description: PROJECTS_SERVICE_URL is not set in .env file for GetAvailableMembersForTask.")
 		return nil, fmt.Errorf("projects-service URL is not configured")
 	}
-
 	// Napravi URL za HTTP GET zahtev ka projects-service
 	url := fmt.Sprintf("%s/api/projects/%s/members/all", projectsServiceURL, projectID)
-	log.Printf("Fetching project members from: %s", url)
+	logging.Logger.Infof("Event ID: FETCH_PROJECT_MEMBERS, Description: Fetching project members from: %s", url)
 
 	// Dohvati Authorization i Role iz dolaznog HTTP zahteva
 	authToken := r.Header.Get("Authorization")
@@ -59,7 +60,7 @@ func (s *TaskService) GetAvailableMembersForTask(r *http.Request, projectID, tas
 	// Napravi HTTP zahtev sa zaglavljima
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		log.Printf("Failed to create request to projects-service: %v", err)
+		logging.Logger.Errorf("Event ID: HTTP_REQUEST_ERROR, Description: Failed to create request to projects-service: %v", err)
 		return nil, err
 	}
 
@@ -87,8 +88,8 @@ func (s *TaskService) GetAvailableMembersForTask(r *http.Request, projectID, tas
 		return rawProjectMembers, nil
 	})
 	if err != nil {
-		log.Printf("Circuit breaker triggered or request to projects-service failed: %v", err)
-		log.Println("Returning empty list of available members as fallback")
+		logging.Logger.Warnf("Event ID: CIRCUIT_BREAKER_TRIPPED, Description: Circuit breaker triggered or request to projects-service failed: %v", err)
+		logging.Logger.Infof("Event ID: FALLBACK_RESPONSE, Description: Returning empty list of available members as fallback.")
 		return []models.Member{}, nil
 	}
 
@@ -100,13 +101,13 @@ func (s *TaskService) GetAvailableMembersForTask(r *http.Request, projectID, tas
 	for _, rawMember := range rawProjectMembers {
 		idStr, ok := rawMember["_id"].(string)
 		if !ok {
-			log.Printf("Warning: Member %+v has an invalid _id format", rawMember)
+			logging.Logger.Warnf("Event ID: INVALID_MEMBER_ID, Description: Member %+v has an invalid _id format.", rawMember)
 			continue
 		}
 
 		objectID, err := primitive.ObjectIDFromHex(idStr)
 		if err != nil {
-			log.Printf("Warning: Failed to convert member ID %s to ObjectID: %v", idStr, err)
+			logging.Logger.Warnf("Event ID: ID_CONVERSION_ERROR, Description: Failed to convert member ID %s to ObjectID: %v", idStr, err)
 			continue
 		}
 
@@ -121,24 +122,23 @@ func (s *TaskService) GetAvailableMembersForTask(r *http.Request, projectID, tas
 		projectMembers = append(projectMembers, member)
 	}
 
-	//LOG: Članovi sa projekta pre bilo kakve obrade
-	log.Printf("Project members fetched and converted for project %s: %+v", projectID, projectMembers)
+	logging.Logger.Infof("Event ID: PROJECT_MEMBERS_FETCHED, Description: Project members fetched and converted for project %s: %+v", projectID, projectMembers)
 
 	// Dohvati podatke o tasku
 	taskObjectID, err := primitive.ObjectIDFromHex(taskID)
 	if err != nil {
-		log.Printf("Error converting taskID to ObjectID: %s, error: %v", taskID, err)
+		logging.Logger.Errorf("Event ID: INVALID_TASK_ID, Description: Error converting taskID to ObjectID: %s, error: %v", taskID, err)
 		return nil, fmt.Errorf("invalid task ID format")
 	}
 
 	var task models.Task
 	err = s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskObjectID}).Decode(&task)
 	if err != nil {
-		log.Printf("Failed to fetch task members for taskID: %s, error: %v", taskID, err)
+		logging.Logger.Errorf("Event ID: TASK_FETCH_ERROR, Description: Failed to fetch task members for taskID: %s, error: %v", taskID, err)
 		return nil, fmt.Errorf("failed to fetch task members: %v", err)
 	}
 
-	log.Printf("Task members fetched for task %s: %+v", taskID, task.Members)
+	logging.Logger.Infof("Event ID: TASK_MEMBERS_FETCHED, Description: Task members fetched for task %s: %+v", taskID, task.Members)
 
 	// Kreiraj mapu postojećih članova zadatka radi brže provere
 	existingTaskMemberIDs := make(map[string]bool)
@@ -150,14 +150,14 @@ func (s *TaskService) GetAvailableMembersForTask(r *http.Request, projectID, tas
 	availableMembers := []models.Member{}
 	for _, member := range projectMembers {
 		if _, exists := existingTaskMemberIDs[member.ID.Hex()]; !exists {
-			log.Printf("Adding member %s to available list for task %s", member.Username, taskID)
+			logging.Logger.Infof("Event ID: MEMBER_ADDED_TO_AVAILABLE, Description: Adding member %s to available list for task %s", member.Username, taskID)
 			availableMembers = append(availableMembers, member)
 		} else {
-			log.Printf("Skipping member %s because they are already in task %s", member.Username, taskID)
+			logging.Logger.Infof("Event ID: MEMBER_SKIPPED, Description: Skipping member %s because they are already in task %s", member.Username, taskID)
 		}
 	}
 
-	log.Printf("Final available members for task %s: %+v", taskID, availableMembers)
+	logging.Logger.Infof("Event ID: FINAL_AVAILABLE_MEMBERS, Description: Final available members for task %s: %+v", taskID, availableMembers)
 
 	return availableMembers, nil
 }
@@ -186,8 +186,10 @@ func (s *TaskService) AddMembersToTask(taskID string, membersToAdd []models.Memb
 			bson.M{"$set": bson.M{"members": task.Members}}, // Postavi `members` kao prazan niz
 		)
 		if err != nil {
+			logging.Logger.Errorf("Event ID: MEMBERS_FIELD_INIT_ERROR, Description: Failed to initialize members field for task %s: %v", taskID, err)
 			return fmt.Errorf("failed to initialize members field: %v", err)
 		}
+		logging.Logger.Infof("Event ID: MEMBERS_FIELD_INITIALIZED, Description: Members field initialized as empty array for task %s.", taskID)
 	}
 
 	// Filtriraj nove članove koji nisu već dodeljeni
@@ -210,8 +212,10 @@ func (s *TaskService) AddMembersToTask(taskID string, membersToAdd []models.Memb
 		update := bson.M{"$addToSet": bson.M{"members": bson.M{"$each": newMembers}}}
 		_, err = s.tasksCollection.UpdateOne(context.Background(), bson.M{"_id": taskObjectID}, update)
 		if err != nil {
+			logging.Logger.Errorf("Event ID: ADD_MEMBERS_TO_TASK_ERROR, Description: Failed to add members to task %s: %v", taskID, err)
 			return fmt.Errorf("failed to add members to task: %v", err)
 		}
+		logging.Logger.Infof("Event ID: MEMBERS_ADDED_TO_TASK, Description: Successfully added %d new members to task %s.", len(newMembers), taskID)
 
 		// Slanje notifikacija za nove članove
 		for _, member := range newMembers {
@@ -221,15 +225,17 @@ func (s *TaskService) AddMembersToTask(taskID string, membersToAdd []models.Memb
 					return nil, s.sendNotification(member, message)
 				})
 				if err != nil {
-					log.Printf("⚠️ Failed to send notification to member %s: %v", member.Username, err)
+					logging.Logger.Errorf("Event ID: NOTIFICATION_SEND_FAILED, Description: Failed to send notification to member %s for task %s: %v", member.Username, taskID, err)
 				}
 			}(member, message)
-
 		}
+	} else {
+		logging.Logger.Infof("Event ID: NO_NEW_MEMBERS, Description: No new members to add to task %s. All provided members are already assigned.", taskID)
 	}
 
 	return nil
 }
+
 func (s *TaskService) sendNotification(member models.Member, message string) error {
 	notification := map[string]string{
 		"userId":   member.ID.Hex(),
@@ -239,19 +245,19 @@ func (s *TaskService) sendNotification(member models.Member, message string) err
 
 	notificationData, err := json.Marshal(notification)
 	if err != nil {
-		fmt.Printf("Error marshaling notification data: %v\n", err)
+		logging.Logger.Errorf("Event ID: NOTIFICATION_MARSHAL_ERROR, Description: Error marshaling notification data: %v", err)
 		return nil
 	}
 
 	notificationURL := os.Getenv("NOTIFICATIONS_SERVICE_URL")
 	if notificationURL == "" {
-		fmt.Println("Notification service URL is not set in .env")
+		logging.Logger.Errorf("Event ID: CONFIG_ERROR, Description: Notification service URL is not set in .env")
 		return fmt.Errorf("notification service URL is not configured")
 	}
 
 	req, err := http.NewRequest("POST", notificationURL, bytes.NewBuffer(notificationData))
 	if err != nil {
-		fmt.Printf("Error creating new request: %v\n", err)
+		logging.Logger.Errorf("Event ID: HTTP_REQUEST_ERROR, Description: Error creating new request for notification: %v", err)
 		return nil
 	}
 
@@ -260,17 +266,17 @@ func (s *TaskService) sendNotification(member models.Member, message string) err
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		fmt.Printf("Error sending HTTP request: %v\n", err)
+		logging.Logger.Errorf("Event ID: HTTP_SEND_ERROR, Description: Error sending HTTP request for notification: %v", err)
 		return nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
-		fmt.Printf("Failed to create notification, status code: %d\n", resp.StatusCode)
+		logging.Logger.Errorf("Event ID: NOTIFICATION_STATUS_ERROR, Description: Failed to create notification, status code: %d", resp.StatusCode)
 		return nil
 	}
 
-	fmt.Printf("Notification successfully sent for member: %s\n", member.Username)
+	logging.Logger.Infof("Event ID: NOTIFICATION_SENT, Description: Notification successfully sent for member: %s", member.Username)
 	return nil
 }
 
@@ -281,35 +287,32 @@ func (s *TaskService) GetMembersForTask(taskID primitive.ObjectID) ([]models.Mem
 	// Dohvati zadatak iz baze koristeći ObjectID
 	err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskID}).Decode(&task)
 	if err != nil {
-		log.Printf("Task not found: %v", err)
+		logging.Logger.Warnf("Event ID: TASK_NOT_FOUND, Description: Task not found: %v", err)
 		return nil, fmt.Errorf("task not found")
 	}
 
+	logging.Logger.Infof("Event ID: MEMBERS_FOR_TASK_FETCHED, Description: Successfully retrieved members for task ID: %s", taskID.Hex())
 	// Vrati članove povezane sa zadatkom
 	return task.Members, nil
 }
 
 func (s *TaskService) CreateTask(projectID string, title, description string, status models.TaskStatus) (*models.Task, error) {
-	log.Println("⏳ Starting CreateTask...")
+	logging.Logger.Info("⏳ Starting CreateTask...")
 
-	// Provera validnosti projectID
 	_, err := primitive.ObjectIDFromHex(projectID)
 	if err != nil {
-		log.Printf("❌ Invalid project ID: %v\n", err)
+		logging.Logger.Errorf("❌ Invalid project ID: %v", err)
 		return nil, fmt.Errorf("invalid project ID format: %v", err)
 	}
 
-	// Ako status nije prosleđen, postavljamo podrazumevanu vrednost
 	if status == "" {
-		log.Println("ℹ️ Status not provided, setting to default (pending)")
+		logging.Logger.Info("ℹ️ Status not provided, setting to default (pending)")
 		status = models.StatusPending
 	}
 
-	// Sanitizacija inputa
 	sanitizedTitle := html.EscapeString(title)
 	sanitizedDescription := html.EscapeString(description)
 
-	// Kreiranje objekta zadatka
 	task := &models.Task{
 		ID:          primitive.NewObjectID(),
 		ProjectID:   projectID,
@@ -318,36 +321,34 @@ func (s *TaskService) CreateTask(projectID string, title, description string, st
 		Status:      status,
 	}
 
-	// Unos zadatka u MongoDB
-	log.Println("📦 Inserting task into MongoDB...")
+	logging.Logger.Info("📦 Inserting task into MongoDB...")
 	result, err := s.tasksCollection.InsertOne(context.Background(), task)
 	if err != nil {
-		log.Printf("❌ Failed to insert task: %v\n", err)
+		logging.Logger.Errorf("❌ Failed to insert task: %v", err)
 		return nil, fmt.Errorf("failed to create task: %v", err)
 	}
 	task.ID = result.InsertedID.(primitive.ObjectID)
-	log.Printf("✅ Task inserted with ID: %s\n", task.ID.Hex())
+	logging.Logger.Infof("✅ Task inserted with ID: %s", task.ID.Hex())
 
-	// === Projekti servis: dodavanje task-a u projekat ===
 	projectsServiceURL := os.Getenv("PROJECTS_SERVICE_URL")
 	if projectsServiceURL == "" {
-		log.Println("⚠️ PROJECTS_SERVICE_URL is not set in .env file")
+		logging.Logger.Warn("⚠️ PROJECTS_SERVICE_URL is not set in .env file")
 		return nil, fmt.Errorf("projects-service URL is not configured")
 	}
 
 	projectURL := fmt.Sprintf("%s/api/projects/%s/add-task", projectsServiceURL, projectID)
 	requestBody, err := json.Marshal(map[string]string{"taskID": task.ID.Hex()})
 	if err != nil {
-		log.Printf("❌ Failed to marshal project-service request body: %v\n", err)
+		logging.Logger.Errorf("❌ Failed to marshal project-service request body: %v", err)
 		return nil, fmt.Errorf("failed to marshal request body: %v", err)
 	}
 
-	log.Printf("📤 Sending request to projects-service: %s\n", projectURL)
-	log.Printf("📄 Request body: %s\n", string(requestBody))
+	logging.Logger.Infof("📤 Sending request to projects-service: %s", projectURL)
+	logging.Logger.Infof("📄 Request body: %s", string(requestBody))
 
 	req, err := http.NewRequest("POST", projectURL, bytes.NewBuffer(requestBody))
 	if err != nil {
-		log.Printf("❌ Failed to create request to projects-service: %v\n", err)
+		logging.Logger.Errorf("❌ Failed to create request to projects-service: %v", err)
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -355,27 +356,25 @@ func (s *TaskService) CreateTask(projectID string, title, description string, st
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		log.Printf("⚠️ Task was created, but failed to notify projects-service: %v\n", err)
+		logging.Logger.Warnf("⚠️ Task was created, but failed to notify projects-service: %v", err)
 	} else {
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			log.Printf("⚠️ projects-service returned status %d when adding task %s to project %s", resp.StatusCode, task.ID.Hex(), projectID)
+			logging.Logger.Warnf("⚠️ projects-service returned status %d when adding task %s to project %s", resp.StatusCode, task.ID.Hex(), projectID)
 			body, _ := io.ReadAll(resp.Body)
-			log.Printf("📄 projects-service response body: %s", string(body))
+			logging.Logger.Infof("📄 projects-service response body: %s", string(body))
 		} else {
-			log.Printf("✅ Successfully notified projects-service about new task %s\n", task.ID.Hex())
+			logging.Logger.Infof("✅ Successfully notified projects-service about new task %s", task.ID.Hex())
 		}
 	}
 
-	// === Workflow servis: kreiranje task noda u grafu ===
 	workflowServiceURL := os.Getenv("WORKFLOW_SERVICE_URL")
 	if workflowServiceURL == "" {
-		log.Println("⚠️ WORKFLOW_SERVICE_URL is not set in .env file")
+		logging.Logger.Warn("⚠️ WORKFLOW_SERVICE_URL is not set in .env file")
 	} else {
-		log.Println("🚀 Preparing to notify workflow-service...")
+		logging.Logger.Info("🚀 Preparing to notify workflow-service...")
 
 		workflowURL := fmt.Sprintf("%s/api/workflow/task-node", strings.TrimRight(workflowServiceURL, "/"))
-
 		taskNodePayload := map[string]any{
 			"id":          task.ID.Hex(),
 			"projectId":   task.ProjectID,
@@ -386,35 +385,35 @@ func (s *TaskService) CreateTask(projectID string, title, description string, st
 
 		payloadBytes, err := json.Marshal(taskNodePayload)
 		if err != nil {
-			log.Printf("❌ Failed to marshal taskNode payload: %v\n", err)
+			logging.Logger.Errorf("❌ Failed to marshal taskNode payload: %v", err)
 		} else {
-			log.Printf("📤 Sending request to workflow-service: %s\n", workflowURL)
-			log.Printf("📄 Payload: %s\n", string(payloadBytes))
+			logging.Logger.Infof("📤 Sending request to workflow-service: %s", workflowURL)
+			logging.Logger.Infof("📄 Payload: %s", string(payloadBytes))
 
 			req, err := http.NewRequest("POST", workflowURL, bytes.NewBuffer(payloadBytes))
 			if err != nil {
-				log.Printf("❌ Failed to create request to workflow-service: %v\n", err)
+				logging.Logger.Errorf("❌ Failed to create request to workflow-service: %v", err)
 			} else {
 				req.Header.Set("Content-Type", "application/json")
 				resp, err := s.httpClient.Do(req)
 				if err != nil {
-					log.Printf("❌ Failed to notify workflow-service: %v\n", err)
+					logging.Logger.Errorf("❌ Failed to notify workflow-service: %v", err)
 				} else {
 					defer resp.Body.Close()
 					body, _ := io.ReadAll(resp.Body)
 
 					if resp.StatusCode != http.StatusCreated {
-						log.Printf("⚠️ workflow-service returned status %d for task %s\n", resp.StatusCode, task.ID.Hex())
-						log.Printf("📄 workflow-service response body: %s\n", string(body))
+						logging.Logger.Warnf("⚠️ workflow-service returned status %d for task %s", resp.StatusCode, task.ID.Hex())
+						logging.Logger.Infof("📄 workflow-service response body: %s", string(body))
 					} else {
-						log.Printf("✅ Successfully notified workflow-service about task %s\n", task.ID.Hex())
+						logging.Logger.Infof("✅ Successfully notified workflow-service about task %s", task.ID.Hex())
 					}
 				}
 			}
 		}
 	}
 
-	log.Println("✅ Task creation process completed.")
+	logging.Logger.Info("✅ Task creation process completed.")
 	return task, nil
 }
 
@@ -422,6 +421,7 @@ func (s *TaskService) GetAllTasks() ([]*models.Task, error) {
 	var tasks []*models.Task
 	cursor, err := s.tasksCollection.Find(context.Background(), bson.M{})
 	if err != nil {
+		logging.Logger.Errorf("Event ID: TASK_RETRIEVAL_FAILED, Description: Failed to retrieve tasks: %v", err)
 		return nil, fmt.Errorf("failed to retrieve tasks: %v", err)
 	}
 	defer cursor.Close(context.Background())
@@ -430,15 +430,18 @@ func (s *TaskService) GetAllTasks() ([]*models.Task, error) {
 	for cursor.Next(context.Background()) {
 		var task models.Task
 		if err := cursor.Decode(&task); err != nil {
+			logging.Logger.Errorf("Event ID: TASK_DECODE_FAILED, Description: Failed to decode task: %v", err)
 			return nil, fmt.Errorf("failed to decode task: %v", err)
 		}
 		tasks = append(tasks, &task)
 	}
 
 	if err := cursor.Err(); err != nil {
+		logging.Logger.Errorf("Event ID: CURSOR_ERROR, Description: Cursor error during task retrieval: %v", err)
 		return nil, fmt.Errorf("cursor error: %v", err)
 	}
 
+	logging.Logger.Infof("Event ID: ALL_TASKS_RETRIEVED, Description: Successfully retrieved %d tasks.", len(tasks))
 	return tasks, nil
 }
 
@@ -446,6 +449,7 @@ func (s *TaskService) RemoveMemberFromTask(taskID string, memberID primitive.Obj
 	// Konvertovanje taskID u ObjectID
 	taskObjectID, err := primitive.ObjectIDFromHex(taskID)
 	if err != nil {
+		logging.Logger.Errorf("Event ID: INVALID_TASK_ID_FORMAT, Description: Invalid task ID format: %v", err)
 		return fmt.Errorf("invalid task ID format")
 	}
 
@@ -453,11 +457,13 @@ func (s *TaskService) RemoveMemberFromTask(taskID string, memberID primitive.Obj
 	var task models.Task
 	err = s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskObjectID}).Decode(&task)
 	if err != nil {
+		logging.Logger.Warnf("Event ID: TASK_NOT_FOUND, Description: Task not found with ID %s: %v", taskID, err)
 		return fmt.Errorf("task not found: %v", err)
 	}
 
 	// ❗️Provera da li je task završen
 	if task.Status == "Completed" {
+		logging.Logger.Warnf("Event ID: REMOVE_FROM_COMPLETED_TASK_ATTEMPT, Description: Attempted to remove member from a completed task %s.", taskID)
 		return fmt.Errorf("cannot remove member from a completed task")
 	}
 
@@ -474,6 +480,7 @@ func (s *TaskService) RemoveMemberFromTask(taskID string, memberID primitive.Obj
 	}
 
 	if !memberFound {
+		logging.Logger.Warnf("Event ID: MEMBER_NOT_FOUND_IN_TASK, Description: Member %s not found in task %s.", memberID.Hex(), taskID)
 		return fmt.Errorf("member not found in the task")
 	}
 
@@ -484,8 +491,10 @@ func (s *TaskService) RemoveMemberFromTask(taskID string, memberID primitive.Obj
 		bson.M{"$set": bson.M{"members": task.Members}},
 	)
 	if err != nil {
+		logging.Logger.Errorf("Event ID: TASK_UPDATE_FAILED, Description: Failed to update task %s after member removal: %v", taskID, err)
 		return fmt.Errorf("failed to update task: %v", err)
 	}
+	logging.Logger.Infof("Event ID: MEMBER_REMOVED_FROM_TASK, Description: Successfully removed member %s from task %s.", memberID.Hex(), taskID)
 
 	// Asinhrono slanje notifikacije preko Circuit Breaker-a
 	message := fmt.Sprintf("You have been removed from the task: %s", task.Title)
@@ -494,7 +503,7 @@ func (s *TaskService) RemoveMemberFromTask(taskID string, memberID primitive.Obj
 			return nil, s.sendNotification(member, message)
 		})
 		if err != nil {
-			log.Printf("⚠️ Failed to send notification to member %s: %v", member.Username, err)
+			logging.Logger.Errorf("Event ID: NOTIFICATION_SEND_FAILED, Description: Failed to send removal notification to member %s: %v", member.Username, err)
 		}
 	}(removedMember, message)
 
@@ -505,8 +514,10 @@ func (s *TaskService) GetTaskByID(taskID primitive.ObjectID) (*models.Task, erro
 	var task models.Task
 	err := s.tasksCollection.FindOne(context.Background(), bson.M{"_id": taskID}).Decode(&task)
 	if err != nil {
+		logging.Logger.Warnf("Event ID: TASK_NOT_FOUND, Description: Task with ID %s not found: %v", taskID.Hex(), err)
 		return nil, err
 	}
+	logging.Logger.Infof("Event ID: TASK_FETCHED_BY_ID, Description: Successfully retrieved task with ID: %s", taskID.Hex())
 	return &task, nil
 }
 
@@ -516,8 +527,8 @@ func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.
 		return nil, fmt.Errorf("task not found: %v", err)
 	}
 
-	fmt.Printf("Task '%s' current status: %s\n", task.Title, task.Status)
-	fmt.Printf("Attempting to change status to: %s\n", status)
+	logging.Logger.Infof("Task '%s' current status: %s", task.Title, task.Status)
+	logging.Logger.Infof("Attempting to change status to: %s", status)
 
 	isAuthorized := false
 	for _, member := range append(task.Members, task.Assignees...) {
@@ -568,7 +579,7 @@ func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.
 		return nil, fmt.Errorf("failed to fetch updated task: %v", err)
 	}
 
-	fmt.Printf("Successfully updated task '%s' to status: %s\n", task.Title, task.Status)
+	logging.Logger.Infof("✅ Successfully updated task '%s' to status: %s", task.Title, task.Status)
 
 	isBlocked := false
 	if len(dependencyIDs) > 0 {
@@ -578,16 +589,15 @@ func (s *TaskService) ChangeTaskStatus(taskID primitive.ObjectID, status models.
 	}
 
 	err = s.updateBlockedInWorkflow(task.ID.Hex(), isBlocked)
-	//_ = s.triggerWorkflowBlockedStatusRefresh(task.ID.Hex()) umesto ovog iznad ovo
 	if err != nil {
-		log.Printf("Warning: failed to update blocked status in workflow-service: %v", err)
+		logging.Logger.Warnf("⚠️ Failed to refresh blocked status in workflow-service: %v", err)
 	}
 
 	message := fmt.Sprintf("The status of task '%s' has been changed to: %s", task.Title, status)
 	for _, member := range append(task.Members, task.Assignees...) {
 		err := s.sendNotification(member, message)
 		if err != nil {
-			log.Printf("Failed to notify user %s: %v", member.Username, err)
+			logging.Logger.Warnf("⚠️ Failed to notify user %s: %v", member.Username, err)
 		}
 	}
 
@@ -599,18 +609,18 @@ func (s *TaskService) DeleteTasksByProject(projectID string) error {
 
 	result, err := s.tasksCollection.DeleteMany(context.Background(), filter)
 	if err != nil {
-		log.Printf("Failed to delete tasks for project ID %s: %v", projectID, err)
+		logging.Logger.Errorf("Event ID: TASKS_DELETE_FAILED, Description: Failed to delete tasks for project ID %s: %v", projectID, err)
 		return fmt.Errorf("failed to delete tasks: %v", err)
 	}
 
-	log.Printf("Successfully deleted %d tasks for project ID %s", result.DeletedCount, projectID)
+	logging.Logger.Infof("Event ID: TASKS_DELETED_BY_PROJECT, Description: Successfully deleted %d tasks for project ID %s", result.DeletedCount, projectID)
 	return nil
 }
 
 func (s *TaskService) HasActiveTasks(ctx context.Context, projectID, memberID string) (bool, error) {
 	memberObjectID, err := primitive.ObjectIDFromHex(memberID)
 	if err != nil {
-		log.Printf("Invalid memberID: %s\n", memberID)
+		logging.Logger.Errorf("Event ID: INVALID_MEMBER_ID_FORMAT, Description: Invalid memberID: %s. Error: %v", memberID, err)
 		return false, err
 	}
 
@@ -622,10 +632,11 @@ func (s *TaskService) HasActiveTasks(ctx context.Context, projectID, memberID st
 
 	count, err := s.tasksCollection.CountDocuments(ctx, filter)
 	if err != nil {
+		logging.Logger.Errorf("Event ID: COUNT_ACTIVE_TASKS_FAILED, Description: Failed to count active tasks for project %s and member %s: %v", projectID, memberID, err)
 		return false, err
 	}
 
-	log.Printf("Found %d active tasks\n", count)
+	logging.Logger.Infof("Event ID: ACTIVE_TASKS_COUNT, Description: Found %d active tasks for project %s and member %s", count, projectID, memberID)
 
 	return count > 0, nil
 }
@@ -634,27 +645,33 @@ func (s *TaskService) GetTasksByProjectID(projectID string) ([]models.Task, erro
 	filter := bson.M{"projectId": projectID}
 	cursor, err := s.tasksCollection.Find(context.Background(), filter)
 	if err != nil {
+		logging.Logger.Errorf("Event ID: TASKS_BY_PROJECT_FETCH_FAILED, Description: Failed to find tasks for project %s: %v", projectID, err)
 		return nil, fmt.Errorf("failed to find tasks: %w", err)
 	}
 	defer cursor.Close(context.Background())
 
 	var tasks []models.Task
 	if err := cursor.All(context.Background(), &tasks); err != nil {
+		logging.Logger.Errorf("Event ID: TASKS_DECODE_FAILED, Description: Failed to decode tasks for project %s: %v", projectID, err)
 		return nil, fmt.Errorf("failed to decode tasks: %w", err)
 	}
+	logging.Logger.Infof("Event ID: TASKS_BY_PROJECT_RETRIEVED, Description: Successfully retrieved %d tasks for project ID %s.", len(tasks), projectID)
 	return tasks, nil
 }
 
 func HasUnfinishedTasks(tasks []models.Task) bool {
 	for _, task := range tasks {
 		if task.Status != models.StatusCompleted {
+			logging.Logger.Debugf("Event ID: UNFINISHED_TASK_FOUND, Description: Unfinished task '%s' found (Status: %s).", task.Title, task.Status)
 			return true
 		}
 	}
+	logging.Logger.Debugf("Event ID: NO_UNFINISHED_TASKS, Description: No unfinished tasks found in the provided list.")
 	return false
 }
 
 func (s *TaskService) RemoveUserFromAllTasksByUsername(username string) error {
+	// Uklanjanje iz members
 	filterMembers := bson.M{
 		"members.username": username,
 	}
@@ -663,11 +680,13 @@ func (s *TaskService) RemoveUserFromAllTasksByUsername(username string) error {
 			"members": bson.M{"username": username},
 		},
 	}
-	_, err := s.tasksCollection.UpdateMany(context.Background(), filterMembers, updateMembers)
+	resultMembers, err := s.tasksCollection.UpdateMany(context.Background(), filterMembers, updateMembers)
 	if err != nil {
+		logging.Logger.Errorf("Event ID: REMOVE_USER_FROM_MEMBERS_FAILED, Description: Failed to remove user '%s' from members: %v", username, err)
 		return fmt.Errorf("failed to remove user from members: %v", err)
 	}
 
+	// Uklanjanje iz assignees
 	filterAssignees := bson.M{
 		"$and": []bson.M{
 			{"assignees": bson.M{"$type": "array"}},
@@ -679,10 +698,14 @@ func (s *TaskService) RemoveUserFromAllTasksByUsername(username string) error {
 			"assignees": username,
 		},
 	}
-	_, err = s.tasksCollection.UpdateMany(context.Background(), filterAssignees, updateAssignees)
+	resultAssignees, err := s.tasksCollection.UpdateMany(context.Background(), filterAssignees, updateAssignees)
 	if err != nil {
+		logging.Logger.Errorf("Event ID: REMOVE_USER_FROM_ASSIGNEES_FAILED, Description: Failed to remove user '%s' from assignees: %v", username, err)
 		return fmt.Errorf("failed to remove user from assignees: %v", err)
 	}
+
+	totalModified := resultMembers.ModifiedCount + resultAssignees.ModifiedCount
+	logging.Logger.Infof("Event ID: REMOVE_USER_FROM_ALL_TASKS_SUCCESS, Description: Successfully removed user '%s' from %d tasks.", username, totalModified)
 
 	return nil
 }

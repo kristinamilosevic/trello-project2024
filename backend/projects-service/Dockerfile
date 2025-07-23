@@ -11,6 +11,7 @@ COPY utils ./utils
 RUN cd projects-service && go mod download
 
 RUN cd projects-service && go build -o ../projects-service .
+RUN mkdir -p /app/logs && chmod 700 /app/logs
 
 FROM alpine
 RUN apk add --no-cache ca-certificates && update-ca-certificates

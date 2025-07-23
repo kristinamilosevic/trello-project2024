@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"trello-project/microservices/users-service/logging"
 	"trello-project/microservices/users-service/models"
 	"trello-project/microservices/users-service/utils"
 
@@ -44,6 +44,7 @@ func NewUserService(
 	tasksBreaker *gobreaker.CircuitBreaker,
 	projectsBreaker *gobreaker.CircuitBreaker,
 ) *UserService {
+	logging.Logger.Debug("Event ID: NEW_USER_SERVICE_INIT, Description: Initializing UserService.")
 	return &UserService{
 		UserCollection:  userCollection,
 		TokenCache:      make(map[string]string),
@@ -57,24 +58,31 @@ func NewUserService(
 
 // RegisterUser šalje verifikacioni email korisniku i čuva podatke u kešu
 func (s *UserService) RegisterUser(user models.User) error {
+	logging.Logger.Debugf("Event ID: REGISTER_USER_START, Description: Attempting to register user with username: %s, email: %s", user.Username, user.Email)
+
 	// Provera da li korisnik već postoji
 	var existingUser models.User
 	if err := s.UserCollection.FindOne(context.Background(), bson.M{"username": user.Username}).Decode(&existingUser); err == nil {
+		logging.Logger.Warnf("Event ID: REGISTER_USER_ALREADY_EXISTS, Description: User with username '%s' already exists.", user.Username)
 		return fmt.Errorf("user with username already exists")
 	}
+	logging.Logger.Debugf("Event ID: REGISTER_USER_USERNAME_CHECK_PASSED, Description: Username '%s' is available.", user.Username)
 
 	// Sanitizacija unosa
 	user.Username = html.EscapeString(user.Username)
 	user.Name = html.EscapeString(user.Name)
 	user.LastName = html.EscapeString(user.LastName)
 	user.Email = html.EscapeString(user.Email)
+	logging.Logger.Debug("Event ID: REGISTER_USER_INPUT_SANITIZED, Description: User input sanitized.")
 
 	// Hashiranje lozinke pre nego što se sačuva
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
+		logging.Logger.Errorf("Event ID: REGISTER_USER_PASSWORD_HASH_FAILED, Description: Failed to hash password for user '%s': %v", user.Username, err)
 		return fmt.Errorf("failed to hash password: %v", err)
 	}
 	user.Password = string(hashedPassword)
+	logging.Logger.Debug("Event ID: REGISTER_USER_PASSWORD_HASHED, Description: Password hashed successfully.")
 
 	// Generisanje verifikacionog koda i podešavanje vremena isteka
 	verificationCode := fmt.Sprintf("%06d", rand.Intn(1000000))
@@ -84,28 +92,32 @@ func (s *UserService) RegisterUser(user models.User) error {
 	user.VerificationCode = verificationCode
 	user.VerificationExpiry = expiryTime
 	user.IsActive = false
+	logging.Logger.Debugf("Event ID: REGISTER_USER_VERIFICATION_SET, Description: Verification code '%s' set for user '%s' with expiry: %s", verificationCode, user.Username, expiryTime.String())
 
 	// Čuvanje korisnika u bazi sa statusom `inactive`
 	if _, err := s.UserCollection.InsertOne(context.Background(), user); err != nil {
+		logging.Logger.Errorf("Event ID: REGISTER_USER_DB_INSERT_FAILED, Description: Failed to save inactive user '%s' to database: %v", user.Username, err)
 		return fmt.Errorf("failed to save user: %v", err)
 	}
+	logging.Logger.Infof("Event ID: REGISTER_USER_DB_INSERT_SUCCESS, Description: Inactive user '%s' saved to database.", user.Username)
 
 	// Slanje verifikacionog email-a sa kodom
 	subject := "Your Verification Code"
 	body := fmt.Sprintf("Your verification code is %s. Please enter it within 1 minute.", verificationCode)
 	if err := utils.SendEmail(user.Email, subject, body); err != nil {
+		logging.Logger.Errorf("Event ID: REGISTER_USER_EMAIL_SEND_FAILED, Description: Failed to send verification email to '%s': %v", user.Email, err)
 		return fmt.Errorf("failed to send email: %v", err)
 	}
 
-	log.Println("Verifikacioni kod poslat korisniku:", user.Email)
+	logging.Logger.Infof("Event ID: REGISTER_USER_EMAIL_SENT, Description: Verification code sent to user: %s", user.Email)
 	return nil
 }
 
 func (s *UserService) ValidatePassword(password string) error {
-	log.Println("Počela validacija lozinke:", password)
+	logging.Logger.Debug("Event ID: VALIDATE_PASSWORD_START, Description: Starting password validation.")
 
 	if len(password) < 8 {
-		log.Println("Lozinka nije dovoljno dugačka.")
+		logging.Logger.Warn("Event ID: VALIDATE_PASSWORD_TOO_SHORT, Description: Password is too short (less than 8 characters).")
 		return fmt.Errorf("password must be at least 8 characters long")
 	}
 
@@ -117,7 +129,7 @@ func (s *UserService) ValidatePassword(password string) error {
 		}
 	}
 	if !hasUppercase {
-		log.Println("Lozinka ne sadrži veliko slovo.")
+		logging.Logger.Warn("Event ID: VALIDATE_PASSWORD_NO_UPPERCASE, Description: Password does not contain an uppercase letter.")
 		return fmt.Errorf("password must contain at least one uppercase letter")
 	}
 
@@ -129,7 +141,7 @@ func (s *UserService) ValidatePassword(password string) error {
 		}
 	}
 	if !hasDigit {
-		log.Println("Lozinka ne sadrži broj.")
+		logging.Logger.Warn("Event ID: VALIDATE_PASSWORD_NO_DIGIT, Description: Password does not contain a number.")
 		return fmt.Errorf("password must contain at least one number")
 	}
 
@@ -142,54 +154,60 @@ func (s *UserService) ValidatePassword(password string) error {
 		}
 	}
 	if !hasSpecial {
-		log.Println("Lozinka ne sadrži specijalni karakter.")
+		logging.Logger.Warn("Event ID: VALIDATE_PASSWORD_NO_SPECIAL_CHAR, Description: Password does not contain a special character.")
 		return fmt.Errorf("password must contain at least one special character")
 	}
 
 	if s.BlackList[password] {
-		log.Println("Lozinka je na black listi.")
+		logging.Logger.Warn("Event ID: VALIDATE_PASSWORD_BLACKLISTED, Description: Password is on the blacklist.")
 		return fmt.Errorf("password is too common. Please choose a stronger one")
 	}
 
-	log.Println("Lozinka je prošla validaciju.")
+	logging.Logger.Debug("Event ID: VALIDATE_PASSWORD_SUCCESS, Description: Password validation successful.")
 	return nil
 }
 
 // GetUnverifiedUserByEmail pronalazi korisnika u bazi po email adresi
 func (s *UserService) GetUnverifiedUserByEmail(email string) (models.User, error) {
+	logging.Logger.Debugf("Event ID: GET_UNVERIFIED_USER_BY_EMAIL_START, Description: Searching for unverified user with email: %s", email)
 	var user models.User
-	err := s.UserCollection.FindOne(context.Background(), bson.M{"email": email}).Decode(&user)
+	err := s.UserCollection.FindOne(context.Background(), bson.M{"email": email, "isActive": false}).Decode(&user)
 	if err != nil {
+		logging.Logger.Warnf("Event ID: GET_UNVERIFIED_USER_BY_EMAIL_NOT_FOUND, Description: Unverified user with email '%s' not found: %v", email, err)
 		return models.User{}, fmt.Errorf("user not found")
 	}
+	logging.Logger.Infof("Event ID: GET_UNVERIFIED_USER_BY_EMAIL_SUCCESS, Description: Found unverified user with email: %s", email)
 	return user, nil
 }
 
 // ConfirmAndSaveUser ažurira korisnika i postavlja `IsActive` na true
 func (s *UserService) ConfirmAndSaveUser(user models.User) error {
+	logging.Logger.Debugf("Event ID: CONFIRM_AND_SAVE_USER_START, Description: Attempting to confirm and activate user with email: %s", user.Email)
 	// Ažuriraj korisnika da bude aktivan
 	filter := bson.M{"email": user.Email}
-	update := bson.M{"$set": bson.M{"isActive": true}}
+	update := bson.M{"$set": bson.M{"isActive": true, "verificationCode": "", "verificationExpiry": time.Time{}}} // Reset verification fields
 
 	_, err := s.UserCollection.UpdateOne(context.Background(), filter, update)
 	if err != nil {
+		logging.Logger.Errorf("Event ID: CONFIRM_AND_SAVE_USER_ACTIVATION_FAILED, Description: Failed to activate user '%s': %v", user.Email, err)
 		return fmt.Errorf("failed to activate user: %v", err)
 	}
 
+	logging.Logger.Infof("Event ID: CONFIRM_AND_SAVE_USER_SUCCESS, Description: User '%s' successfully activated.", user.Email)
 	return nil
 }
 
 // CreateUser čuva korisnika u bazi
 func (s *UserService) CreateUser(user models.User) error {
-	log.Println("Pokušavam da sačuvam korisnika:", user.Email)
+	logging.Logger.Debugf("Event ID: CREATE_USER_START, Description: Attempting to save user to MongoDB: %s", user.Email)
 
 	_, err := s.UserCollection.InsertOne(context.Background(), user)
 	if err != nil {
-		log.Println("Greška prilikom čuvanja korisnika u MongoDB:", err)
+		logging.Logger.Errorf("Event ID: CREATE_USER_DB_INSERT_FAILED, Description: Error saving user to MongoDB '%s': %v", user.Email, err)
 		return err
 	}
 
-	log.Println("Korisnik sačuvan u MongoDB:", user.Email)
+	logging.Logger.Infof("Event ID: CREATE_USER_DB_INSERT_SUCCESS, Description: User saved to MongoDB: %s", user.Email)
 	return nil
 }
 
@@ -208,7 +226,6 @@ func (s *UserService) DeleteAccount(username string, authToken string) error {
 		return fmt.Errorf("TASKS_SERVICE_URL or PROJECTS_SERVICE_URL not set")
 	}
 
-	// Helper funkcija za GET zahtev sa headerima
 	makeAuthorizedGetRequest := func(url, role string) (*http.Response, error) {
 		req, err := http.NewRequest(http.MethodGet, url, nil)
 		if err != nil {
@@ -219,7 +236,6 @@ func (s *UserService) DeleteAccount(username string, authToken string) error {
 		return s.HTTPClient.Do(req)
 	}
 
-	// 🧠 Circuit breaker nad project servisom - dohvatanje projekata
 	getProjectIDs := func(url string, role string) ([]string, error) {
 		result, err := s.ProjectsBreaker.Execute(func() (interface{}, error) {
 			resp, err := makeAuthorizedGetRequest(url, role)
@@ -247,7 +263,7 @@ func (s *UserService) DeleteAccount(username string, authToken string) error {
 		})
 
 		if err != nil {
-			log.Printf("[Fallback] ProjectsBreaker fallback triggered: %v", err)
+			logging.Logger.Warnf("[Fallback] ProjectsBreaker fallback triggered: %v", err)
 			return nil, fmt.Errorf("cannot verify projects due to service unavailability")
 		}
 
@@ -263,7 +279,6 @@ func (s *UserService) DeleteAccount(username string, authToken string) error {
 		projectIDs, _ = getProjectIDs(url, role)
 	}
 
-	// 🔐 Provera nedovršenih taskova po projektu (circuit breaker za task servis)
 	for _, projectID := range projectIDs {
 		url := fmt.Sprintf("%s/api/tasks/project/%s/has-unfinished", strings.TrimRight(tasksServiceURL, "/"), projectID)
 
@@ -287,14 +302,13 @@ func (s *UserService) DeleteAccount(username string, authToken string) error {
 			return nil, nil
 		})
 		if err != nil {
-			return err // Ovo ne preskačemo — nedovršeni taskovi su kritični
+			return err
 		}
 	}
 
-	// 🚨 DELETE projekata ako je manager (uz CB)
 	if role == "manager" {
 		for _, projectID := range projectIDs {
-			projectID := projectID // shadow fix
+			projectID := projectID
 
 			_, err := s.ProjectsBreaker.Execute(func() (interface{}, error) {
 				deleteURL := fmt.Sprintf("%s/api/projects/%s", strings.TrimRight(projectsServiceURL, "/"), projectID)
@@ -318,13 +332,11 @@ func (s *UserService) DeleteAccount(username string, authToken string) error {
 			})
 
 			if err != nil {
-				log.Printf("[Fallback] Failed to delete project %s: %v", projectID, err)
-				// nastavljamo dalje
+				logging.Logger.Warnf("[Fallback] Failed to delete project %s: %v", projectID, err)
 			}
 		}
 	}
 
-	// 🔁 PATCH - uklanjanje korisnika iz projekata (CB + fallback)
 	_, err = s.ProjectsBreaker.Execute(func() (interface{}, error) {
 		patchURL := fmt.Sprintf("%s/api/projects/remove-user/%s?role=%s", strings.TrimRight(projectsServiceURL, "/"), userID, role)
 		req, err := http.NewRequest(http.MethodPatch, patchURL, nil)
@@ -347,10 +359,9 @@ func (s *UserService) DeleteAccount(username string, authToken string) error {
 		return nil, nil
 	})
 	if err != nil {
-		log.Printf("[Fallback] User not removed from projects (project-service down?): %v", err)
+		logging.Logger.Warnf("[Fallback] User not removed from projects (project-service down?): %v", err)
 	}
 
-	// 🔁 PATCH - uklanjanje iz taskova (CB + fallback)
 	if role == "member" {
 		_, err := s.TasksBreaker.Execute(func() (interface{}, error) {
 			taskRemoveURL := fmt.Sprintf("%s/api/tasks/remove-user/by-username/%s", strings.TrimRight(tasksServiceURL, "/"), username)
@@ -372,11 +383,10 @@ func (s *UserService) DeleteAccount(username string, authToken string) error {
 			return nil, nil
 		})
 		if err != nil {
-			log.Printf("[Fallback] User not removed from tasks (task-service down?): %v", err)
+			logging.Logger.Warnf("[Fallback] User not removed from tasks (task-service down?): %v", err)
 		}
 	}
 
-	// ✅ Brisanje iz baze
 	res, err := s.UserCollection.DeleteOne(context.Background(), bson.M{"username": username})
 	if err != nil {
 		return fmt.Errorf("failed to delete user: %v", err)
@@ -389,31 +399,41 @@ func (s *UserService) DeleteAccount(username string, authToken string) error {
 }
 
 func (s UserService) LoginUser(username, password string) (models.User, string, error) {
+	logging.Logger.Debugf("Event ID: LOGIN_USER_START, Description: Attempting to log in user: %s", username)
 	var user models.User
 	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
 	if err != nil {
+		logging.Logger.Warnf("Event ID: LOGIN_USER_NOT_FOUND, Description: User '%s' not found during login: %v", username, err)
 		return models.User{}, "", errors.New("user not found")
 	}
+	logging.Logger.Debugf("Event ID: LOGIN_USER_FOUND, Description: User '%s' found. Proceeding with password comparison.", username)
 
 	// Provera hashirane lozinke
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		logging.Logger.Warnf("Event ID: LOGIN_USER_INVALID_PASSWORD, Description: Invalid password provided for user: %s", username)
 		return models.User{}, "", errors.New("invalid password")
 	}
+	logging.Logger.Debugf("Event ID: LOGIN_USER_PASSWORD_MATCH, Description: Password matched for user: %s", username)
 
 	if !user.IsActive {
+		logging.Logger.Warnf("Event ID: LOGIN_USER_INACTIVE, Description: Attempted login for inactive user: %s", username)
 		return models.User{}, "", errors.New("user not active")
 	}
+	logging.Logger.Debugf("Event ID: LOGIN_USER_ACTIVE, Description: User '%s' is active. Generating auth token.", username)
 
 	token, err := s.JWTService.GenerateAuthToken(user.Username, user.Role)
 	if err != nil {
+		logging.Logger.Errorf("Event ID: LOGIN_USER_TOKEN_GENERATION_FAILED, Description: Failed to generate auth token for user '%s': %v", user.Username, err)
 		return models.User{}, "", fmt.Errorf("failed to generate token: %v", err)
 	}
+	logging.Logger.Infof("Event ID: LOGIN_USER_SUCCESS, Description: Successfully logged in user '%s' and generated token.", username)
 
 	return user, token, nil
 }
 
 // DeleteExpiredUnverifiedUsers briše korisnike kojima je istekao rok za verifikaciju i koji nisu aktivni
 func (s *UserService) DeleteExpiredUnverifiedUsers() {
+	logging.Logger.Debug("Event ID: DELETE_EXPIRED_UNVERIFIED_USERS_START, Description: Starting periodic cleanup of expired unverified users.")
 	filter := bson.M{
 		"isActive": false,
 		"verificationExpiry": bson.M{
@@ -424,29 +444,33 @@ func (s *UserService) DeleteExpiredUnverifiedUsers() {
 	// Brišemo sve korisnike koji odgovaraju uslovima
 	result, err := s.UserCollection.DeleteMany(context.Background(), filter)
 	if err != nil {
-		log.Printf("Greška prilikom brisanja korisnika sa isteklim verifikacionim rokom: %v", err)
+		logging.Logger.Errorf("Event ID: DELETE_EXPIRED_UNVERIFIED_USERS_FAILED, Description: Error deleting users with expired verification: %v", err)
 	} else {
-		log.Printf("Obrisano %d korisnika sa isteklim verifikacionim rokom.", result.DeletedCount)
+		logging.Logger.Infof("Event ID: DELETE_EXPIRED_UNVERIFIED_USERS_SUCCESS, Description: Deleted %d users with expired verification.", result.DeletedCount)
 	}
 }
 
 func (s *UserService) GetUserForCurrentSession(ctx context.Context, username string) (models.User, error) {
+	logging.Logger.Debugf("Event ID: GET_USER_FOR_CURRENT_SESSION_START, Description: Fetching user '%s' for current session.", username)
 	var user models.User
 
 	err := s.UserCollection.FindOne(ctx, bson.M{"username": username}).Decode(&user)
 	if err != nil {
+		logging.Logger.Warnf("Event ID: GET_USER_FOR_CURRENT_SESSION_NOT_FOUND, Description: User '%s' not found for current session: %v", username, err)
 		return models.User{}, fmt.Errorf("user not found")
 	}
 
-	user.Password = ""
-
+	user.Password = "" // Ensure password is not exposed
+	logging.Logger.Infof("Event ID: GET_USER_FOR_CURRENT_SESSION_SUCCESS, Description: User '%s' fetched for current session. Password redacted.", username)
 	return user, nil
 }
 
 // ChangePassword menja lozinku korisniku
 func (s *UserService) ChangePassword(username, oldPassword, newPassword, confirmPassword string) error {
+	logging.Logger.Debugf("Event ID: CHANGE_PASSWORD_START, Description: Attempting to change password for user: %s", username)
 	// Proveri da li se nova lozinka poklapa sa potvrdom
 	if newPassword != confirmPassword {
+		logging.Logger.Warn("Event ID: CHANGE_PASSWORD_MISMATCH, Description: New password and confirmation do not match.")
 		return fmt.Errorf("new password and confirmation do not match")
 	}
 
@@ -454,19 +478,25 @@ func (s *UserService) ChangePassword(username, oldPassword, newPassword, confirm
 	var user models.User
 	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
 	if err != nil {
+		logging.Logger.Warnf("Event ID: CHANGE_PASSWORD_USER_NOT_FOUND, Description: User '%s' not found during password change: %v", username, err)
 		return fmt.Errorf("user not found")
 	}
+	logging.Logger.Debugf("Event ID: CHANGE_PASSWORD_USER_FOUND, Description: User '%s' found. Verifying old password.", username)
 
 	// Proveri staru lozinku
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(oldPassword)); err != nil {
+		logging.Logger.Warnf("Event ID: CHANGE_PASSWORD_OLD_PASSWORD_INCORRECT, Description: Incorrect old password provided for user: %s", username)
 		return fmt.Errorf("old password is incorrect")
 	}
+	logging.Logger.Debugf("Event ID: CHANGE_PASSWORD_OLD_PASSWORD_CORRECT, Description: Old password is correct for user: %s", username)
 
 	// Hashuj novu lozinku
 	hashedNewPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
+		logging.Logger.Errorf("Event ID: CHANGE_PASSWORD_HASH_FAILED, Description: Failed to hash new password for user '%s': %v", username, err)
 		return fmt.Errorf("failed to hash new password: %v", err)
 	}
+	logging.Logger.Debugf("Event ID: CHANGE_PASSWORD_NEW_PASSWORD_HASHED, Description: New password hashed for user: %s", username)
 
 	// Ažuriraj lozinku u bazi
 	_, err = s.UserCollection.UpdateOne(
@@ -475,35 +505,46 @@ func (s *UserService) ChangePassword(username, oldPassword, newPassword, confirm
 		bson.M{"$set": bson.M{"password": string(hashedNewPassword)}},
 	)
 	if err != nil {
+		logging.Logger.Errorf("Event ID: CHANGE_PASSWORD_DB_UPDATE_FAILED, Description: Failed to update password for user '%s' in database: %v", username, err)
 		return fmt.Errorf("failed to update password: %v", err)
 	}
 
+	logging.Logger.Infof("Event ID: CHANGE_PASSWORD_SUCCESS, Description: Password successfully changed for user: %s", username)
 	return nil
 }
 
 func (s *UserService) SendPasswordResetLink(username, email string) error {
+	logging.Logger.Debugf("Event ID: SEND_PASSWORD_RESET_LINK_START, Description: Attempting to send password reset link for user '%s' to email: %s", username, email)
 	// Pronađi korisnika u bazi
 	var user models.User
 	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
 	if err != nil {
+		logging.Logger.Warnf("Event ID: SEND_PASSWORD_RESET_LINK_USER_NOT_FOUND, Description: User '%s' not found when sending reset link: %v", username, err)
 		return fmt.Errorf("user not found")
 	}
+	logging.Logger.Debugf("Event ID: SEND_PASSWORD_RESET_LINK_USER_FOUND, Description: User '%s' found. Verifying email match.", username)
 
 	if user.Email != email {
+		logging.Logger.Warnf("Event ID: SEND_PASSWORD_RESET_LINK_EMAIL_MISMATCH, Description: Provided email '%s' does not match user's email '%s' for user '%s'.", email, user.Email, username)
 		return fmt.Errorf("email does not match")
 	}
+	logging.Logger.Debugf("Event ID: SEND_PASSWORD_RESET_LINK_EMAIL_MATCH, Description: Email matched for user '%s'. Generating reset token.", username)
 
 	// Generiši token za resetovanje lozinke
-	token, err := s.JWTService.GenerateEmailVerificationToken(username)
+	token, err := s.JWTService.GenerateEmailVerificationToken(username) // Reusing verification token logic, consider a dedicated reset token
 	if err != nil {
+		logging.Logger.Errorf("Event ID: SEND_PASSWORD_RESET_LINK_TOKEN_GENERATION_FAILED, Description: Failed to generate reset token for user '%s': %v", username, err)
 		return fmt.Errorf("failed to generate reset token: %v", err)
 	}
+	logging.Logger.Debugf("Event ID: SEND_PASSWORD_RESET_LINK_TOKEN_GENERATED, Description: Reset token generated for user: %s", username)
 
 	// Pošalji email sa linkom za resetovanje
 	if err := utils.SendPasswordResetEmail(email, token); err != nil {
+		logging.Logger.Errorf("Event ID: SEND_PASSWORD_RESET_LINK_EMAIL_SEND_FAILED, Description: Failed to send password reset email to '%s' for user '%s': %v", email, username, err)
 		return fmt.Errorf("failed to send password reset email: %v", err)
 	}
 
+	logging.Logger.Infof("Event ID: SEND_PASSWORD_RESET_LINK_SUCCESS, Description: Password reset link successfully sent to '%s' for user: %s", email, username)
 	return nil
 }
 
@@ -511,12 +552,12 @@ func (s *UserService) GetMemberByUsernameHandler(w http.ResponseWriter, r *http.
 	vars := mux.Vars(r)
 	username := vars["username"]
 
-	fmt.Println("Received username:", username)
+	logging.Logger.Debugf("Event ID: GET_MEMBER_BY_USERNAME_HANDLER_START, Description: Received request for username: %s", username)
 
 	var user models.User
 	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
 	if err != nil {
-		fmt.Printf("User not found for username: %s, error: %v\n", username, err)
+		logging.Logger.Warnf("Event ID: GET_MEMBER_BY_USERNAME_HANDLER_NOT_FOUND, Description: User not found for username: %s, error: %v", username, err)
 		http.Error(w, "Member not found", http.StatusNotFound)
 		return
 	}
@@ -526,16 +567,19 @@ func (s *UserService) GetMemberByUsernameHandler(w http.ResponseWriter, r *http.
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(user)
+	logging.Logger.Infof("Event ID: GET_MEMBER_BY_USERNAME_HANDLER_SUCCESS, Description: Successfully retrieved and sent user details for username: %s", username)
 }
 
 // vraca sve korisnike koji imaju role member
 func (s *UserService) GetAllMembers() ([]models.User, error) {
+	logging.Logger.Debug("Event ID: GET_ALL_MEMBERS_START, Description: Attempting to retrieve all users with role 'member'.")
 	// Pravljenje filtera koji selektuje samo korisnike čiji je role = "member"
 	filter := bson.M{"role": "member"}
 
 	// Izvršavanje upita na bazi
 	cursor, err := s.UserCollection.Find(context.Background(), filter)
 	if err != nil {
+		logging.Logger.Errorf("Event ID: GET_ALL_MEMBERS_DB_QUERY_FAILED, Description: Failed to fetch members from database: %v", err)
 		return nil, fmt.Errorf("failed to fetch members: %v", err)
 	}
 	defer cursor.Close(context.Background())
@@ -543,6 +587,7 @@ func (s *UserService) GetAllMembers() ([]models.User, error) {
 	// Parsiranje rezultata
 	var members []models.User
 	if err := cursor.All(context.Background(), &members); err != nil {
+		logging.Logger.Errorf("Event ID: GET_ALL_MEMBERS_DECODE_FAILED, Description: Failed to parse members from database cursor: %v", err)
 		return nil, fmt.Errorf("failed to parse members: %v", err)
 	}
 
@@ -551,38 +596,48 @@ func (s *UserService) GetAllMembers() ([]models.User, error) {
 		members[i].Password = ""
 	}
 
+	logging.Logger.Infof("Event ID: GET_ALL_MEMBERS_SUCCESS, Description: Successfully retrieved %d members.", len(members))
 	return members, nil
 }
 
 func (s *UserService) GetRoleByUsername(username string) (string, error) {
+	logging.Logger.Debugf("Event ID: GET_ROLE_BY_USERNAME_START, Description: Attempting to retrieve role for username: %s", username)
 	var user models.User
 	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
 	if err != nil {
+		logging.Logger.Warnf("Event ID: GET_ROLE_BY_USERNAME_NOT_FOUND, Description: User '%s' not found when getting role: %v", username, err)
 		return "", err
 	}
+	logging.Logger.Infof("Event ID: GET_ROLE_BY_USERNAME_SUCCESS, Description: Successfully retrieved role '%s' for username: %s", user.Role, username)
 	return user.Role, nil
 }
 
 func (s *UserService) GetIDByUsername(username string) (primitive.ObjectID, error) {
+	logging.Logger.Debugf("Event ID: GET_ID_BY_USERNAME_START, Description: Attempting to retrieve ID for username: %s", username)
 	var user models.User
 	err := s.UserCollection.FindOne(context.Background(), bson.M{"username": username}).Decode(&user)
 	if err != nil {
+		logging.Logger.Warnf("Event ID: GET_ID_BY_USERNAME_NOT_FOUND, Description: User '%s' not found when getting ID: %v", username, err)
 		return primitive.NilObjectID, fmt.Errorf("user not found: %v", err)
 	}
+	logging.Logger.Infof("Event ID: GET_ID_BY_USERNAME_SUCCESS, Description: Successfully retrieved ID '%s' for username: %s", user.ID.Hex(), username)
 	return user.ID, nil
 }
 
 func (s *UserService) GetMemberByID(ctx context.Context, id string) (models.User, error) {
+	logging.Logger.Debugf("Event ID: GET_MEMBER_BY_ID_START, Description: Attempting to retrieve member by ID: %s", id)
 	userID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
+		logging.Logger.Warnf("Event ID: GET_MEMBER_BY_ID_INVALID_FORMAT, Description: Invalid user ID format: %s, error: %v", id, err)
 		return models.User{}, fmt.Errorf("invalid user ID format")
 	}
 
 	var member models.User
 	err = s.UserCollection.FindOne(ctx, bson.M{"_id": userID}).Decode(&member)
 	if err != nil {
+		logging.Logger.Warnf("Event ID: GET_MEMBER_BY_ID_NOT_FOUND, Description: User with ID '%s' not found: %v", id, err)
 		return models.User{}, fmt.Errorf("user not found")
 	}
-
+	logging.Logger.Infof("Event ID: GET_MEMBER_BY_ID_SUCCESS, Description: Successfully retrieved member with ID: %s", id)
 	return member, nil
 }

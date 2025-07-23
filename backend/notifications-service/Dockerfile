@@ -13,5 +13,6 @@ RUN go build -o notifications-service .
 FROM alpine
 WORKDIR /usr/bin
 COPY --from=build_container /app/notifications-service . 
+RUN mkdir -p /app/logs && chown nobody:nogroup /app/logs
 EXPOSE 8004
 ENTRYPOINT ["notifications-service"]

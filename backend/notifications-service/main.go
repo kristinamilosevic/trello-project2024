@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"notifications-service/handlers"
+	"notifications-service/logging"
 	"notifications-service/repositories"
 	"notifications-service/services"
 	"os"
@@ -27,12 +28,11 @@ func enableCORS(next http.Handler) http.Handler {
 }
 func main() {
 
-	logger := log.New(os.Stdout, "notifications-service ", log.LstdFlags)
-
-	// Inicijalizacija repozitorijuma
-	repo, err := repositories.NewNotificationRepo(logger)
+	logging.InitLogger()
+	repo, err := repositories.NewNotificationRepo(logging.Logger) // PROMENJENO
 	if err != nil {
-		logger.Fatalf("Failed to initialize repository: %v", err)
+
+		logging.Logger.Fatalf("Failed to initialize repository: %v", err) // PROMENJENO
 	}
 	defer repo.CloseSession()
 
@@ -59,6 +59,6 @@ func main() {
 	corsRouter := enableCORS(router)
 
 	// Pokretanje servera
-	logger.Println("Server is running on port 8004")
+	logging.Logger.Infof("Server is running on port %s", os.Getenv("NOTIFICATIONS_SERVICE_PORT"))
 	log.Fatal(http.ListenAndServe(":8004", corsRouter))
 }
