@@ -14,7 +14,7 @@ export class TaskService {
   constructor(private http: HttpClient) {}
   private getAuthHeaders(): HttpHeaders {
     const token = localStorage.getItem('token'); // Uzima token iz localStorage
-    const role = localStorage.getItem('role'); // Uzima ulogu iz localStorage
+    const role = localStorage.getItem('role'); // Uzima ulogu iz localStoragee
     if (!token || !role) {
       throw new Error('Token or Role is missing'); // Bacanje greške ako token ili role ne postoji
     }
