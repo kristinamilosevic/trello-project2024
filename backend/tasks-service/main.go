@@ -88,11 +88,22 @@ func main() {
 			logging.Logger.Infof("Event ID: CIRCUIT_BREAKER_STATE_CHANGE, Description: Circuit Breaker '%s' state changed from %s to %s", name, from.String(), to.String())
 		},
 	})
+	workflowBreaker := gobreaker.NewCircuitBreaker(gobreaker.Settings{
+		Name:        "ProjectsServiceCB",
+		MaxRequests: 1,
+		Timeout:     2 * time.Second,
+		ReadyToTrip: func(counts gobreaker.Counts) bool {
+			return counts.ConsecutiveFailures > 3
+		},
+		OnStateChange: func(name string, from, to gobreaker.State) {
+			logging.Logger.Infof("Event ID: CIRCUIT_BREAKER_STATE_CHANGE, Description: Circuit Breaker '%s' changed from '%s' to '%s'", name, from.String(), to.String())
+		},
+	})
 
-	taskService := services.NewTaskService(tasksCollection, httpClient, projectsBreaker, notificationsbreaker)
+	taskService := services.NewTaskService(tasksCollection, httpClient, projectsBreaker, notificationsbreaker, workflowBreaker)
 	taskHandler := handlers.NewTaskHandler(taskService)
 
-	// Kreiranje mux routera
+	// Kreiranje mux routeraa
 	r := mux.NewRouter()
 
 	// Definisanje rute sa parametrima za zadatke i članove
