@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -26,6 +27,7 @@ type TaskService struct {
 	httpClient           *http.Client
 	ProjectsBreaker      *gobreaker.CircuitBreaker
 	NotificationsBreaker *gobreaker.CircuitBreaker
+	WorkflowBreaker      *gobreaker.CircuitBreaker
 }
 
 func NewTaskService(
@@ -33,6 +35,7 @@ func NewTaskService(
 	httpClient *http.Client,
 	projectsBreaker *gobreaker.CircuitBreaker,
 	notificationsBreaker *gobreaker.CircuitBreaker,
+	workflowBreaker *gobreaker.CircuitBreaker,
 
 ) *TaskService {
 	return &TaskService{
@@ -40,6 +43,7 @@ func NewTaskService(
 		httpClient:           httpClient,
 		ProjectsBreaker:      projectsBreaker,
 		NotificationsBreaker: notificationsBreaker,
+		WorkflowBreaker:      workflowBreaker,
 	}
 }
 
@@ -330,87 +334,77 @@ func (s *TaskService) CreateTask(projectID string, title, description string, st
 	task.ID = result.InsertedID.(primitive.ObjectID)
 	logging.Logger.Infof("✅ Task inserted with ID: %s", task.ID.Hex())
 
-	projectsServiceURL := os.Getenv("PROJECTS_SERVICE_URL")
-	if projectsServiceURL == "" {
-		logging.Logger.Warn("⚠️ PROJECTS_SERVICE_URL is not set in .env file")
-		return nil, fmt.Errorf("projects-service URL is not configured")
-	}
+	// Notify projects-service
+	if url := os.Getenv("PROJECTS_SERVICE_URL"); url != "" {
+		projectURL := fmt.Sprintf("%s/api/projects/%s/add-task", url, projectID)
+		body, _ := json.Marshal(map[string]string{"taskID": task.ID.Hex()})
 
-	projectURL := fmt.Sprintf("%s/api/projects/%s/add-task", projectsServiceURL, projectID)
-	requestBody, err := json.Marshal(map[string]string{"taskID": task.ID.Hex()})
-	if err != nil {
-		logging.Logger.Errorf("❌ Failed to marshal project-service request body: %v", err)
-		return nil, fmt.Errorf("failed to marshal request body: %v", err)
-	}
+		req, _ := http.NewRequest("POST", projectURL, bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Role", "manager")
 
-	logging.Logger.Infof("📤 Sending request to projects-service: %s", projectURL)
-	logging.Logger.Infof("📄 Request body: %s", string(requestBody))
+		logging.Logger.Infof("📤 Notifying projects-service: %s", projectURL)
 
-	req, err := http.NewRequest("POST", projectURL, bytes.NewBuffer(requestBody))
-	if err != nil {
-		logging.Logger.Errorf("❌ Failed to create request to projects-service: %v", err)
-		return nil, fmt.Errorf("failed to create request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Role", "manager")
+		_, err := s.ProjectsBreaker.Execute(func() (interface{}, error) {
+			resp, err := s.httpClient.Do(req)
+			if err != nil {
+				return nil, err
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				body, _ := io.ReadAll(resp.Body)
+				return nil, fmt.Errorf("projects-service error: %s", string(body))
+			}
+			return nil, nil
+		})
 
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		logging.Logger.Warnf("⚠️ Task was created, but failed to notify projects-service: %v", err)
-	} else {
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			logging.Logger.Warnf("⚠️ projects-service returned status %d when adding task %s to project %s", resp.StatusCode, task.ID.Hex(), projectID)
-			body, _ := io.ReadAll(resp.Body)
-			logging.Logger.Infof("📄 projects-service response body: %s", string(body))
+		if err != nil {
+			logging.Logger.Warnf("🔁 Fallback: Failed to notify projects-service for task %s: %v", task.ID.Hex(), err)
 		} else {
-			logging.Logger.Infof("✅ Successfully notified projects-service about new task %s", task.ID.Hex())
+			logging.Logger.Infof("✅ projects-service notified about task %s", task.ID.Hex())
 		}
+	} else {
+		logging.Logger.Warn("⚠️ PROJECTS_SERVICE_URL is not set")
 	}
 
-	workflowServiceURL := os.Getenv("WORKFLOW_SERVICE_URL")
-	if workflowServiceURL == "" {
-		logging.Logger.Warn("⚠️ WORKFLOW_SERVICE_URL is not set in .env file")
-	} else {
-		logging.Logger.Info("🚀 Preparing to notify workflow-service...")
-
-		workflowURL := fmt.Sprintf("%s/api/workflow/task-node", strings.TrimRight(workflowServiceURL, "/"))
-		taskNodePayload := map[string]any{
+	// Notify workflow-service
+	if url := os.Getenv("WORKFLOW_SERVICE_URL"); url != "" {
+		workflowURL := fmt.Sprintf("%s/api/workflow/task-node", strings.TrimRight(url, "/"))
+		payload := map[string]any{
 			"id":          task.ID.Hex(),
 			"projectId":   task.ProjectID,
 			"name":        task.Title,
 			"description": task.Description,
 			"blocked":     false,
 		}
+		body, _ := json.Marshal(payload)
 
-		payloadBytes, err := json.Marshal(taskNodePayload)
-		if err != nil {
-			logging.Logger.Errorf("❌ Failed to marshal taskNode payload: %v", err)
-		} else {
-			logging.Logger.Infof("📤 Sending request to workflow-service: %s", workflowURL)
-			logging.Logger.Infof("📄 Payload: %s", string(payloadBytes))
+		req, _ := http.NewRequest("POST", workflowURL, bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
 
-			req, err := http.NewRequest("POST", workflowURL, bytes.NewBuffer(payloadBytes))
+		logging.Logger.Infof("📤 Notifying workflow-service: %s", workflowURL)
+
+		_, err := s.WorkflowBreaker.Execute(func() (interface{}, error) {
+			resp, err := s.httpClient.Do(req)
 			if err != nil {
-				logging.Logger.Errorf("❌ Failed to create request to workflow-service: %v", err)
-			} else {
-				req.Header.Set("Content-Type", "application/json")
-				resp, err := s.httpClient.Do(req)
-				if err != nil {
-					logging.Logger.Errorf("❌ Failed to notify workflow-service: %v", err)
-				} else {
-					defer resp.Body.Close()
-					body, _ := io.ReadAll(resp.Body)
-
-					if resp.StatusCode != http.StatusCreated {
-						logging.Logger.Warnf("⚠️ workflow-service returned status %d for task %s", resp.StatusCode, task.ID.Hex())
-						logging.Logger.Infof("📄 workflow-service response body: %s", string(body))
-					} else {
-						logging.Logger.Infof("✅ Successfully notified workflow-service about task %s", task.ID.Hex())
-					}
-				}
+				return nil, err
 			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusCreated {
+				body, _ := io.ReadAll(resp.Body)
+				return nil, fmt.Errorf("workflow-service error: %s", string(body))
+			}
+			return nil, nil
+		})
+
+		if err != nil {
+			logging.Logger.Warnf("🔁 Fallback: Failed to notify workflow-service for task %s: %v", task.ID.Hex(), err)
+			// Optionally: queue for retry, etc.
+		} else {
+			logging.Logger.Infof("✅ workflow-service notified about task %s", task.ID.Hex())
 		}
+	} else {
+		logging.Logger.Warn("⚠️ WORKFLOW_SERVICE_URL is not set")
 	}
 
 	logging.Logger.Info("✅ Task creation process completed.")
@@ -711,35 +705,45 @@ func (s *TaskService) RemoveUserFromAllTasksByUsername(username string) error {
 }
 
 func (s *TaskService) getDependenciesFromWorkflow(taskID string) ([]string, error) {
-	baseURL := os.Getenv("WORKFLOW_SERVICE_URL")
-	if baseURL == "" {
-		return nil, fmt.Errorf("WORKFLOW_SERVICE_URL not set in environment")
-	}
+	result, err := s.WorkflowBreaker.Execute(func() (interface{}, error) {
+		baseURL := os.Getenv("WORKFLOW_SERVICE_URL")
+		if baseURL == "" {
+			return nil, fmt.Errorf("WORKFLOW_SERVICE_URL not set in environment")
+		}
 
-	url := fmt.Sprintf("%s/api/workflow/dependencies/%s", baseURL, taskID)
+		url := fmt.Sprintf("%s/api/workflow/dependencies/%s", baseURL, taskID)
 
-	resp, err := http.Get(url)
+		resp, err := http.Get(url)
+		if err != nil {
+			return nil, fmt.Errorf("failed to contact workflow-service: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("workflow-service returned status: %d", resp.StatusCode)
+		}
+
+		var dependencies []struct {
+			ID string `json:"id"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&dependencies); err != nil {
+			return nil, fmt.Errorf("failed to decode response: %v", err)
+		}
+
+		var ids []string
+		for _, dep := range dependencies {
+			ids = append(ids, dep.ID)
+		}
+		return ids, nil
+	})
+
 	if err != nil {
-		return nil, fmt.Errorf("failed to contact workflow-service: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("workflow-service returned status: %d", resp.StatusCode)
+		// Fallback logika
+		fmt.Printf("Fallback triggered: %v\n", err)
+		return []string{}, nil // ili neka default vrednost
 	}
 
-	var dependencies []struct {
-		ID string `json:"id"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&dependencies); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %v", err)
-	}
-
-	var ids []string
-	for _, dep := range dependencies {
-		ids = append(ids, dep.ID)
-	}
-	return ids, nil
+	return result.([]string), nil
 }
 
 func (s *TaskService) updateBlockedInWorkflow(taskID string, blocked bool) error {
@@ -758,20 +762,36 @@ func (s *TaskService) updateBlockedInWorkflow(taskID string, blocked bool) error
 		return fmt.Errorf("failed to marshal JSON: %v", err)
 	}
 
-	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return fmt.Errorf("failed to create HTTP request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
+	// Wrap HTTP logic in circuit breaker execution
+	_, err = s.WorkflowBreaker.Execute(func() (interface{}, error) {
+		req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonData))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create HTTP request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
 
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send HTTP request: %v", err)
-	}
-	defer resp.Body.Close()
+		resp, err := s.httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to send HTTP request: %v", err)
+		}
+		defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("workflow-service returned status code %d", resp.StatusCode)
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("workflow-service returned status code %d", resp.StatusCode)
+		}
+
+		return nil, nil
+	})
+
+	// Fallback logika kada je circuit breaker otvoren
+	if errors.Is(err, gobreaker.ErrOpenState) {
+		logging.Logger.Warnf("[updateBlockedInWorkflow] Circuit breaker OPEN. Skipping update for taskID %s, blocked=%v", taskID, blocked)
+		return nil // fallback: ne pravimo problem ako ne možemo da ažuriramo
+	}
+
+	if err != nil {
+		logging.Logger.Errorf("[updateBlockedInWorkflow] Error updating workflow service for taskID %s: %v", taskID, err)
+		return err
 	}
 
 	return nil
