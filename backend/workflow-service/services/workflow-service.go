@@ -3,8 +3,8 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 	"trello-project/microservices/workflow-service/interfaces"
+	"trello-project/microservices/workflow-service/logging"
 	"trello-project/microservices/workflow-service/models"
 	"trello-project/microservices/workflow-service/services/commands"
 
@@ -23,27 +23,35 @@ func (s *WorkflowService) AddDependency(ctx context.Context, rel models.TaskDepe
 	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 
+	logging.Logger.Infof("Attempting to add dependency: %s <- %s", rel.ToTaskID, rel.FromTaskID)
+
 	exist, err := s.TasksExist(ctx, rel.FromTaskID, rel.ToTaskID)
 	if err != nil {
+		logging.Logger.Errorf("Failed to check if tasks exist: %v", err)
 		return fmt.Errorf("failed to check task existence: %v", err)
 	}
 	if !exist {
+		logging.Logger.Warnf("One or both tasks do not exist: from=%s, to=%s", rel.FromTaskID, rel.ToTaskID)
 		return fmt.Errorf("one or both tasks do not exist")
 	}
 
 	exists, err := s.DependencyExists(ctx, rel.FromTaskID, rel.ToTaskID)
 	if err != nil {
+		logging.Logger.Errorf("Failed to check if dependency exists: %v", err)
 		return fmt.Errorf("failed to check if dependency exists: %v", err)
 	}
 	if exists {
+		logging.Logger.Warnf("Dependency already exists: %s <- %s", rel.ToTaskID, rel.FromTaskID)
 		return fmt.Errorf("dependency already exists")
 	}
 
 	hasCycle, err := s.CreatesCycle(ctx, rel.FromTaskID, rel.ToTaskID)
 	if err != nil {
+		logging.Logger.Errorf("Failed to check for cycle: %v", err)
 		return fmt.Errorf("failed to check cycle: %v", err)
 	}
 	if hasCycle {
+		logging.Logger.Warnf("Cycle detected when trying to add dependency: %s <- %s", rel.ToTaskID, rel.FromTaskID)
 		return fmt.Errorf("cannot add dependency: cycle detected")
 	}
 
@@ -61,17 +69,18 @@ func (s *WorkflowService) AddDependency(ctx context.Context, rel models.TaskDepe
 	})
 
 	if err != nil {
+		logging.Logger.Errorf("Failed to create dependency relation: %v", err)
 		return fmt.Errorf("failed to create dependency relation: %v", err)
 	}
 
-	log.Printf("Dependency added: %s <- %s", rel.ToTaskID, rel.FromTaskID)
-	// CQRS: Ažuriraj blocked status za task koji je dobio novu zavisnost
+	logging.Logger.Infof("Dependency successfully added: %s <- %s", rel.ToTaskID, rel.FromTaskID)
+
 	cmd := commands.UpdateBlockedStatusCommand{
 		TaskID: rel.ToTaskID,
 		Svc:    interfaces.WorkflowCommandContext(s),
 	}
 	if err := cmd.Execute(ctx); err != nil {
-		log.Printf("failed to update blocked status for task %s: %v", rel.ToTaskID, err)
+		logging.Logger.Warnf("Failed to update blocked status for task %s: %v", rel.ToTaskID, err)
 	}
 
 	return nil
@@ -79,10 +88,14 @@ func (s *WorkflowService) AddDependency(ctx context.Context, rel models.TaskDepe
 
 func (s *WorkflowService) CreatesCycle(ctx context.Context, fromID, toID string) (bool, error) {
 	if fromID == toID {
+		logging.Logger.Warnf("Cycle detected: task cannot depend on itself (id=%s)", fromID)
 		return true, nil
 	}
+
 	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
+
+	logging.Logger.Infof("Checking for cycle: %s -> %s", fromID, toID)
 
 	result, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 		query := `
@@ -99,6 +112,7 @@ func (s *WorkflowService) CreatesCycle(ctx context.Context, fromID, toID string)
 		if res.Next(ctx) {
 			val, ok := res.Record().Values[0].(bool)
 			if !ok {
+				logging.Logger.Errorf("Unexpected result type during cycle check")
 				return false, fmt.Errorf("unexpected result type")
 			}
 			return val, nil
@@ -107,13 +121,17 @@ func (s *WorkflowService) CreatesCycle(ctx context.Context, fromID, toID string)
 	})
 
 	if err != nil {
+		logging.Logger.Errorf("Cycle detection query failed: %v", err)
 		return false, fmt.Errorf("cycle detection failed: %v", err)
 	}
 
+	logging.Logger.Infof("Cycle check result for %s -> %s: %v", fromID, toID, result.(bool))
 	return result.(bool), nil
 }
 
 func (s *WorkflowService) TasksExist(ctx context.Context, id1, id2 string) (bool, error) {
+	logging.Logger.Infof("Checking if both tasks exist: id1=%s, id2=%s", id1, id2)
+
 	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 
@@ -137,13 +155,17 @@ func (s *WorkflowService) TasksExist(ctx context.Context, id1, id2 string) (bool
 	})
 
 	if err != nil {
+		logging.Logger.Errorf("Error checking task existence: %v", err)
 		return false, err
 	}
 
+	logging.Logger.Infof("TasksExist result for %s and %s: %v", id1, id2, result.(bool))
 	return result.(bool), nil
 }
 
 func (s *WorkflowService) EnsureTaskNode(ctx context.Context, task models.TaskNode) error {
+	logging.Logger.Infof("Ensuring task node: %+v", task)
+
 	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 
@@ -167,10 +189,18 @@ func (s *WorkflowService) EnsureTaskNode(ctx context.Context, task models.TaskNo
 		return nil, err
 	})
 
+	if err != nil {
+		logging.Logger.Errorf("Failed to ensure task node %s: %v", task.ID, err)
+	} else {
+		logging.Logger.Infof("Task node ensured: %s", task.ID)
+	}
+
 	return err
 }
 
 func (s *WorkflowService) GetDependencies(ctx context.Context, taskId string) ([]models.TaskNode, error) {
+	logging.Logger.Infof("Fetching dependencies for task: %s", taskId)
+
 	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 
@@ -209,13 +239,17 @@ func (s *WorkflowService) GetDependencies(ctx context.Context, taskId string) ([
 	})
 
 	if err != nil {
+		logging.Logger.Errorf("Failed to get dependencies for task %s: %v", taskId, err)
 		return nil, err
 	}
 
+	logging.Logger.Infof("Fetched %d dependencies for task %s", len(result.([]models.TaskNode)), taskId)
 	return result.([]models.TaskNode), nil
 }
 
 func (s *WorkflowService) DependencyExists(ctx context.Context, fromID, toID string) (bool, error) {
+	logging.Logger.Infof("Checking if dependency exists: %s <- %s", toID, fromID)
+
 	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 
@@ -238,17 +272,23 @@ func (s *WorkflowService) DependencyExists(ctx context.Context, fromID, toID str
 	})
 
 	if err != nil {
+		logging.Logger.Errorf("Error checking dependency existence for %s <- %s: %v", toID, fromID, err)
 		return false, err
 	}
+
+	logging.Logger.Infof("Dependency exists result for %s <- %s: %v", toID, fromID, result.(bool))
 	return result.(bool), nil
 }
 
 func (s *WorkflowService) UpdateBlockedStatus(ctx context.Context, taskID string) error {
+	logging.Logger.Infof("Updating blocked status for task: %s", taskID)
+
 	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 
 	dependencies, err := s.GetDependencies(ctx, taskID)
 	if err != nil {
+		logging.Logger.Errorf("Failed to fetch dependencies for task %s: %v", taskID, err)
 		return fmt.Errorf("failed to fetch dependencies: %v", err)
 	}
 
@@ -267,14 +307,17 @@ func (s *WorkflowService) UpdateBlockedStatus(ctx context.Context, taskID string
 	})
 
 	if err != nil {
+		logging.Logger.Errorf("Failed to update blocked status for task %s: %v", taskID, err)
 		return fmt.Errorf("failed to update blocked status: %v", err)
 	}
 
-	log.Printf("Blocked status for task %s updated to %v", taskID, isBlocked)
+	logging.Logger.Infof("Blocked status for task %s updated to %v", taskID, isBlocked)
 	return nil
 }
 
 func (s *WorkflowService) SetBlockedStatus(ctx context.Context, taskID string, blocked bool) error {
+	logging.Logger.Infof("Setting blocked status for task %s to %v", taskID, blocked)
+
 	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 
@@ -282,7 +325,6 @@ func (s *WorkflowService) SetBlockedStatus(ctx context.Context, taskID string, b
         MATCH (t:Task {id: $taskID})
         SET t.blocked = $blocked
     `
-
 	params := map[string]interface{}{
 		"taskID":  taskID,
 		"blocked": blocked,
@@ -294,12 +336,17 @@ func (s *WorkflowService) SetBlockedStatus(ctx context.Context, taskID string, b
 	})
 
 	if err != nil {
+		logging.Logger.Errorf("Failed to set blocked status for task %s: %v", taskID, err)
 		return fmt.Errorf("failed to set blocked status in db: %w", err)
 	}
 
+	logging.Logger.Infof("Blocked status for task %s successfully set to %v", taskID, blocked)
 	return nil
 }
+
 func (s *WorkflowService) GetProjectDependencies(ctx context.Context, projectID string) ([]models.TaskDependencyRelation, error) {
+	logging.Logger.Infof("Fetching project dependencies for project: %s", projectID)
+
 	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 
@@ -326,13 +373,17 @@ func (s *WorkflowService) GetProjectDependencies(ctx context.Context, projectID 
 	})
 
 	if err != nil {
+		logging.Logger.Errorf("Failed to fetch project dependencies for project %s: %v", projectID, err)
 		return nil, err
 	}
 
+	logging.Logger.Infof("Fetched %d project dependencies for project %s", len(result.([]models.TaskDependencyRelation)), projectID)
 	return result.([]models.TaskDependencyRelation), nil
 }
 
 func (s *WorkflowService) GetWorkflowByProject(ctx context.Context, projectID string) ([]models.TaskNode, []models.TaskDependencyRelation, error) {
+	logging.Logger.Infof("Fetching workflow graph for project: %s", projectID)
+
 	session := s.Driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 
@@ -369,6 +420,7 @@ func (s *WorkflowService) GetWorkflowByProject(ctx context.Context, projectID st
 		return taskNodes, nil
 	})
 	if err != nil {
+		logging.Logger.Errorf("Failed to fetch task nodes for project %s: %v", projectID, err)
 		return nil, nil, fmt.Errorf("failed to fetch task nodes: %w", err)
 	}
 
@@ -398,8 +450,10 @@ func (s *WorkflowService) GetWorkflowByProject(ctx context.Context, projectID st
 		return relations, nil
 	})
 	if err != nil {
+		logging.Logger.Errorf("Failed to fetch dependency relations for project %s: %v", projectID, err)
 		return nil, nil, fmt.Errorf("failed to fetch dependency relations: %w", err)
 	}
 
+	logging.Logger.Infof("Workflow graph fetched for project %s: %d tasks, %d dependencies", projectID, len(nodes.([]models.TaskNode)), len(dependencies.([]models.TaskDependencyRelation)))
 	return nodes.([]models.TaskNode), dependencies.([]models.TaskDependencyRelation), nil
 }

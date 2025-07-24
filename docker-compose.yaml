@@ -123,6 +123,9 @@ services:
     networks:
       - app-network
     restart: on-failure
+    volumes:
+      - ./backend/workflow-service/logs:/app/logs
+
 
   api-composer-service:
     build:

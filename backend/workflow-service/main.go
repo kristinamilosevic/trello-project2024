@@ -2,13 +2,12 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"time"
 
 	"trello-project/microservices/workflow-service/handlers"
+	"trello-project/microservices/workflow-service/logging"
 	"trello-project/microservices/workflow-service/services"
 
 	"github.com/gorilla/mux"
@@ -16,25 +15,13 @@ import (
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
 
-func enableCORS(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", os.Getenv("CORS_ORIGIN"))
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
 func main() {
+	// Inicijalizuj logger
+	logging.InitLogger()
+
 	err := godotenv.Load(".env")
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		logging.Logger.Fatalf("Failed to load .env file: %v", err)
 	}
 
 	neo4jUri := os.Getenv("NEO4J_URI")
@@ -42,12 +29,12 @@ func main() {
 	neo4jPassword := os.Getenv("NEO4J_PASSWORD")
 
 	if neo4jUri == "" || neo4jUser == "" || neo4jPassword == "" {
-		log.Fatal("Neo4j connection details are missing in .env")
+		logging.Logger.Fatal("Neo4j connection details are missing in .env")
 	}
 
 	driver, err := neo4j.NewDriverWithContext(neo4jUri, neo4j.BasicAuth(neo4jUser, neo4jPassword, ""))
 	if err != nil {
-		log.Fatalf("Failed to create Neo4j driver: %v", err)
+		logging.Logger.Fatalf("Failed to create Neo4j driver: %v", err)
 	}
 	defer driver.Close(context.Background())
 
@@ -74,6 +61,10 @@ func main() {
 		ReadTimeout:  10 * time.Second,
 	}
 
-	fmt.Println("Workflow service running on port", port)
-	log.Fatal(srv.ListenAndServe())
+	logging.Logger.Infof("Workflow service running on port %s", port)
+
+	err = srv.ListenAndServe()
+	if err != nil {
+		logging.Logger.Fatalf("Server failed to start: %v", err)
+	}
 }

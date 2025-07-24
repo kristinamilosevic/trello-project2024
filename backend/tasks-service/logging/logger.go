@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync" // Dodato za once.Do
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
@@ -32,7 +33,10 @@ func (f *CustomFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 		b = &bytes.Buffer{}
 	}
 
-	b.WriteString(fmt.Sprintf("Date: %s, Time: %s, ", entry.Time.Format("2006-01-02"), entry.Time.Format("15:04:05")))
+	location := timezoneCEST()
+	localTime := entry.Time.In(location)
+
+	b.WriteString(fmt.Sprintf("Date: %s, Time: %s, ", localTime.Format("2006-01-02"), localTime.Format("15:04:05")))
 
 	// Koristi SystemName iz CustomFormatter instance, kao u projects-service
 	b.WriteString(fmt.Sprintf("Event Source: %s, ", f.SystemName))
@@ -55,6 +59,10 @@ func (f *CustomFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	b.WriteByte('\n') // Novi red na kraju
 
 	return b.Bytes(), nil
+}
+
+func timezoneCEST() *time.Location {
+	return time.FixedZone("CEST", 2*60*60) // +2 sata u sekundama
 }
 
 // InitLogger inicijalizuje globalni logger.

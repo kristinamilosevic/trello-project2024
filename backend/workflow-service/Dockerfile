@@ -27,6 +27,8 @@ COPY --from=build_container /app/workflow-service .
 
 EXPOSE 8005
 
+RUN mkdir -p /app/logs && chmod 700 /app/logs
+
 RUN chmod +x /usr/bin/workflow-service
 
 ENTRYPOINT ["./workflow-service"]

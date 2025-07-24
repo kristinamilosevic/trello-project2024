@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
@@ -25,7 +26,10 @@ func (f *CustomFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 		b = &bytes.Buffer{}
 	}
 
-	b.WriteString(fmt.Sprintf("Date: %s, Time: %s, ", entry.Time.Format("2006-01-02"), entry.Time.Format("15:04:05")))
+	location := timezoneCEST()
+	localTime := entry.Time.In(location)
+
+	b.WriteString(fmt.Sprintf("Date: %s, Time: %s, ", localTime.Format("2006-01-02"), localTime.Format("15:04:05")))
 
 	b.WriteString(fmt.Sprintf("Event Source: %s, ", f.SystemName))
 
@@ -43,6 +47,10 @@ func (f *CustomFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	b.WriteByte('\n')
 
 	return b.Bytes(), nil
+}
+
+func timezoneCEST() *time.Location {
+	return time.FixedZone("CEST", 2*60*60) // +2 sata u sekundama
 }
 
 func InitLogger() {
