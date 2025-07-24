@@ -27,6 +27,6 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=kristinamilosevic_trello-project2024
-            -Dsonar.organization=trixandtix
+            -Dsonar.organization=trixtix
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
