@@ -301,16 +301,16 @@ func (s *TaskService) GetMembersForTask(taskID primitive.ObjectID) ([]models.Mem
 }
 
 func (s *TaskService) CreateTask(projectID string, title, description string, status models.TaskStatus) (*models.Task, error) {
-	logging.Logger.Info("⏳ Starting CreateTask...")
+	logging.Logger.Info(" Starting CreateTask...")
 
 	_, err := primitive.ObjectIDFromHex(projectID)
 	if err != nil {
-		logging.Logger.Errorf("❌ Invalid project ID: %v", err)
+		logging.Logger.Errorf(" Invalid project ID: %v", err)
 		return nil, fmt.Errorf("invalid project ID format: %v", err)
 	}
 
 	if status == "" {
-		logging.Logger.Info("ℹ️ Status not provided, setting to default (pending)")
+		logging.Logger.Info("Status not provided, setting to default (pending)")
 		status = models.StatusPending
 	}
 
@@ -325,14 +325,14 @@ func (s *TaskService) CreateTask(projectID string, title, description string, st
 		Status:      status,
 	}
 
-	logging.Logger.Info("📦 Inserting task into MongoDB...")
+	logging.Logger.Info(" Inserting task into MongoDB...")
 	result, err := s.tasksCollection.InsertOne(context.Background(), task)
 	if err != nil {
-		logging.Logger.Errorf("❌ Failed to insert task: %v", err)
+		logging.Logger.Errorf(" Failed to insert task: %v", err)
 		return nil, fmt.Errorf("failed to create task: %v", err)
 	}
 	task.ID = result.InsertedID.(primitive.ObjectID)
-	logging.Logger.Infof("✅ Task inserted with ID: %s", task.ID.Hex())
+	logging.Logger.Infof("Task inserted with ID: %s", task.ID.Hex())
 
 	// Notify projects-service
 	if url := os.Getenv("PROJECTS_SERVICE_URL"); url != "" {
@@ -359,12 +359,12 @@ func (s *TaskService) CreateTask(projectID string, title, description string, st
 		})
 
 		if err != nil {
-			logging.Logger.Warnf("🔁 Fallback: Failed to notify projects-service for task %s: %v", task.ID.Hex(), err)
+			logging.Logger.Warnf("Fallback: Failed to notify projects-service for task %s: %v", task.ID.Hex(), err)
 		} else {
-			logging.Logger.Infof("✅ projects-service notified about task %s", task.ID.Hex())
+			logging.Logger.Infof("projects-service notified about task %s", task.ID.Hex())
 		}
 	} else {
-		logging.Logger.Warn("⚠️ PROJECTS_SERVICE_URL is not set")
+		logging.Logger.Warn(" PROJECTS_SERVICE_URL is not set")
 	}
 
 	// Notify workflow-service
@@ -382,7 +382,7 @@ func (s *TaskService) CreateTask(projectID string, title, description string, st
 		req, _ := http.NewRequest("POST", workflowURL, bytes.NewBuffer(body))
 		req.Header.Set("Content-Type", "application/json")
 
-		logging.Logger.Infof("📤 Notifying workflow-service: %s", workflowURL)
+		logging.Logger.Infof(" Notifying workflow-service: %s", workflowURL)
 
 		_, err := s.WorkflowBreaker.Execute(func() (interface{}, error) {
 			resp, err := s.httpClient.Do(req)
@@ -398,16 +398,16 @@ func (s *TaskService) CreateTask(projectID string, title, description string, st
 		})
 
 		if err != nil {
-			logging.Logger.Warnf("🔁 Fallback: Failed to notify workflow-service for task %s: %v", task.ID.Hex(), err)
+			logging.Logger.Warnf(" Fallback: Failed to notify workflow-service for task %s: %v", task.ID.Hex(), err)
 			// Optionally: queue for retry, etc.
 		} else {
-			logging.Logger.Infof("✅ workflow-service notified about task %s", task.ID.Hex())
+			logging.Logger.Infof("workflow-service notified about task %s", task.ID.Hex())
 		}
 	} else {
-		logging.Logger.Warn("⚠️ WORKFLOW_SERVICE_URL is not set")
+		logging.Logger.Warn("WORKFLOW_SERVICE_URL is not set")
 	}
 
-	logging.Logger.Info("✅ Task creation process completed.")
+	logging.Logger.Info("Task creation process completed.")
 	return task, nil
 }
 
